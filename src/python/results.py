@@ -12,6 +12,8 @@ import pandas as pd
 from itertools import combinations
 from scipy.misc import comb
 
+from alignment import sequence_identity_by_id
+
 from gensim.models.word2vec import Word2Vec
 
 import sys
@@ -176,28 +178,39 @@ TSS_Cosine = CosineSemSim(GO, util=Utils)
 MTSS_BMA = BMASemSim(GO, ac=None, util=Utils)
 
 
-
 class StatisticsBar(object):
     def __init__(self, n):
         self.n = n
+        self.indx = 0
         self.right = 0
         self.wrong = 0
+        self.sum_delta = 0
         sys.stdout.write('\n')
 
-    def update(self, r, w, indx):
-        sys.stdout.write("\rGot %s Right vs %s Wrong, Checked %s out of %s" % (r, w, indx, self.n))
+    def display(self):
+        percright = 100.0*self.right/self.indx
+        percwrong = 100.0*self.wrong/self.indx
+        perccheck = 100.0*self.indx/self.n
+        avgdelta = self.sum_delta / self.indx
+        sys.stdout.write(
+            "\rGot {0}({4:.2f}%) Right vs {1}({5:.2f}%) Wrong, Checked {2}({7:.2f}%) out of {3} p.. Avg. delta is {6}"
+                .format(self.right, self.wrong, self.indx, self.n, percright, percwrong, avgdelta, perccheck))
 
-    def incright(self, indx, i=1):
+    def update(self, delta, inc):
+        self.indx += inc
+        self.sum_delta += delta
+        if delta > .5:
+            self.incwrong()
+        if delta < .25:
+            self.incright()
+
+    def incright(self, i=1):
         self.right += i
-        self.update(self.right, self.wrong, indx)
+        self.display()
 
-    def incwrong(self, indx, i=1):
+    def incwrong(self, i=1):
         self.wrong += i
-        self.update(self.right, self.wrong, indx)
-
-    def finish(self):
-        sys.stdout.write('\n')
-
+        self.display()
 
 def compute_semsim(terms1, terms2, func=MTSS_BMA.SemSim, metric=TSS_Cosine):
     return func(list(map(lambda s: s.encode("ascii", "ignore"), terms1)),
@@ -215,19 +228,17 @@ def compute_similarity(model, annots):
             semsim1 = model.similarity(pair[0], pair[1])
             goids1, goids2 = annots[pair[0]], annots[pair[1]]
             semsim2 = compute_semsim(goids1, goids2)
-            record = [pair[0], pair[1], semsim1, semsim2]
+            #seqid = sequence_identity_by_id(pair[0], pair[1], db.ecod)
+            seqid = -1
+            record = [pair[0], pair[1], semsim1, semsim2, seqid]
             delta = abs(semsim1 - semsim2)
             STATS.append(record)
-            if delta > .5:
-                bar.incwrong(len(STATS))
-            if delta < .25:
-                bar.incright(len(STATS))
+            bar.update(delta, 1)
             if semsim2 > .9 and delta < .25:
                 #logger.debug(record)
                 pass
         except (TypeError, KeyError) as err:
-           pass
-    bar.finish()
+            pass
     return STATS
 
 
@@ -247,15 +258,15 @@ def benchmark_pdb_embedding(method, sample_size):
         model = Word2Vec.load('%s/%s.%s.model' % (ckptpath, method, emb_dim))
         output = '%s/%s.%s.semsim.csv' % (ckptpath, method, emb_dim)
         save_stats(compute_similarity(model, annots), output,
-                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY'])
+                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
     elif method == 'node2vec':
-        annots = {dom.eid: dom.get_go_terms() for dom in
+        annots = {dom.eid.lower(): dom.get_go_terms() for dom in
                   filter(lambda e: e.get_go_terms(),
                          map(EcodDomain, db.ecod.aggregate([{"$sample": {"size": sample_size}}])))}
-        model = Node2Vec('%s/ecod.sparse.edgelist' % ckptpath)
+        model = Node2Vec('%s/ecod.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
         output = '%s/%s.%s.semsim.csv' % (ckptpath, method, emb_dim)
         save_stats(compute_similarity(model, annots), output,
-                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY'])
+                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
     else:
         logger.error("Unknown method")
 

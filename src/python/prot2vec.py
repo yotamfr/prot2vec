@@ -23,7 +23,6 @@ import math
 import os
 
 import utils
-from alignment import sequence_identity_by_id
 import parameters as params
 
 args = params.arguments
@@ -85,7 +84,7 @@ def get_ecod_clusters(ratio=0.90):
 
 class EcodGraph(object):
 
-    def __init__(self, edgelist='%s/ecod.edgelist' % ckptpath):
+    def __init__(self, edgelist=None):
         self.edgelist = edgelist
         if edgelist and os.path.exists(edgelist):
             self.from_edgelist(edgelist)
@@ -105,11 +104,7 @@ class EcodGraph(object):
 
     def coalesce(self, func, th=.90, num_trials=2000):
         cluster_dic, reverse_dic = get_ecod_clusters(th)
-        nodes_dic = {}
-        nodes = list(db.ecod.find({}))
-        for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
-            u = EcodDomain(nodes[i])
-            nodes_dic[u.name] = u
+        nodes_dic = get_ecod_dictionary("ecod_id")
         bar = tqdm(range(num_trials), desc=str(self))
         for i in bar:
             ids = np.random.choice(self.nodes(), size=1000, replace=False)
@@ -404,25 +399,40 @@ def get_word_vectors(model_filename):
     return pca_filename, wordvecs_filename
 
 
-def retrofit_wordvecs(input_filename, lexicon='exact_synonyms.txt'):
-    output_filename = "retrofitted_%s" % input_filename
-    os.system("python retrofitting/retrofit.py -i %s/%s -l %s/%s -n 10 -o %s/retrofitted_wordvecs.txt"
-              % (ckptpath, input_filename, ckptpath, lexicon, ckptpath))
-    df = pd.read_csv('%s/retrofitted_wordvecs.txt' % ckptpath, sep=" ", header=None)
-    df.to_csv('%s/%s' % (ckptpath, output_filename), sep='\t', header=None, index=False)
-    return output_filename
+def get_ecod_dictionary(key_field):
+    logger.info("Computing ECOD Dictionary...")
+    nodes_dic = {}
+    nodes = list(db.ecod.find({}))
+    for i in tqdm(range(len(nodes)), desc="Docs Processed"):
+        nodes_dic[nodes[i][key_field]] = EcodDomain(nodes[i])
+    return nodes_dic
+
+
+def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
+    nodes_dic = get_ecod_dictionary("uid")
+    cluster_dic, reverse_dic = get_ecod_clusters(th)
+    logger.info("Retrofitting...")
+    lexicon = "%s/synonyms.%s.txt" % (ckptpath, th)
+    ecods = [map(lambda uid: nodes_dic[uid].name, ids)
+             for ids in cluster_dic.values()]
+    with open(lexicon, 'w+') as f:
+        lines = ["%s\n" % " ".join(synonyms) for synonyms in ecods]
+        f.writelines(lines)
+    os.system("python ../../../retrofitting/retrofit.py -i %s -l %s -n 10 -o %s"
+              % (inpath, lexicon, outpath))
+    return outpath
 
 
 class Node2Vec(object):
 
-    def __init__(self, edgelist):
-        emb = "%s.%s.emb" % (edgelist, emb_dim)
+    def __init__(self, edgelist, emb):
         self.model = {}
         if os.path.exists(emb):
+            logger.info("Reading input Model from src=%s" % emb)
             df = pd.read_csv(emb, header=None, skiprows=1, sep=" ")
-            for _, row in df.iterrows():
-                self[row[0]] = np.array(row[1:])
-        else:
+            for i, row in df.iterrows():
+                self[row[0]] = np.array(row[1:emb_dim+1])
+        elif os.path.exists(edgelist):
             logger.info("Reading input Graph from src=%s" % edgelist)
             G = nx.read_edgelist(edgelist, data=False)
             nodes, edges = G.nodes(), G.edges()
@@ -441,6 +451,8 @@ class Node2Vec(object):
                 df.loc[i, 0] = key
                 self[key] = np.array(row[1:])
             df.to_csv(emb, sep=" ", index=False, header=None)
+        else:
+            logger.error("Unknown method")
 
     def similarity(self, w1, w2):
         v1 = matutils.unitvec(self[w1])
@@ -448,22 +460,26 @@ class Node2Vec(object):
         return dot(v1, v2)
 
     def __getitem__(self, key):
-        return self.model[key]
+        return self.model[key.lower()]
 
     def __setitem__(self, key, val):
-        self.model[key] = val
+        self.model[key.lower()] = val
 
 
 def main():
 
-    # src = '%s/ecod.edgelist' % ckptpath
-    # G = EcodGraph(edgelist=src)
+    src = '%s/ecod.simple.edgelist' % ckptpath
+    G = EcodGraph(edgelist=src)
+    G.to_edgelist(src)
+    # G = EcodGraph()
     # G.init_from_collection()
     # G.to_edgelist(src)
     # G.coalesce(thicken, .95)
     # G.to_edgelist(src)
 
-    model = Node2Vec('%s/ecod.dense.edgelist' % ckptpath)
+    model = Node2Vec('%s/ecod.simple.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
+
+    retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.90.ecod.emb" % ckptpath, th=.90)
 
 if __name__ == "__main__":
     main()
