@@ -181,6 +181,14 @@ def ensure_exists(dirname):
             pass
 
 
+def reduce(f, L, acc):
+    while L:
+        y = acc
+        x = L.pop()
+        acc = f(x, y)
+    return acc
+
+
 if __name__ == '__main__':
     print('len(list()):%s\tlen([]):%s' % (len(list()), len([])))
     try:

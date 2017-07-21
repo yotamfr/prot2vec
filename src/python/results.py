@@ -263,8 +263,9 @@ def benchmark_pdb_embedding(method, sample_size):
         annots = {dom.eid.lower(): dom.get_go_terms() for dom in
                   filter(lambda e: e.get_go_terms(),
                          map(EcodDomain, db.ecod.aggregate([{"$sample": {"size": sample_size}}])))}
-        model = Node2Vec('%s/ecod.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
-        output = '%s/%s.%s.semsim.csv' % (ckptpath, method, emb_dim)
+        model = Node2Vec()
+        model.load("%s/ecod.dense.emb" % ckptpath)
+        output = '%s/ecod.dense.semsim.csv' % ckptpath
         save_stats(compute_similarity(model, annots), output,
                    cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
     else:

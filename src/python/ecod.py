@@ -10,6 +10,8 @@ from pdb import select_structure
 from pdb import is_single_domain_protein
 from pymongo import MongoClient
 
+import utils
+
 import parameters as params
 args = params.arguments
 cullpdb = args["cull_pdb"]
@@ -80,7 +82,7 @@ class EcodDomain(object):
     @property
     def chain(self):
         suffix = self.__eid[5:]
-        return suffix[:-1]
+        return suffix[:-1].upper()
 
     @property
     def num(self):
@@ -117,9 +119,11 @@ class EcodDomain(object):
         return map(EcodDomain, db.ecod.find({'$or': query}))
 
     def get_go_terms(self):
-        return reduce(lambda x, y: x | y,
-                      [set(map(lambda e: e["GO_ID"], db.goa.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
-                       for locus in self.loci], set())
+        # return set(map(lambda e: e["GO_ID"],
+        #                db.goa.find({"DB_Object_ID": self.pdb.upper() + self.chain.upper()})))
+        return utils.reduce(lambda x, y: x | y,
+                            [set(map(lambda e: e["GO_ID"], db.goa.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
+                             for locus in self.loci], set())
 
     def __str__(self):
         args = (self.eid, self.pdb, self.chain, self.num, map(str, self.loci), self.hierarchy)

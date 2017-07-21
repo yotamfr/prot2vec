@@ -143,13 +143,13 @@ class Locus(object):
         self.raw = raw
         if isinstance(raw, str):
             loc = raw.split(':')
-            self.chain = loc[0]
+            self.chain = loc[0].upper()
             try:
                 self.res = loc[1]
             except IndexError as err:
                 self.res = "%s-%s" % (int(-10e4), int(10e7))
         else:
-            self.chain = raw['chain']
+            self.chain = raw['chain'].upper()
             self.res = "%s-%s" % (raw['start'], raw['end'])
 
     @property
@@ -168,13 +168,13 @@ class Locus(object):
     def res(self, val):
         val = val.split('-')
         try:
-            val = map(int, val)
+            val = list(map(int, val))
             l, h = val[0], val[-1]
         except ValueError:     # negative start index
             l, h = -int(val[1]), int(val[2])
         except Exception as err:
             handleError(err, self.raw)
-        self.__res = xrange(l, h+1)
+        self.__res = range(l, h+1)
 
     @property
     def start(self):

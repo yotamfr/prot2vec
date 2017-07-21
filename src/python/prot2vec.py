@@ -425,14 +425,20 @@ def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
 
 class Node2Vec(object):
 
-    def __init__(self, edgelist, emb):
+    def __init__(self):
         self.model = {}
+
+    def load(self, emb):
         if os.path.exists(emb):
             logger.info("Reading input Model from src=%s" % emb)
             df = pd.read_csv(emb, header=None, skiprows=1, sep=" ")
             for i, row in df.iterrows():
-                self[row[0]] = np.array(row[1:emb_dim+1])
-        elif os.path.exists(edgelist):
+                self[row[0]] = np.array(row[1:emb_dim + 1])
+        else:
+            logger.error("%s not found" % emb)
+
+    def train(self, edgelist, emb):
+        if os.path.exists(edgelist):
             logger.info("Reading input Graph from src=%s" % edgelist)
             G = nx.read_edgelist(edgelist, data=False)
             nodes, edges = G.nodes(), G.edges()
@@ -452,7 +458,7 @@ class Node2Vec(object):
                 self[key] = np.array(row[1:])
             df.to_csv(emb, sep=" ", index=False, header=None)
         else:
-            logger.error("Unknown method")
+            logger.error("%s not found" % edgelist)
 
     def similarity(self, w1, w2):
         v1 = matutils.unitvec(self[w1])
@@ -465,21 +471,29 @@ class Node2Vec(object):
     def __setitem__(self, key, val):
         self.model[key.lower()] = val
 
+    def __contains__(self, key):
+        return key.lower() in self.model
+
+    def vocab(self):
+        return self.model.keys()
+
 
 def main():
 
-    src = '%s/ecod.simple.edgelist' % ckptpath
-    G = EcodGraph(edgelist=src)
-    G.to_edgelist(src)
+    # src = '%s/ecod.simple.edgelist' % ckptpath
+    # G = EcodGraph(edgelist=src)
+    # G.to_edgelist(src)
     # G = EcodGraph()
     # G.init_from_collection()
     # G.to_edgelist(src)
     # G.coalesce(thicken, .95)
     # G.to_edgelist(src)
 
-    model = Node2Vec('%s/ecod.simple.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
+    # model = Node2Vec()
 
-    retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.90.ecod.emb" % ckptpath, th=.90)
+    # model.train('%s/ecod.simple.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
+
+    retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 
 if __name__ == "__main__":
     main()
