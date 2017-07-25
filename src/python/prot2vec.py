@@ -7,13 +7,15 @@ from gensim.models.word2vec import Word2Vec
 from pymongo import MongoClient
 from tqdm import tqdm
 
-from ecod import EcodDomain
+from models import EcodDomain
 
 assert doc2vec.FAST_VERSION > -1
 
 from numpy import dot
 
 from sklearn.decomposition import PCA
+
+from models import PdbChain
 
 import itertools
 import networkx as nx
@@ -33,6 +35,7 @@ seq_length = args["seq_length"]
 emb_dim = args["word_embedding_dim"]
 datapath = args["data_path"]
 ECOD = args['ecod_fasta']
+PDB = args['pdb_fasta']
 
 client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
@@ -55,7 +58,34 @@ consts = {
 }
 
 
-def get_ecod_clusters(ratio=0.90):
+def get_pdb_clusters(ratio):
+
+    fasta_filename = PDB
+
+    cluster_filename = "%s.%s" % (fasta_filename, ratio)
+
+    if not os.path.exists(cluster_filename):
+        os.system("cdhit -i %s -o %s -c %s -n 4" % (fasta_filename, cluster_filename, ratio))
+
+    # open the cluster file and set the output dictionary
+    cluster_file, cluster_dic, reverse_dic = open("%s.clstr" % cluster_filename), {}, {}
+
+    logger.info("Reading cluster groups...")
+    # parse through the cluster file and store the cluster name + sequences in the dictionary
+    cluster_groups = (x[1] for x in itertools.groupby(cluster_file, key=lambda line: line[0] == '>'))
+    for cluster in cluster_groups:
+        name = int(next(cluster).strip().split()[-1])
+        ids = [seq.split('>')[1].split('...')[0].split('|')[0] for seq in next(cluster_groups)]
+        cluster_dic[name] = ids
+    for cluster, ids in cluster_dic.items():
+        for seqid in ids:
+            reverse_dic[seqid] = cluster
+    logger.info("Detected %s clusters (>%s similarity) groups..." % (len(cluster_dic), ratio))
+
+    return cluster_dic, reverse_dic
+
+
+def get_ecod_clusters(ratio):
 
     fasta_filename = ECOD
 
@@ -82,40 +112,18 @@ def get_ecod_clusters(ratio=0.90):
     return cluster_dic, reverse_dic
 
 
-class EcodGraph(object):
+class Graph(object):
 
-    def __init__(self, edgelist=None):
+    def __init__(self, edgelist):
+        self.graph = nx.Graph()
         self.edgelist = edgelist
         if edgelist and os.path.exists(edgelist):
             self.from_edgelist(edgelist)
         else:
-            self.graph = nx.Graph()
+            self.init()
 
-    def init_from_collection(self):
-        logger.info(self)
-        logger.info("Initiating Graph from DB collection")
-        nodes = list(map(EcodDomain, db.ecod.find({})))
-        for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
-            u = nodes[i]
-            for v in u.get_adj_nodes():
-                self.add_edge(u.name, v.name)
-        logger.info("Finished!")
-        logger.info(self)
-
-    def coalesce(self, func, th=.90, num_trials=2000):
-        cluster_dic, reverse_dic = get_ecod_clusters(th)
-        nodes_dic = get_ecod_dictionary("ecod_id")
-        bar = tqdm(range(num_trials), desc=str(self))
-        for i in bar:
-            ids = np.random.choice(self.nodes(), size=1000, replace=False)
-            nodes = filter(lambda e: e.uid in reverse_dic,
-                           map(lambda e: nodes_dic[e], ids))
-            for u, v in itertools.combinations(nodes, 2):
-                if reverse_dic[u.uid] == reverse_dic[v.uid]:
-                    func(self, u.name, v.name)
-            if not i % 50:
-                self.to_edgelist(self.edgelist)
-                bar.set_description(str(self))
+    def init(self):
+        pass
 
     def is_connected(self):
         return nx.is_connected(self.graph)
@@ -145,137 +153,68 @@ class EcodGraph(object):
         return 'G=(V,E) |E|=%s, |V|=%s #CCs=%s' %\
                (len(self.edges()), len(self.nodes()), self.number_connected_components())
 
+    def to_gml(self, relpath):
+        nx.write_gml(self, relpath)
 
-class InterfaceGraph(nx.Graph):
-    def __init__(self, db_collection):
-        super(InterfaceGraph, self).__init__()
-        self.collection = db_collection
-        self.nodes_dic = {}
 
-    def init_from_csv(self, csv_filename):
-        df = pd.read_csv(csv_filename)
-        for _, row in df.iterrows():
-            if not (row['MinDist:Atom-Atom'] and row['MinDist:Calpha-Calpha']):
-                continue
-            self.add_node(row['FROM_MOTIF'], label=row['FROM_MOTIF'],
-                          graphics=consts["NODE_GRAPHICS"]())
-            self.add_node(row['TO_MOTIF'], label=row['TO_MOTIF'],
-                          graphics=consts["NODE_GRAPHICS"]())
-            self.add_edge(row['FROM_MOTIF'], row['TO_MOTIF'],
-                          graphics=consts["EDGE_GRAPHICS"]())
+class PdbGraph(Graph):
 
-    def init_from_collection(self, db_collection, Model):
-        logger.info("Initiating Graph from DB collection")
-        nodes = list(map(Model, db_collection.find({})))
+    def __init__(self, edgelist_filename):
+        super(PdbGraph, self).__init__(edgelist_filename)
+
+    def init(self):
+        logger.info(self)
+        logger.info("Initiating Graph from PDB collection")
+        nodes = list(map(PdbChain, db.pdb.find({})))
+        for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
+            self.add_node(nodes[i].name)
+        logger.info("Finished!")
+        logger.info(self)
+
+    def coalesce(self, func, th=.90, num_trials=2000):
+        cluster_dic, reverse_dic = get_pdb_clusters(th)
+        bar = tqdm(range(num_trials), desc=str(self))
+        for i in bar:
+            nodes = np.random.choice(self.nodes(), size=1000, replace=False)
+            for u, v in itertools.combinations(nodes, 2):
+                if u in reverse_dic and v in reverse_dic:
+                    if reverse_dic[u] == reverse_dic[v]:
+                        func(self, u, v)
+            if not i % 50:
+                self.to_edgelist(self.edgelist)
+                bar.set_description(str(self))
+
+
+class EcodGraph(Graph):
+
+    def __init__(self, edgelist_filename):
+        super(EcodGraph, self).__init__(edgelist_filename)
+
+    def init(self):
+        logger.info(self)
+        logger.info("Initiating Graph from ECOD collection")
+        nodes = list(map(EcodDomain, db.ecod.find({})))
         for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
             u = nodes[i]
-            self.nodes_dic[u.name] = u
             for v in u.get_adj_nodes():
-                if not (self.has_edge(u.name, v.name) or self.has_edge(v.name, u.name)):
-                    self.add_edge(u.name, v.name)
-        num_cc = nx.number_connected_components(self)
-        logger.info('Finished building G=(V,E) |E|=%s, |V|=%s #CCs=%s' %
-                    (len(self.edges()), len(self.nodes()), num_cc))
+                self.add_edge(u.name, v.name)
+        logger.info("Finished!")
+        logger.info(self)
 
-    # get representatives from all CCs
-    def representatives(self):
-        representatives = {}
-        n = float(len(self.nodes()))
-        ccs = nx.connected_components(self)
-        for cc in ccs:
-            rep = np.random.choice(list(cc))
-            representatives[rep] = len(cc) / n
-        return representatives
-
-    def coalesce(self, func, th=.90, max_trials=4000):
-        nodes_dic = self.nodes_dic
+    def coalesce(self, func, th=.90, num_trials=2000):
         cluster_dic, reverse_dic = get_ecod_clusters(th)
-        trial = 0
-        while not nx.is_connected(self) and trial < max_trials:
-            num_cc = nx.number_connected_components(self)
-            args = (trial, len(self.edges()), len(self.nodes()), num_cc)
-            logger.info('Coalescing trial:%s %s/%s CCs:%s' % args)
+        nodes_dic = get_ecod_dictionary("ecod_id")
+        bar = tqdm(range(num_trials), desc=str(self))
+        for i in bar:
             ids = np.random.choice(self.nodes(), size=1000, replace=False)
             nodes = filter(lambda e: e.uid in reverse_dic,
                            map(lambda e: nodes_dic[e], ids))
             for u, v in itertools.combinations(nodes, 2):
                 if reverse_dic[u.uid] == reverse_dic[v.uid]:
                     func(self, u.name, v.name)
-            trial += 1
-
-    def get_degrees(self):
-        return np.array(self.degree(self.nodes()).values(), dtype=np.float)
-
-    def sample_path(self, lmd):  # length of path is sampled from poisson dist.
-        src = self.sample_node()
-        nbs = self.neighbors(src)
-        k = max(math.floor(np.random.poisson(lam=lmd)), 2)
-        assert len(nbs) > 0  # no zero deg nodes
-        if len(nbs) == 1:
-            p = self.random_walk(src, k)
-        else:
-            k1 = int(k / 2)
-            k2 = k - k1
-            neighbor = self.sample_node(self.get_weights(nbs))
-            p1 = self.random_walk(neighbor, k1, reverse=True, forbidden=[src])
-            p2 = self.random_walk(src, k2, forbidden=p1)
-            p = p1 + p2
-        return list(map(lambda ns: np.random.choice(ns.split(',')), p)), src
-
-    # sample node (weighted by degree)
-    def sample_node(self, weights=None):
-        if not weights:
-            if not self.weights:
-                self.weights = self.get_weights(self.nodes())
-                a = self.a = list(self.weights.keys())
-                w = self.w = list(self.weights.values())
-            else:
-                a = self.a
-                w = self.w
-        else:
-            a = list(weights.keys())
-            w = list(weights.values())
-        return np.random.choice(a, p=w)
-
-    def random_walk(self, src, k, reverse=False, forbidden=[], max_trials=10):
-        if k < 1: return []
-        curr = src
-        path = [src]
-        i = k
-        while i > 1:
-            nbs = self.neighbors(curr)
-            next = self.sample_node(self.get_weights(nbs))
-            trial = 0
-            while (next in path) or (next in forbidden):
-                trial += 1
-                if trial > max_trials:
-                    if reverse: path.reverse()
-                    return path
-                nbs = self.neighbors(curr)
-                next = self.sample_node(self.get_weights(nbs))
-            path.append(next)
-            curr = next
-            i -= 1
-        assert len(path) == k
-        if reverse: path.reverse()
-        return path
-
-    def to_gml(self, relpath):
-        nx.write_gml(self, relpath)
-
-    def get_weights(self, nodes):
-        weights = {}
-        degrees = self.degree(nodes)
-        sigma = float(sum(degrees.values()))
-        for v, w in degrees.items():
-            weights[v] = w / sigma
-        return weights
-
-
-def generate_sample_sentences():
-    logger.info("Generating Samples...")
-    adjacency_list = create_adjacency_list()
-    power_rule_sample(adjacency_list, "power_rule:all_nodes")
+            if not i % 50:
+                self.to_edgelist(self.edgelist)
+                bar.set_description(str(self))
 
 
 def complex(pdb): return pdb[:4]
@@ -399,13 +338,22 @@ def get_word_vectors(model_filename):
     return pca_filename, wordvecs_filename
 
 
-def get_ecod_dictionary(key_field):
-    logger.info("Computing ECOD Dictionary...")
+def get_dictionary(collection, Model, field):
     nodes_dic = {}
-    nodes = list(db.ecod.find({}))
+    nodes = list(collection.find({}))
     for i in tqdm(range(len(nodes)), desc="Docs Processed"):
-        nodes_dic[nodes[i][key_field]] = EcodDomain(nodes[i])
+        nodes_dic[nodes[i][field]] = Model(nodes[i])
     return nodes_dic
+
+
+def get_ecod_dictionary(key_field):
+    logger.info("Computing ECOD Dictionary ...")
+    return get_dictionary(db.ecod, EcodDomain, key_field)
+
+
+def get_pdb_dictionary(key_field):
+    logger.info("Computing PDB Dictionary ...")
+    return get_dictionary(db.pdb, PdbChain, key_field)
 
 
 def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
@@ -433,7 +381,14 @@ class Node2Vec(object):
             logger.info("Reading input Model from src=%s" % emb)
             df = pd.read_csv(emb, header=None, skiprows=1, sep=" ")
             for i, row in df.iterrows():
-                self[row[0]] = np.array(row[1:emb_dim + 1])
+                if row[0] in self:
+                    tmp = np.zeros(emb_dim*2)
+                    tmp[:emb_dim] = self[row[0]]
+                    tmp[emb_dim:] = row[1:emb_dim + 1]
+                    self[row[0]] = tmp
+                else:
+                    self[row[0]] = np.array(row[1:emb_dim + 1])
+
         else:
             logger.error("%s not found" % emb)
 
@@ -466,34 +421,39 @@ class Node2Vec(object):
         return dot(v1, v2)
 
     def __getitem__(self, key):
-        return self.model[key.lower()]
+        return self.model[key]
 
     def __setitem__(self, key, val):
-        self.model[key.lower()] = val
+        self.model[key] = val
 
     def __contains__(self, key):
-        return key.lower() in self.model
+        return key in self.model
 
     def vocab(self):
         return self.model.keys()
 
 
+def create_pdb_edgelist(perc=70):
+    dst = '%s/pdb.%s.edgelist' % (ckptpath, perc)
+    G = PdbGraph(dst)
+    G.coalesce(thicken, perc/100.0, 4000)
+    G.to_edgelist(dst)
+
+
+def create_ecod_edgelist(perc=95):
+    dst = '%s/ecod.%s.edgelist' % (ckptpath, perc)
+    G = EcodGraph(dst)
+    G.coalesce(thicken, perc/100.0)
+    G.to_edgelist(dst)
+
+
 def main():
 
-    # src = '%s/ecod.simple.edgelist' % ckptpath
-    # G = EcodGraph(edgelist=src)
-    # G.to_edgelist(src)
-    # G = EcodGraph()
-    # G.init_from_collection()
-    # G.to_edgelist(src)
-    # G.coalesce(thicken, .95)
-    # G.to_edgelist(src)
+    model = Node2Vec()
 
-    # model = Node2Vec()
+    model.train('%s/pdb.60.edgelist' % ckptpath, "%s/pdb.60.emb" % ckptpath)
 
-    # model.train('%s/ecod.simple.edgelist' % ckptpath, "%s/ecod.simple.emb" % ckptpath)
-
-    retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
+    # retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 
 if __name__ == "__main__":
     main()

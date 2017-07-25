@@ -1,9 +1,12 @@
 __author__ = 'yfrank'
 
+from pdb import InterfaceSelector
+from pdb import get_sequences
+from Bio.PDB import PDBParser
+
 from utils import ispdbid
 from utils import isecodid
 from utils import handleError
-from domain import Locus
 from pdb import MotifSelector
 from pdb import ConnectorPDB
 from pdb import select_structure
@@ -14,12 +17,241 @@ import utils
 
 import parameters as params
 args = params.arguments
-cullpdb = args["cull_pdb"]
-ECOD = args['ecod_fasta']
 
 client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
 db = client[dbname]
+
+ECOD = args["ecod_fasta"]
+PDB = ConnectorPDB(args["pdb_dir"])
+cullpdb = args["cull_pdb"]
+
+
+class Motif(object):
+
+    def __init__(self, pid, chain, loci=None, seq=None):
+        self.pdb = pid
+        self.chain = chain
+        if not loci:
+            self.loci = chain
+        else:
+            self.loci = loci  # requires a string in ecod format
+        self.seq = seq
+
+    @property
+    def seq(self):
+        return self.__seq
+
+    @seq.setter
+    def seq(self,val):
+        self.__seq = val
+
+    @property
+    def loci(self):
+        return self.__loci
+
+    @loci.setter
+    def loci(self,val):
+        self.__loci = map(Locus, val.split(','))
+
+    @property
+    def pdb(self):
+        return self.__pdb
+
+    @pdb.setter     # e1htr.1
+    def pdb(self, val):
+        self.__pdb = val.lower()
+
+    @property
+    def chain(self):
+        return self.__chain
+
+    @chain.setter
+    def chain(self, val):
+        self.__chain = val
+
+    @property
+    def name(self):
+        return "%s%s" % (self.pdb, self.chain)
+
+    def get_pdb_structure(self):
+        return PDB.get_structure(self.pdb, parser=PDBParser(QUIET=True))
+
+    def select(self, structure=None):
+        if not structure:
+            structure = self.get_pdb_structure()
+        return select_structure(MotifSelector(self), structure)
+
+    def is_gene_product(self, structure=None):
+        if not structure:
+            structure = self.get_pdb_structure()
+        return is_single_domain_protein(self, structure)
+
+    def get_sequences(self, structure=None):
+        if not structure:
+            structure = self.get_pdb_structure()
+        return get_sequences(structure)
+
+    def __str__(self):
+        args = (self.name, self.pdb, self.chain, map(str, self.loci))
+        return 'name:\t%s\npdb:\t%s\nchain:\t%s\nloci:\t%s' % args
+
+
+class PdbChain(object):
+
+    def __init__(self, doc):
+        self.pid = doc["pdb_id"]
+        self.chain = doc["chain"]
+        self.complex = doc["complex"]
+        self.seq = doc["sequence"]
+
+    @property
+    def pid(self):
+        return self.__pid
+
+    @property
+    def name(self):
+        return self.__pid
+
+    @pid.setter
+    def pid(self, val):
+        self.__pid = val
+
+    @property
+    def chain(self):
+        return self.__chain
+
+    @chain.setter
+    def chain(self, val):
+        self.__chain = val
+
+    @property
+    def seq(self):
+        return self.__seq
+
+    @seq.setter
+    def seq(self, val):
+        self.__seq = val
+
+    @property
+    def complex(self):
+        return self.__complex.upper()
+
+    @complex.setter
+    def complex(self, val):
+        self.__complex = val
+
+    def get_go_terms(self):
+        return set(map(lambda e: e["GO_ID"],
+                       db.goa.find({"DB_Object_ID": self.pid})))
+
+    def is_gene_product(self):
+        return True
+
+
+class Interface(object):
+    def __init__(self, motif1, motif2):
+        self.from_motif = motif1
+        self.to_motif = motif2
+
+    @property
+    def from_motif(self):
+        return self.__from_motif
+
+    @from_motif.setter
+    def from_motif(self, val):
+        self.__from_motif = val
+
+    @property
+    def to_motif(self):
+        return self.__to_motif
+
+    @to_motif.setter
+    def to_motif(self, val):
+        self.__to_motif = val
+
+    @property
+    def from_res(self):
+        return self.from_motif.loci
+
+    @from_res.setter
+    def from_res(self,val):
+        self.from_motif.loci = val
+
+    @property
+    def to_res(self):
+        return self.to_motif.loci
+
+    @to_res.setter
+    def to_res(self,val):
+        self.to_motif.loci = val
+
+    @property
+    def name(self):
+        return "%s_I_%s" % (self.from_motif.name, self.to_motif.name)
+
+    def select(self, structure):
+        pdb = self.from_motif.pdb
+        assert self.to_motif.pdb == pdb
+        return select_structure(InterfaceSelector(self), structure)
+
+    def __str__(self):
+        return self.name
+
+
+class Locus(object):
+
+    def __init__(self, raw):
+
+        self.raw = raw
+        if isinstance(raw, str):
+            loc = raw.split(':')
+            self.chain = loc[0]
+            try:
+                self.res = loc[1]
+            except IndexError as err:
+                self.res = "%s-%s" % (int(-10e4), int(10e7))
+        else:
+            self.chain = raw['chain']
+            self.res = "%s-%s" % (raw['start'], raw['end'])
+
+    @property
+    def chain(self):
+        return self.__chain
+
+    @chain.setter     # e1htr.1
+    def chain(self, val):
+        self.__chain = val
+
+    @property
+    def res(self):
+        return self.__res
+
+    @res.setter     # e1htr.1
+    def res(self, val):
+        val = val.split('-')
+        try:
+            val = list(map(int, val))
+            l, h = val[0], val[-1]
+        except ValueError:     # negative start index
+            l, h = -int(val[1]), int(val[2])
+        except Exception as err:
+            handleError(err, self.raw)
+        self.__res = range(l, h+1)
+
+    @property
+    def start(self):
+        return self.res[0]
+
+    @property
+    def end(self):
+        return self.res[-1]
+
+    def __str__(self):
+        return "%s:%s-%s" % (self.chain, self.res[0], self.res[-1])
+
+    def __repr__(self):
+        return {"chain": self.chain, "start": self.start, "end": self.end}
 
 
 class IllegalArgumentError(ValueError):
@@ -82,7 +314,7 @@ class EcodDomain(object):
     @property
     def chain(self):
         suffix = self.__eid[5:]
-        return suffix[:-1].upper()
+        return suffix[:-1]
 
     @property
     def num(self):
@@ -99,7 +331,7 @@ class EcodDomain(object):
 
     def is_gene_product(self, structure=None):
         if not structure:
-            record = db.ecod.find_one({})
+            return db.ecod.count({"complex": self.complex, "chain": self.chain}) <= 2
         else:
             return is_single_domain_protein(self, structure)
 
@@ -119,8 +351,6 @@ class EcodDomain(object):
         return map(EcodDomain, db.ecod.find({'$or': query}))
 
     def get_go_terms(self):
-        # return set(map(lambda e: e["GO_ID"],
-        #                db.goa.find({"DB_Object_ID": self.pdb.upper() + self.chain.upper()})))
         return utils.reduce(lambda x, y: x | y,
                             [set(map(lambda e: e["GO_ID"], db.goa.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
                              for locus in self.loci], set())

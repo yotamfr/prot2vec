@@ -28,7 +28,8 @@ logger = utils.get_logger("baselines")
 # from src.uniprot_pfam_goa_mongo import exp_codes
 
 from prot2vec import Node2Vec
-from ecod import EcodDomain
+from models import EcodDomain
+from models import PdbChain
 
 client = MongoClient('mongodb://localhost:27017/')
 db = client['prot2vec']
@@ -69,29 +70,25 @@ BINARY = {
                cache_size=200, class_weight=None, verbose=False,
                max_iter=-1, decision_function_shape=None, random_state=None),
     "RFC": RandomForestClassifier(n_estimators=10, criterion='gini', max_depth=None,
-                               min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.0,
-                               max_features='auto', max_leaf_nodes=None, min_impurity_split=1e-07,
-                               bootstrap=True, oob_score=False, n_jobs=1, random_state=None, verbose=0,
-                               warm_start=False, class_weight=None)
+                                  min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.0,
+                                  max_features='auto', max_leaf_nodes=None, min_impurity_split=1e-07,
+                                  bootstrap=True, oob_score=False, n_jobs=1, random_state=None, verbose=0,
+                                  warm_start=False, class_weight=None)
 }
 
 
-def load_ecod_data(sample_size):
+def load_data(sample_size, collection, Model):
 
     ids, wordvecs, annots, terms = [], [], [], set()
 
-    # sequences = map(EcodDomain, db.ecod.aggregate([{"$sample": {"size": sample_size}}]))
+    sample = collection.aggregate([{"$sample": {"size": sample_size}}])
 
-    sequences = map(EcodDomain, db.ecod.find({}))
-
-    # for _ in tqdm(range(sample_size), desc="ECOD sequences processed"):
-    for _ in tqdm(range(db.ecod.count({})), desc="ECOD sequences processed"):
-        seq = next(sequences)
-        # key = seq.eid.lower()
-        # if key not in WORD2VEC:
-        #     continue
-        key = seq.eid
-        if key not in WORD2VEC.model:
+    for _ in tqdm(range(sample_size), desc="sequences processed"):
+        seq = Model(next(sample))
+        if not seq.is_gene_product():
+            continue
+        key = seq.name
+        if key not in WORD2VEC:
             continue
         goterms = seq.get_go_terms()
         if not len(goterms):
@@ -262,14 +259,16 @@ def remove_null_preds(intuitive_truths, intuitive_predictions):
 
 
 def load_word2vec_models():
-    WORD2VEC.load("%s/ecod.dense.emb" % ckptpath)
+    # WORD2VEC.load("%s/ecod.dense.emb" % ckptpath)
+    # WORD2VEC.load("%s/ecod.simple.emb" % ckptpath)
+    WORD2VEC.load("%s/pdb.60.emb" % ckptpath)
 
 
 if __name__ == "__main__":
 
     load_word2vec_models()
 
-    data, labels, classes = load_ecod_data(100000)
+    data, labels, classes = load_data(50000, db.pdb, PdbChain)
     macro, micro, support, num_classes = 0.0, 0.0, 0, 0
 
     logger.info("Training Classifiers ...\n")
@@ -279,6 +278,8 @@ if __name__ == "__main__":
         X, y = data, labels[:, j]
 
         kfold = 5
+        if sum(y) < kfold:
+            continue
         sss = StratifiedShuffleSplit(n_splits=kfold, test_size=0.2, random_state=0)
 
         try:

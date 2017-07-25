@@ -18,7 +18,9 @@ from gensim.models.word2vec import Word2Vec
 
 import sys
 
-from ecod import EcodDomain
+from models import EcodDomain
+from models import PdbChain
+
 import parameters as params
 import utils
 from prot2vec import Node2Vec
@@ -257,19 +259,41 @@ def benchmark_pdb_embedding(method, sample_size):
                   for p in db.pdb.aggregate([{"$sample": {"size": sample_size}}])}
         model = Word2Vec.load('%s/%s.%s.model' % (ckptpath, method, emb_dim))
         output = '%s/%s.%s.semsim.csv' % (ckptpath, method, emb_dim)
-        save_stats(compute_similarity(model, annots), output,
-                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
-    elif method == 'node2vec':
-        annots = {dom.eid.lower(): dom.get_go_terms() for dom in
+    elif method == 'ecod.dense':
+        annots = {dom.eid: dom.get_go_terms() for dom in
                   filter(lambda e: e.get_go_terms(),
                          map(EcodDomain, db.ecod.aggregate([{"$sample": {"size": sample_size}}])))}
         model = Node2Vec()
         model.load("%s/ecod.dense.emb" % ckptpath)
         output = '%s/ecod.dense.semsim.csv' % ckptpath
-        save_stats(compute_similarity(model, annots), output,
-                   cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
+    elif method == 'ecod.combined':
+        annots = {dom.eid: dom.get_go_terms() for dom in
+                  filter(lambda e: e.get_go_terms(),
+                         map(EcodDomain, db.ecod.aggregate([{"$sample": {"size": sample_size}}])))}
+        model = Node2Vec()
+        model.load("%s/ecod.dense.emb" % ckptpath)
+        model.load("%s/ecod.simple.emb" % ckptpath)
+        output = '%s/ecod.combined.semsim.csv' % ckptpath
+    elif method == 'pdb.95':
+        annots = {chain.pid: chain.get_go_terms() for chain in
+                  filter(lambda p: p.get_go_terms(),
+                         map(PdbChain, db.pdb.aggregate([{"$sample": {"size": sample_size}}])))}
+        model = Node2Vec()
+        model.load("%s/pdb.95.emb" % ckptpath)
+        output = '%s/pdb.95.semsim.csv' % ckptpath
+    elif method == 'pdb.60':
+        annots = {chain.pid: chain.get_go_terms() for chain in
+                  filter(lambda p: p.get_go_terms(),
+                         map(PdbChain, db.pdb.aggregate([{"$sample": {"size": sample_size}}])))}
+        model = Node2Vec()
+        model.load("%s/pdb.60.emb" % ckptpath)
+        output = '%s/pdb.60.semsim.csv' % ckptpath
     else:
         logger.error("Unknown method")
+        return
+
+    save_stats(compute_similarity(model, annots), output,
+               cols=['PROT1', 'PROT2', 'PROT2VEC', 'GENEONTOLOGY', 'SEQ_IDENTITY'])
 
 
 if __name__ == '__main__':
@@ -277,4 +301,4 @@ if __name__ == '__main__':
                           ['GO:0004672', 'GO:0005524', 'GO:0006468'], TSS=TSS_Cosine)
 
     # benchmark_pdb_embedding("prot2vec", 1000)
-    benchmark_pdb_embedding("node2vec", 10**4)
+    benchmark_pdb_embedding("pdb.60", 10**4)

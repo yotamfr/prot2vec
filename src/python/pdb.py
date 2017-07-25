@@ -176,7 +176,6 @@ class ConnectorPDB(object):
         else:
             return creator()
 
-
     def freemem(self):
         if P.memory_percent() > 45.:
             # print "memory_percent=%8s\tclearing cache..." % (P.memory_percent(),)
