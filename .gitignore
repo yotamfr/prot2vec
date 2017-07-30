@@ -1,6 +1,9 @@
 .idea/
-data/
-models/
+data
+models
+prot2vec.Rproj
+.Rhistory
+figures
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -103,3 +106,4 @@ ENV/
 
 # mypy
 .mypy_cache/
+.Rproj.user

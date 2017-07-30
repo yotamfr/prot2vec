@@ -6,20 +6,29 @@ from tqdm import tqdm
 from Bio import SeqIO
 from pymongo import MongoClient
 
+import matplotlib.pyplot as plt
+
+from scipy import interp
+
+from itertools import cycle
+
 from sklearn.svm import OneClassSVM
 from sklearn.ensemble import IsolationForest
 from sklearn.covariance import EllipticEnvelope
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.svm import SVC
 
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.model_selection import KFold
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.externals import joblib
+
+from sklearn.metrics import roc_curve, auc
 
 import utils
 logger = utils.get_logger("baselines")
@@ -28,8 +37,10 @@ logger = utils.get_logger("baselines")
 # from src.uniprot_pfam_goa_mongo import exp_codes
 
 from prot2vec import Node2Vec
+
 from models import EcodDomain
 from models import PdbChain
+from models import Uniprot
 
 client = MongoClient('mongodb://localhost:27017/')
 db = client['prot2vec']
@@ -43,7 +54,7 @@ seq_length = args["seq_length"]
 emb_dim = args["word_embedding_dim"]
 datapath = args["data_path"]
 
-ONECLASSDIR = "%s/oneclass" % datapath
+ONECLASSDIR = "%s/../oneclass" % datapath
 TARGETSEQDIR = "../CAFA/CAFA3/CAFA3_targets/Target files"
 TRAININGDATA = "../CAFA/CAFA3/CAFA3_training_data/uniprot_sprot_exp.fasta"
 TRAININGLABELS = "../CAFA/CAFA3/CAFA3_training_data/uniprot_sprot_exp.txt"
@@ -54,25 +65,27 @@ CAFA2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
 now = datetime.datetime.utcnow()
 # now = CAFA2_cutoff
 
+random_state = np.random.RandomState(0)
+
 WORD2VEC = Node2Vec()
 
 ONECLASS = {
     "IsolationForest": IsolationForest(n_estimators=100, max_samples='auto', contamination=0.1, max_features=1.0,
-                                       bootstrap=False, n_jobs=1, random_state=None, verbose=0),
+                                       bootstrap=False, n_jobs=1, random_state=random_state, verbose=0),
     "OneClassSVM": OneClassSVM(nu=0.1, kernel="rbf", gamma=0.1),
     "EllipticEnvelope": EllipticEnvelope(store_precision=True, assume_centered=False, support_fraction=None,
-                         contamination=0.1, random_state=None)
+                         contamination=0.1, random_state=random_state)
 }
 
 BINARY = {
     "SVM": SVC(C=1.0, kernel='rbf', degree=3, gamma='auto',
                coef0=0.0, shrinking=True, probability=False, tol=0.001,
                cache_size=200, class_weight=None, verbose=False,
-               max_iter=-1, decision_function_shape=None, random_state=None),
+               max_iter=-1, decision_function_shape=None, random_state=random_state),
     "RFC": RandomForestClassifier(n_estimators=10, criterion='gini', max_depth=None,
                                   min_samples_split=2, min_samples_leaf=1, min_weight_fraction_leaf=0.0,
                                   max_features='auto', max_leaf_nodes=None, min_impurity_split=1e-07,
-                                  bootstrap=True, oob_score=False, n_jobs=1, random_state=None, verbose=0,
+                                  bootstrap=True, oob_score=False, n_jobs=1, random_state=random_state, verbose=0,
                                   warm_start=False, class_weight=None)
 }
 
@@ -98,13 +111,13 @@ def load_data(sample_size, collection, Model):
         terms |= goterms
         ids.append(key)
 
-    X = np.array(wordvecs)
+    X = np.matrix(wordvecs)
     mlb = MultiLabelBinarizer(classes=list(terms), sparse_output=False)
     y = mlb.fit_transform(annots)
 
     logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
 
-    return X, y, list(mlb.classes_)
+    return X, y, mlb.classes_
 
 
 def train_multicalss_classifiers(X_train, y_train, X_test, y_test, datadir=ONECLASSDIR, calssifier=""):
@@ -261,14 +274,17 @@ def remove_null_preds(intuitive_truths, intuitive_predictions):
 def load_word2vec_models():
     # WORD2VEC.load("%s/ecod.dense.emb" % ckptpath)
     # WORD2VEC.load("%s/ecod.simple.emb" % ckptpath)
-    WORD2VEC.load("%s/pdb.60.emb" % ckptpath)
+    # WORD2VEC.load("%s/pdb.60.emb" % ckptpath)
+    WORD2VEC.load("%s/uniprot.60.emb" % ckptpath)
+    # WORD2VEC.load("%s/random.emb" % ckptpath)
 
 
-if __name__ == "__main__":
+def main1(models, collection, Model, sample_size):
 
-    load_word2vec_models()
+    for model in models:
+        WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
 
-    data, labels, classes = load_data(50000, db.pdb, PdbChain)
+    data, labels, classes = load_data(sample_size, collection, Model)
     macro, micro, support, num_classes = 0.0, 0.0, 0, 0
 
     logger.info("Training Classifiers ...\n")
@@ -278,9 +294,10 @@ if __name__ == "__main__":
         X, y = data, labels[:, j]
 
         kfold = 5
-        if sum(y) < kfold:
-            continue
-        sss = StratifiedShuffleSplit(n_splits=kfold, test_size=0.2, random_state=0)
+
+        if sum(y) < 10: continue
+
+        sss = StratifiedShuffleSplit(n_splits=kfold, test_size=.2, random_state=0)
 
         try:
             scores = np.zeros(3)
@@ -318,3 +335,114 @@ if __name__ == "__main__":
 
     logger.info("f1_macro: %s, f1_micro: %s, total_support: %s" %
                 (macro/num_classes, micro/support, support))
+
+
+def main2(models, collection, Model, sample_size):
+
+    for model in models:
+        WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
+
+    data, labels, classes = load_data(sample_size, collection, Model)
+
+    X, y = data, labels
+
+    logger.info("filtering...")
+
+    ix1 = np.sum(y, axis=0) > 99
+    y = y[:, ix1]
+    classes = classes[ix1]
+    ix0 = np.sum(y, axis=1) > 0
+    y = y[ix0, :]
+    X = X[ix0, :]
+
+    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+
+    logger.info("training...")
+
+    n_classes = y.shape[1]
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5,
+                                                            random_state=0, stratify=y)
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Learn to predict each class against the other
+        classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=2)
+        y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+
+        # Compute ROC curve and ROC area for each class
+        fpr = dict()
+        tpr = dict()
+        roc_auc = dict()
+        for i in range(n_classes):
+            fpr[classes[i]], tpr[classes[i]], _ = roc_curve(y_test[:, i], y_score[:, i])
+            roc_auc[classes[i]] = auc(fpr[classes[i]], tpr[classes[i]])
+
+        # Compute micro-average ROC curve and ROC area
+        fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+
+        # Compute macro-average ROC curve and ROC area
+
+        # First aggregate all false positive rates
+        all_fpr = np.unique(np.concatenate([fpr[classes[i]] for i in range(n_classes)]))
+
+        # Then interpolate all ROC curves at this points
+        mean_tpr = np.zeros_like(all_fpr)
+        for i in range(n_classes):
+            mean_tpr += interp(all_fpr, fpr[classes[i]], tpr[classes[i]])
+
+        # Finally average it and compute AUC
+        mean_tpr /= n_classes
+
+        fpr["macro"] = all_fpr
+        tpr["macro"] = mean_tpr
+        roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+
+        title = '#Sequences: %s, #GO-Terms: %s' % y.shape
+        plot_roc_auc(fpr, tpr, roc_auc, classes, title)
+
+    except ValueError as err:
+        logger.error(err)
+
+
+def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
+    # Plot all ROC curves
+    lw = 2
+    plt.figure()
+    plt.plot(fpr["micro"], tpr["micro"],
+             label='micro-average ROC curve (area = {0:0.2f})'
+                   ''.format(roc_auc["micro"]),
+             color='deeppink', linestyle=':', linewidth=4)
+
+    plt.plot(fpr["macro"], tpr["macro"],
+             label='macro-average ROC curve (area = {0:0.2f})'
+                   ''.format(roc_auc["macro"]),
+             color='navy', linestyle=':', linewidth=4)
+
+    colors = cycle(['aqua', 'darkorange', 'cornflowerblue', 'magenta', 'cyan'])
+    for i, color in zip(range(5), colors):
+        plt.plot(fpr[classes[i]], tpr[classes[i]], color=color, lw=lw,
+                 label='ROC curve of class {0} (area = {1:0.2f})'
+                       ''.format(classes[i], roc_auc[classes[i]]))
+
+    plt.plot([0, 1], [0, 1], 'k--', lw=lw)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(title)
+    plt.legend(loc="lower right")
+    plt.show()
+
+
+if __name__ == "__main__":
+
+    # main2(["uniprot.60"], db.uniprot, Uniprot, 50000)
+
+    main2(["random"], db.pdb, PdbChain, 50000)
+
+    # main1(["pdb.95"], db.pdb, PdbChain, 50000)

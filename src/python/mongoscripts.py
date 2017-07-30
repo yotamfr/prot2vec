@@ -210,39 +210,35 @@ def load_pdb_goa(start=db.goa.count({})): # load GOA in a flat structure
 def add_single_uniprot(fasta):
 
     header, sequence = fasta.id, str(fasta.seq)
-    db, UniqueIdentifier, EntryName = header.split(' ')[0].split('|')
+    dbname, UniqueIdentifier, EntryName = header.split(' ')[0].split('|')
 
     prot = {
         "primary_accession": UniqueIdentifier,
-        "db": db,
+        "db": dbname,
         "entry_name": EntryName,
         "sequence": sequence,
         "length": len(sequence),
         "created_at": datetime.datetime.utcnow(),
-        "header": header,
-        "is_target": False,
-        "is_train": False,
+        "header": header
     }
 
-    Uniprot.update_one({
+    db.uniprot.update_one({
         "_id": UniqueIdentifier}, {
         "$set": prot
     }, upsert=True)
 
 
-def load_uniprot(start=Uniprot.count({})):   # http://www.uniprot.org/help/fasta-headers
+def load_uniprot(start=db.uniprot.count({})):   # http://www.uniprot.org/help/fasta-headers
     numseq = 0
     logger.info("Countig Uniprot sequences.")
-    fasta_sequences = SeqIO.parse(open(UNIPROTSRC),'fasta')
+    fasta_sequences = SeqIO.parse(open(args["uniprot_fasta"]),'fasta')
     for fasta in fasta_sequences: numseq += 1
     logger.info("\nLoading %s Uniprot sequences to cafa3 ...\n" % numseq)
-    fasta_sequences = SeqIO.parse(open(UNIPROTSRC),'fasta')
+    fasta_sequences = SeqIO.parse(open(args["uniprot_fasta"]), 'fasta')
     for i in tqdm(range(numseq), desc="sequences already processed"):
         if i < start: continue
         add_single_uniprot(next(fasta_sequences))
-    load_external_uniprot_data()
-
-    logger.info("\nFinished loading Uniprot! %s errors had occurred\n" % (len(errors)))
+    logger.info("\nFinished!")
 
 
 # def read_clstr(collection, cluster_filename):
@@ -280,8 +276,10 @@ def load_uniprot(start=Uniprot.count({})):   # http://www.uniprot.org/help/fasta
 
 def main():
     # load_pdb_sequences()
-    load_ecod_sequences()
+    # load_ecod_sequences()
     # load_pdb_goa()
+    load_uniprot()
+
 
 if __name__ == "__main__":
     main()

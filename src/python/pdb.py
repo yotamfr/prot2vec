@@ -318,8 +318,8 @@ def measure_min_dist(model1, model2):
         return closestnbr(A, B)
     atoms1 = list(model1.get_atoms())
     atoms2 = list(model2.get_atoms())
-    cas1 = filter(lambda a: a.name=='CA', atoms1)
-    cas2 = filter(lambda a: a.name=='CA', atoms2)
+    cas1 = filter(lambda a: a.name == 'CA', atoms1)
+    cas2 = filter(lambda a: a.name == 'CA', atoms2)
     atomMatom = get_min_dist(atoms1, atoms2)
     caMca = get_min_dist(cas1, cas2)
     return [atomMatom[0], caMca[0]]

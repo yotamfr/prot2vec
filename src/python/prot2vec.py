@@ -8,14 +8,14 @@ from pymongo import MongoClient
 from tqdm import tqdm
 
 from models import EcodDomain
+from models import Uniprot
+from models import PdbChain
 
 assert doc2vec.FAST_VERSION > -1
 
 from numpy import dot
 
 from sklearn.decomposition import PCA
-
-from models import PdbChain
 
 import itertools
 import networkx as nx
@@ -34,8 +34,10 @@ ckptpath = args["ckpt_path"]
 seq_length = args["seq_length"]
 emb_dim = args["word_embedding_dim"]
 datapath = args["data_path"]
+
 ECOD = args['ecod_fasta']
 PDB = args['pdb_fasta']
+UNIPROT = args['uniprot_fasta']
 
 client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
@@ -58,14 +60,12 @@ consts = {
 }
 
 
-def get_pdb_clusters(ratio):
-
-    fasta_filename = PDB
+def get_cdhit_clusters(ratio, fasta_filename, parse=lambda seq: seq.split('>')[1].split('...')[0].split('|')[0]):
 
     cluster_filename = "%s.%s" % (fasta_filename, ratio)
 
     if not os.path.exists(cluster_filename):
-        os.system("cdhit -i %s -o %s -c %s -n 4" % (fasta_filename, cluster_filename, ratio))
+        os.system("cdhit -i %s -o %s -c %s -n 5" % (fasta_filename, cluster_filename, ratio))
 
     # open the cluster file and set the output dictionary
     cluster_file, cluster_dic, reverse_dic = open("%s.clstr" % cluster_filename), {}, {}
@@ -75,39 +75,12 @@ def get_pdb_clusters(ratio):
     cluster_groups = (x[1] for x in itertools.groupby(cluster_file, key=lambda line: line[0] == '>'))
     for cluster in cluster_groups:
         name = int(next(cluster).strip().split()[-1])
-        ids = [seq.split('>')[1].split('...')[0].split('|')[0] for seq in next(cluster_groups)]
+        ids = [parse(seq) for seq in next(cluster_groups)]
         cluster_dic[name] = ids
     for cluster, ids in cluster_dic.items():
         for seqid in ids:
             reverse_dic[seqid] = cluster
     logger.info("Detected %s clusters (>%s similarity) groups..." % (len(cluster_dic), ratio))
-
-    return cluster_dic, reverse_dic
-
-
-def get_ecod_clusters(ratio):
-
-    fasta_filename = ECOD
-
-    cluster_filename = "%s.%s" % (fasta_filename, ratio)
-
-    if not os.path.exists(cluster_filename):
-        os.system("cdhit -i %s -o %s -c %s" % (fasta_filename, cluster_filename, ratio))
-
-    # open the cluster file and set the output dictionary
-    cluster_file, cluster_dic, reverse_dic = open("%s.clstr" % cluster_filename), {}, {}
-
-    logger.info("Reading cluster groups...")
-    # parse through the cluster file and store the cluster name + sequences in the dictionary
-    cluster_groups = (x[1] for x in itertools.groupby(cluster_file, key=lambda line: line[0] == '>'))
-    for cluster in cluster_groups:
-        name = int(next(cluster).strip().split()[-1])
-        ids = [seq.split('>')[1].split('...')[0].split('|')[0] for seq in next(cluster_groups)]
-        cluster_dic[name] = ids
-    for cluster, ids in cluster_dic.items():
-        for seqid in ids:
-            reverse_dic[seqid] = cluster
-    logger.info("Detected %s cluster groups..." % len(cluster_dic))
 
     return cluster_dic, reverse_dic
 
@@ -150,11 +123,66 @@ class Graph(object):
         return nx.number_connected_components(self.graph)
 
     def __str__(self):
-        return 'G=(V,E) |E|=%s, |V|=%s #CCs=%s' %\
+        return 'G=(V,E) |E|=%s |V|=%s #CCs=%s' %\
                (len(self.edges()), len(self.nodes()), self.number_connected_components())
 
     def to_gml(self, relpath):
         nx.write_gml(self, relpath)
+
+
+class RandomGraph(Graph):
+
+    def __init__(self, edgelist_filename):
+        super(RandomGraph, self).__init__(edgelist_filename)
+
+    def init(self):
+        logger.info(self)
+        logger.info("Initiating Graph from PDB collection")
+        nodes = list(map(PdbChain, db.pdb.find({})))
+        for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
+            self.add_node(nodes[i].name)
+        logger.info("Finished!")
+        logger.info(self)
+
+    def coalesce(self, func, th=.90, num_trials=2000):
+        bar = tqdm(range(num_trials), desc=str(self))
+        for i in bar:
+            nodes = np.random.choice(self.nodes(), size=1000, replace=False)
+            for u, v in itertools.combinations(nodes, 2):
+                if hash(u) % 2000 == hash(v) % 2000:
+                    func(self, u, v)
+            if not i % 50:
+                self.to_edgelist(self.edgelist)
+                bar.set_description(str(self))
+
+
+class UniprotGraph(Graph):
+
+    def __init__(self, edgelist_filename):
+        super(UniprotGraph, self).__init__(edgelist_filename)
+
+    def init(self):
+        logger.info(self)
+        logger.info("Initiating Graph from Uniprot collection")
+        nodes = list(map(Uniprot, db.uniprot.find({})))
+        for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
+            self.add_node(nodes[i].uid)
+        logger.info("Finished!")
+        logger.info(self)
+
+    def coalesce(self, func, th=.90, num_trials=2000):
+        parse_uniprot_id = lambda seq: seq.split('>')[1].split('...')[0].split('|')[1]
+        cluster_dic, reverse_dic = get_cdhit_clusters(th, UNIPROT, parse_uniprot_id)
+        bar = tqdm(range(num_trials), desc=str(self))
+        for i in bar:
+            nodes = np.random.choice(self.nodes(), size=1000, replace=False)
+            for u, v in itertools.combinations(nodes, 2):
+                if u in reverse_dic and v in reverse_dic:
+                    if reverse_dic[u] == reverse_dic[v]:
+                        func(self, u, v)
+            if not i % 50:
+                self.to_edgelist(self.edgelist)
+                bar.set_description(str(self))
 
 
 class PdbGraph(Graph):
@@ -172,7 +200,7 @@ class PdbGraph(Graph):
         logger.info(self)
 
     def coalesce(self, func, th=.90, num_trials=2000):
-        cluster_dic, reverse_dic = get_pdb_clusters(th)
+        cluster_dic, reverse_dic = get_cdhit_clusters(th, PDB)
         bar = tqdm(range(num_trials), desc=str(self))
         for i in bar:
             nodes = np.random.choice(self.nodes(), size=1000, replace=False)
@@ -202,7 +230,7 @@ class EcodGraph(Graph):
         logger.info(self)
 
     def coalesce(self, func, th=.90, num_trials=2000):
-        cluster_dic, reverse_dic = get_ecod_clusters(th)
+        cluster_dic, reverse_dic = get_cdhit_clusters(th, ECOD)
         nodes_dic = get_ecod_dictionary("ecod_id")
         bar = tqdm(range(num_trials), desc=str(self))
         for i in bar:
@@ -358,7 +386,7 @@ def get_pdb_dictionary(key_field):
 
 def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
     nodes_dic = get_ecod_dictionary("uid")
-    cluster_dic, reverse_dic = get_ecod_clusters(th)
+    cluster_dic, reverse_dic = get_cdhit_clusters(th, ECOD)
     logger.info("Retrofitting...")
     lexicon = "%s/synonyms.%s.txt" % (ckptpath, th)
     ecods = [map(lambda uid: nodes_dic[uid].name, ids)
@@ -374,7 +402,7 @@ def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
 class Node2Vec(object):
 
     def __init__(self):
-        self.model = {}
+        self._model = dict()
 
     def load(self, emb):
         if os.path.exists(emb):
@@ -415,28 +443,38 @@ class Node2Vec(object):
         else:
             logger.error("%s not found" % edgelist)
 
+    @property
+    def vectors(self):
+        return self._model.values()
+
     def similarity(self, w1, w2):
-        v1 = matutils.unitvec(self[w1])
-        v2 = matutils.unitvec(self[w2])
-        return dot(v1, v2)
+        return dot(matutils.unitvec(self[w1]), matutils.unitvec(self[w2]))
 
     def __getitem__(self, key):
-        return self.model[key]
+        return self._model[key]
 
     def __setitem__(self, key, val):
-        self.model[key] = val
+        self._model[key] = val
 
     def __contains__(self, key):
-        return key in self.model
+        return key in self._model
 
+    @property
     def vocab(self):
-        return self.model.keys()
+        return self._model.keys()
 
 
-def create_pdb_edgelist(perc=70):
+def create_uniprot_edgelist(perc, num_iter):
+    dst = '%s/uniprot.%s.edgelist' % (ckptpath, perc)
+    G = UniprotGraph(dst)
+    G.coalesce(thicken, perc/100.0, num_iter)
+    G.to_edgelist(dst)
+
+
+def create_pdb_edgelist(perc, num_iter):
     dst = '%s/pdb.%s.edgelist' % (ckptpath, perc)
     G = PdbGraph(dst)
-    G.coalesce(thicken, perc/100.0, 4000)
+    G.coalesce(thicken, perc/100.0, num_iter)
     G.to_edgelist(dst)
 
 
@@ -449,9 +487,16 @@ def create_ecod_edgelist(perc=95):
 
 def main():
 
+    # dst = '%s/random.edgelist' % ckptpath
+    # G = RandomGraph(dst)
+    # G.coalesce(thicken)
+    # G.to_edgelist(dst)
+
+    # create_uniprot_edgelist(60, 2000)
+
     model = Node2Vec()
 
-    model.train('%s/pdb.60.edgelist' % ckptpath, "%s/pdb.60.emb" % ckptpath)
+    model.train('%s/uniprot.60.edgelist' % ckptpath, "%s/uniprot.60.emb" % ckptpath)
 
     # retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 

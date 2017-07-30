@@ -22,6 +22,8 @@ client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
 db = client[dbname]
 
+GOA = client["cafa3"].geneontology_annots
+
 ECOD = args["ecod_fasta"]
 PDB = ConnectorPDB(args["pdb_dir"])
 cullpdb = args["cull_pdb"]
@@ -95,6 +97,42 @@ class Motif(object):
     def __str__(self):
         args = (self.name, self.pdb, self.chain, map(str, self.loci))
         return 'name:\t%s\npdb:\t%s\nchain:\t%s\nloci:\t%s' % args
+
+
+class Uniprot(object):
+
+    def __init__(self, doc):
+        self.uid = doc["primary_accession"]
+        self.dbname = doc["db"]
+        self.entry_name = doc["entry_name"]
+        self.seq = doc["sequence"]
+
+    @property
+    def name(self):
+        return self.__uid
+
+    @property
+    def seq(self):
+        return self.__seq
+
+    @seq.setter
+    def seq(self, val):
+        self.__seq = val
+
+    @property
+    def uid(self):
+        return self.__uid
+
+    @uid.setter
+    def uid(self, val):
+        self.__uid = val
+
+    def get_go_terms(self):
+        return set(map(lambda e: e["GO_ID"],
+                       GOA.find({"DB_Object_ID": self.uid})))
+
+    def is_gene_product(self):
+        return True
 
 
 class PdbChain(object):
