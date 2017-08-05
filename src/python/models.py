@@ -127,7 +127,7 @@ class Uniprot(object):
     def uid(self, val):
         self.__uid = val
 
-    def get_go_terms(self):
+    def get_go_terms(self, aspect=None):
         return set(map(lambda e: e["GO_ID"],
                        GOA.find({"DB_Object_ID": self.uid})))
 
@@ -179,9 +179,10 @@ class PdbChain(object):
     def complex(self, val):
         self.__complex = val
 
-    def get_go_terms(self):
-        return set(map(lambda e: e["GO_ID"],
-                       db.goa.find({"DB_Object_ID": self.pid})))
+    def get_go_terms(self, aspect=None):
+        criteria = {"DB_Object_ID": self.pid, "Aspect": aspect} \
+            if aspect else {"DB_Object_ID": self.pid}
+        return set(map(lambda e: e["GO_ID"], db.goa.find(criteria)))
 
     def is_gene_product(self):
         return True
@@ -388,7 +389,7 @@ class EcodDomain(object):
                       for locus in self.loci])
         return map(EcodDomain, db.ecod.find({'$or': query}))
 
-    def get_go_terms(self):
+    def get_go_terms(self, aspect=None):
         return utils.reduce(lambda x, y: x | y,
                             [set(map(lambda e: e["GO_ID"], db.goa.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
                              for locus in self.loci], set())

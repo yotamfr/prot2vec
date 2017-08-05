@@ -92,7 +92,7 @@ BINARY = {
 }
 
 
-def load_data(sample_size, collection, Model):
+def load_data(sample_size, collection, Model, aspect=None):
 
     ids, wordvecs, annots, terms = [], [], [], set()
 
@@ -105,7 +105,7 @@ def load_data(sample_size, collection, Model):
         key = seq.name
         if key not in WORD2VEC:
             continue
-        goterms = seq.get_go_terms()
+        goterms = seq.get_go_terms(aspect)
         if not len(goterms):
             continue
         wordvecs.append(WORD2VEC[key])
@@ -522,11 +522,72 @@ def plot_precision_recall(recall, precision, average_precision, classes, title):
     plt.legend(loc="lower right")
     plt.show()
 
+
+def main4(models, aspect, sample_size):
+
+    collection, Model = db.pdb, PdbChain
+
+    for model in models:
+        WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
+
+    data, labels, classes = load_data(sample_size, collection, Model)
+
+    X, y = data, labels
+
+    logger.info("filtering...")
+
+    ix1 = np.sum(y, axis=0) > 9
+    y = y[:, ix1]
+    classes = classes[ix1]
+    ix0 = np.sum(y, axis=1) > 0
+    y = y[ix0, :]
+    X = X[ix0, :]
+
+    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+
+    logger.info("training...")
+
+    n_classes = y.shape[1]
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5,
+                                                            random_state=0, stratify=y)
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Learn to predict each class against the other
+        classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=2)
+        y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+
+        # Compute ROC curve and ROC area for each class
+        precision = dict()
+        recall = dict()
+        average_precision = dict()
+        for i in range(n_classes):
+            precision[classes[i]], recall[classes[i]], _ = precision_recall_curve(y_test[:, i], y_score[:, i])
+            average_precision[classes[i]] = average_precision_score(y_test[:, i], y_score[:, i])
+
+            # Compute Precision-Recall and plot curve
+            precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+            average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+
+        # Compute micro-average ROC curve and ROC area
+        precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+        average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+
+        title = 'Precision-Recall curve: #Sequences: %s, #GO-Terms: %s' % y.shape
+        plot_precision_recall(recall, precision, average_precision, classes, title)
+
+    except ValueError as err:
+        logger.error(err)
+
 if __name__ == "__main__":
 
     # main3(["uniprot.60"], db.uniprot, Uniprot, 10 ** 4)
 
-    main3(["random"], db.pdb, PdbChain, 50000)
+    main4(["random"], "F", 10 ** 4)
 
     # model = Node2Vec()
 
