@@ -530,7 +530,7 @@ def main4(models, aspect, sample_size):
     for model in models:
         WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
 
-    data, labels, classes = load_data(sample_size, collection, Model)
+    data, labels, classes = load_data(sample_size, collection, Model, aspect)
 
     X, y = data, labels
 
@@ -587,7 +587,7 @@ if __name__ == "__main__":
 
     # main3(["uniprot.60"], db.uniprot, Uniprot, 10 ** 4)
 
-    main4(["random"], "F", 10 ** 4)
+    main4(["pdb.60"], "F", 10 ** 4)
 
     # model = Node2Vec()
 
