@@ -29,6 +29,8 @@ from sklearn.metrics import precision_recall_fscore_support
 from sklearn.externals import joblib
 
 from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import average_precision_score
 
 import utils
 logger = utils.get_logger("baselines")
@@ -439,11 +441,92 @@ def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
     plt.show()
 
 
+def main3(models, collection, Model, sample_size):
+
+    for model in models:
+        WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
+
+    data, labels, classes = load_data(sample_size, collection, Model)
+
+    X, y = data, labels
+
+    logger.info("filtering...")
+
+    ix1 = np.sum(y, axis=0) > 9
+    y = y[:, ix1]
+    classes = classes[ix1]
+    ix0 = np.sum(y, axis=1) > 0
+    y = y[ix0, :]
+    X = X[ix0, :]
+
+    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+
+    logger.info("training...")
+
+    n_classes = y.shape[1]
+
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5,
+                                                            random_state=0, stratify=y)
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Learn to predict each class against the other
+        classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=2)
+        y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+
+        # Compute ROC curve and ROC area for each class
+        precision = dict()
+        recall = dict()
+        average_precision = dict()
+        for i in range(n_classes):
+            precision[classes[i]], recall[classes[i]], _ = precision_recall_curve(y_test[:, i], y_score[:, i])
+            average_precision[classes[i]] = average_precision_score(y_test[:, i], y_score[:, i])
+
+            # Compute Precision-Recall and plot curve
+            precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+            average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+
+        # Compute micro-average ROC curve and ROC area
+        precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+        average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+
+        title = 'Precision-Recall curve: #Sequences: %s, #GO-Terms: %s' % y.shape
+        plot_precision_recall(recall, precision, average_precision, classes, title)
+
+    except ValueError as err:
+        logger.error(err)
+
+
+def plot_precision_recall(recall, precision, average_precision, classes, title):
+    # Plot Precision-Recall curve
+    colors = cycle(['navy', 'turquoise', 'darkorange', 'cornflowerblue', 'teal'])
+    lw, n_classes = 2, 5
+
+    # Plot Precision-Recall curve for each class
+    plt.clf()
+    plt.plot(recall["micro"], precision["micro"], color='gold', lw=lw,
+             label='micro-average Precision-recall curve (area = {0:0.2f})'
+                   ''.format(average_precision["micro"]))
+    for i, color in zip(range(n_classes), colors):
+        plt.plot(recall[classes[i]], precision[classes[i]], color=color, lw=lw,
+                 label='Precision-recall curve of class {0} (area = {1:0.2f})'
+                       ''.format(classes[i], average_precision[classes[i]]))
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(title)
+    plt.legend(loc="lower right")
+    plt.show()
+
 if __name__ == "__main__":
 
-    # main2(["uniprot.60"], db.uniprot, Uniprot, 50000)
+    # main3(["uniprot.60"], db.uniprot, Uniprot, 10 ** 4)
 
-    main1(["random"], db.pdb, PdbChain, 50000)
+    main3(["random"], db.pdb, PdbChain, 50000)
 
     # model = Node2Vec()
 
