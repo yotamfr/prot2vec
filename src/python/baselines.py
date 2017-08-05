@@ -348,7 +348,7 @@ def main2(models, collection, Model, sample_size):
 
     logger.info("filtering...")
 
-    ix1 = np.sum(y, axis=0) > 99
+    ix1 = np.sum(y, axis=0) > 9
     y = y[:, ix1]
     classes = classes[ix1]
     ix0 = np.sum(y, axis=1) > 0
@@ -443,6 +443,10 @@ if __name__ == "__main__":
 
     # main2(["uniprot.60"], db.uniprot, Uniprot, 50000)
 
-    main2(["random"], db.pdb, PdbChain, 50000)
+    main1(["random"], db.pdb, PdbChain, 50000)
 
-    # main1(["pdb.95"], db.pdb, PdbChain, 50000)
+    # model = Node2Vec()
+
+    # model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
+
+    # main1(["uniprot.80"], db.uniprot, Uniprot, 50000)

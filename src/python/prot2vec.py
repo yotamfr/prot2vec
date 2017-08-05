@@ -492,11 +492,11 @@ def main():
     # G.coalesce(thicken)
     # G.to_edgelist(dst)
 
-    # create_uniprot_edgelist(60, 2000)
+    create_uniprot_edgelist(80, 8000)
 
     model = Node2Vec()
 
-    model.train('%s/uniprot.60.edgelist' % ckptpath, "%s/uniprot.60.emb" % ckptpath)
+    model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
 
     # retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 
