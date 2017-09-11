@@ -25,6 +25,7 @@ args = parser.parse_args()
 
 arguments = {
     "pdb_fasta": "{}/pdbaa".format(args.datapath),
+    "pdbnr_fasta": "{}/pdbaa.nr".format(args.datapath),
     "pdb_gaf": "{}/goa_pdb.gaf".format(args.datapath),
     "obo_file": "{}/go-basic.obo".format(args.datapath),
     "ecod_fasta": "{}/ecod.latest.fasta.txt".format(args.datapath),

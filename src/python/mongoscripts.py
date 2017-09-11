@@ -83,13 +83,13 @@ def load_ecod_sequences(start=db.ecod.count({})):
     logger.info("\nFinished!")
 
 
-def load_pdb_sequences(start=db.pdb.count({}), fetch_go=False):
+def load_pdb_sequences(collection, filename, start=None, fetch_go=False):
 
     numseq = 0
-    filename = args["pdb_fasta"]
+    if not start: start = collection.count({}) + 5
     logger.info("Countig PDB sequences.")
     fasta_sequences = SeqIO.parse(open(filename), 'fasta')
-    for fasta in fasta_sequences: numseq += 1
+    for _ in fasta_sequences: numseq += 1
     logger.info("Loading %s PDB sequences to %s ..." % (numseq, dbname))
     fasta_sequences = SeqIO.parse(open(filename), 'fasta')
 
@@ -107,9 +107,14 @@ def load_pdb_sequences(start=db.pdb.count({}), fetch_go=False):
         if i < start: continue
         d = None
 
-        if not d: d = parse(formatC, fasta.description,
+        if ' ||' in fasta.description:
+            desc, dup = fasta.description.split(' ||')
+        else:
+            desc, dup = fasta.description, None
+
+        if not d: d = parse(formatC, desc,
                             dict(INT=parse_int, FLOAT=parse_float, BOOL=parse_bool, LIST=parse_list))
-        if not d: d = parse(formatD, fasta.description,
+        if not d: d = parse(formatD, desc,
                             dict(INT=parse_int, FLOAT=parse_float, BOOL=parse_bool, LIST=parse_list))
         if not d: continue
 
@@ -123,7 +128,7 @@ def load_pdb_sequences(start=db.pdb.count({}), fetch_go=False):
 
         terms = [] if not fetch_go else get_GO_terms(fasta.id)
 
-        db.pdb.update_one({"_id": fasta.id}, {
+        collection.update_one({"_id": fasta.id}, {
             "$set": {
                 "pdb_id": d["pdb_id"],
                 "complex": d["pdb_id"][:4],
@@ -147,7 +152,8 @@ def load_pdb_sequences(start=db.pdb.count({}), fetch_go=False):
                       "name": t['detail']['@name'],
                       "definition": t['detail']['@definition']
                       } for t in terms],
-                "descriptors": descriptors
+                "descriptors": descriptors,
+                "duplicates": [] if not dup else dup.split(' ')
             }
         }, upsert=True)
 
@@ -275,10 +281,10 @@ def load_uniprot(start=db.uniprot.count({})):   # http://www.uniprot.org/help/fa
 
 
 def main():
-    # load_pdb_sequences()
+    load_pdb_sequences(collection=db.pdbnr, filename=args["pdbnr_fasta"])
     # load_ecod_sequences()
     # load_pdb_goa()
-    load_uniprot()
+    # load_uniprot()
 
 
 if __name__ == "__main__":

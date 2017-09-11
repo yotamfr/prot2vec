@@ -68,6 +68,7 @@ now = datetime.datetime.utcnow()
 # now = CAFA2_cutoff
 
 random_state = np.random.RandomState(0)
+np.random.seed(101)
 
 WORD2VEC = Node2Vec()
 
@@ -122,6 +123,39 @@ def load_data(sample_size, collection, Model, aspect=None):
     return X, y, mlb.classes_
 
 
+def load_multiple_data(sample_size, collection, Model, dictionaries=[WORD2VEC], aspect=None):
+
+    sample = collection.aggregate([{"$sample": {"size": sample_size}}])
+
+    ids, wordvecs, annots, terms = [], {D.name: [] for D in dictionaries}, [], set()
+
+    for _ in tqdm(range(sample_size), desc="sequences processed"):
+        seq = Model(next(sample))
+        if not seq.is_gene_product():
+            continue
+        key = seq.name
+        if not np.all([key in D for D in dictionaries]):
+            continue
+        goterms = seq.get_go_terms(aspect)
+        if not len(goterms):
+            continue
+        for D in dictionaries:
+            wordvecs[D.name].append(D[key])
+        annots.append(goterms)
+        terms |= goterms
+        ids.append(key)
+
+    for D in dictionaries:
+        wordvecs[D.name] = np.matrix(wordvecs[D.name])
+
+    mlb = MultiLabelBinarizer(classes=list(terms), sparse_output=False)
+    y = mlb.fit_transform(annots)
+
+    logger.info("X.shape=%s y.shape=%s\n" % (wordvecs[dictionaries[0].name].shape, y.shape))
+
+    return wordvecs, y, mlb.classes_
+
+
 def train_multicalss_classifiers(X_train, y_train, X_test, y_test, datadir=ONECLASSDIR, calssifier=""):
     pass
 
@@ -168,47 +202,25 @@ def measure_oneclass_accuracy(X_test, y_truth, calssifier="OneClassSVM"):
     return score
 
 
-def get_hmmer_predictions(datafile=TRAININGDATA, date=now):
-
-    logger.info("Predicting labels for %s based on HMMER.\n" % datafile)
-
-    numseqs, intuitive_prediction = 0, {}
-    fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
-    for target in fasta_sequences: numseqs += 1
-    fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
-
-    for i in tqdm(range(numseqs)):
-        target = next(fasta_sequences)
-        hits = sorted(Hmmer.find_one({"_id": target.id})["hits"],
-                      key=lambda h: h['@score'], reverse=True)
-        intuitive_prediction[target.id] = set()
-        for hit in hits:
-            terms = get_goa_until_date(hit["@acc2"], date)
-            if not(hit["@acc2"] == target.id or terms.issubset(set())):
-                intuitive_prediction[target.id] = terms
-                break
-    return intuitive_prediction
+# def get_goa_until_date(id, date):
+#     annots = Annots.find({"DB_Object_ID": id, "Date": {"$lte": date}, "ECO_Evidence_code": {"$in": exp_codes}})
+#     return set(map(lambda annot: annot["GO_ID"], annots))
 
 
-def get_goa_until_date(id, date):
-    annots = Annots.find({"DB_Object_ID": id, "Date": {"$lte": date}, "ECO_Evidence_code": {"$in": exp_codes}})
-    return set(map(lambda annot: annot["GO_ID"], annots))
-
-
-def get_mock_predictions(datafile=TRAININGDATA, date=now):
-
-    logger.info("Predicting labels for %s based on GOA.\n" % datafile)
-
-    numseqs, intuitive_prediction = 0, {}
-    fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
-    for target in fasta_sequences: numseqs += 1
-    fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
-
-    for i in tqdm(range(numseqs)):
-        target = next(fasta_sequences)
-        terms = get_goa_until_date(target.id, date)
-        intuitive_prediction[target.id] = set(terms)
-    return intuitive_prediction
+# def get_mock_predictions(datafile=TRAININGDATA, date=now):
+#
+#     logger.info("Predicting labels for %s based on GOA.\n" % datafile)
+#
+#     numseqs, intuitive_prediction = 0, {}
+#     fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
+#     for target in fasta_sequences: numseqs += 1
+#     fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
+#
+#     for i in tqdm(range(numseqs)):
+#         target = next(fasta_sequences)
+#         terms = get_goa_until_date(target.id, date)
+#         intuitive_prediction[target.id] = set(terms)
+#     return intuitive_prediction
 
 
 def compute_precision_recall_fscore_support(intuitive_truths, intuitive_predictions, limit=10000):
@@ -441,63 +453,69 @@ def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
     plt.show()
 
 
-def main3(models, collection, Model, sample_size):
+def main3(dictionaries, collection, Model, sample_size):
 
-    for model in models:
-        WORD2VEC.load("%s/%s.emb" % (ckptpath, model))
+    for model in dictionaries:
+        model.load("%s/%s.emb" % (ckptpath, model.name))
 
-    data, labels, classes = load_data(sample_size, collection, Model)
+    wordsvecs, labels, classes = load_multiple_data(sample_size, collection, Model, dictionaries)
 
-    X, y = data, labels
+    for model in dictionaries:
 
-    logger.info("filtering...")
+        logger.info("Measuring %s Performance" % model.name)
 
-    ix1 = np.sum(y, axis=0) > 9
-    y = y[:, ix1]
-    classes = classes[ix1]
-    ix0 = np.sum(y, axis=1) > 0
-    y = y[ix0, :]
-    X = X[ix0, :]
+        X = wordsvecs[model.name]
 
-    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+        logger.info("filtering...")
 
-    logger.info("training...")
+        ix1 = np.sum(labels, axis=0) > 9       # only cls when num samples > 9
+        y = labels[:, ix1]
+        cls = classes[ix1]
+        ix0 = np.sum(y, axis=1) > 0       # only samples when mum cls > 0
+        y = y[ix0, :]
+        X = X[ix0, :]
 
-    n_classes = y.shape[1]
+        assert np.all(np.sum(y, axis=0) > 9)
+        assert np.all(np.sum(y, axis=1) > 0)
 
-    try:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5,
-                                                            random_state=0, stratify=y)
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train = scaler.transform(X_train)
-        X_test = scaler.transform(X_test)
+        logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
 
-        # Learn to predict each class against the other
-        classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=2)
-        y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+        logger.info("training...")
 
-        # Compute ROC curve and ROC area for each class
-        precision = dict()
-        recall = dict()
-        average_precision = dict()
-        for i in range(n_classes):
-            precision[classes[i]], recall[classes[i]], _ = precision_recall_curve(y_test[:, i], y_score[:, i])
-            average_precision[classes[i]] = average_precision_score(y_test[:, i], y_score[:, i])
+        n_classes = y.shape[1]
 
-            # Compute Precision-Recall and plot curve
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5)
+            scaler = StandardScaler()
+            scaler.fit(X_train)
+            X_train = scaler.transform(X_train)
+            X_test = scaler.transform(X_test)
+
+            # Learn to predict each class against the other
+            classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=4)
+            y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+
+            # Compute ROC curve and ROC area for each class
+            precision = dict()
+            recall = dict()
+            average_precision = dict()
+            for i in range(n_classes):
+                precision[cls[i]], recall[cls[i]], _ = precision_recall_curve(y_test[:, i], y_score[:, i])
+                average_precision[cls[i]] = average_precision_score(y_test[:, i], y_score[:, i])
+
+                # Compute Precision-Recall and plot curve
+                precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+                average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+
+            # Compute micro-average ROC curve and ROC area
             precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
             average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
 
-        # Compute micro-average ROC curve and ROC area
-        precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
-        average_precision["micro"] = average_precision_score(y_test, y_score, average="micro")
+            title = 'Precision-Recall %s: #Sequences: %s, #GO-Terms: %s' % (model.name, y.shape[0], y.shape[1])
+            plot_precision_recall(recall, precision, average_precision, cls, title)
 
-        title = 'Precision-Recall curve: #Sequences: %s, #GO-Terms: %s' % y.shape
-        plot_precision_recall(recall, precision, average_precision, classes, title)
-
-    except ValueError as err:
-        logger.error(err)
+        except ValueError as err:
+            logger.error(err)
 
 
 def plot_precision_recall(recall, precision, average_precision, classes, title):
@@ -543,7 +561,7 @@ def main4(models, aspect, sample_size):
     y = y[ix0, :]
     X = X[ix0, :]
 
-    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+    logger.info("X.shape=%s y.shape=%s (%s)\n" % (X.shape, y.shape, aspect))
 
     logger.info("training...")
 
@@ -585,12 +603,12 @@ def main4(models, aspect, sample_size):
 
 if __name__ == "__main__":
 
-    # main3(["uniprot.60"], db.uniprot, Uniprot, 10 ** 4)
-
-    main4(["pdb.60"], "F", 10 ** 4)
-
     # model = Node2Vec()
 
     # model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
 
-    # main1(["uniprot.80"], db.uniprot, Uniprot, 50000)
+    main3([Node2Vec("random.pdb"), Node2Vec("pdbnr.complex"), Node2Vec("pdbnr.enriched")], db.pdbnr, PdbChain, 20000)
+
+    main3([Node2Vec("random.uniprot"), Node2Vec("uniprot.60"), Node2Vec("uniprot.80")], db.uniprot, Uniprot, 50000)
+
+    # main4(["pdb.60"], "F", 50000)
