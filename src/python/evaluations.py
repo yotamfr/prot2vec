@@ -607,8 +607,8 @@ if __name__ == "__main__":
 
     # model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
 
-    main3([Node2Vec("random.pdb"), Node2Vec("pdbnr.complex"), Node2Vec("pdbnr.enriched")], db.pdbnr, PdbChain, 20000)
+    main3([Node2Vec("random.pdb"), Node2Vec("pdbnr.complex"), Node2Vec("pdbnr.enriched")], db.pdbnr, PdbChain, 50000)
 
-    main3([Node2Vec("random.uniprot"), Node2Vec("uniprot.60"), Node2Vec("uniprot.80")], db.uniprot, Uniprot, 50000)
+    # main3([Node2Vec("random.uniprot"), Node2Vec("uniprot.60"), Node2Vec("uniprot.80")], db.uniprot, Uniprot, 50000)
 
     # main4(["pdb.60"], "F", 50000)

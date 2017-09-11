@@ -230,7 +230,8 @@ class PdbGraphNr(Graph):
         for i in tqdm(range(len(nodes)), desc="Nodes Processed"):
             self.add_node(nodes[i].name)
             for neighbor in map(PdbChain, db.pdbnr.find({"complex": nodes[i].complex})):
-                self.add_edge(nodes[i].name, neighbor.name)
+                if nodes[i].name != neighbor.name:
+                    self.add_edge(nodes[i].name, neighbor.name)
         logger.info("Finished!")
         logger.info(self)
 
@@ -534,12 +535,12 @@ def main():
 
     # Node2Vec().train('%s/random.uniprot.edgelist' % ckptpath, "%s/random.uniprot.emb" % ckptpath)
 
-    dst = '%s/pdbnr.enriched.edgelist' % ckptpath
+    dst = '%s/pdbnr.complex.edgelist' % ckptpath
     G = PdbGraphNr(dst)
-    G.coalesce(thicken)
+    # G.coalesce(thicken)
     G.to_edgelist(dst)
 
-    Node2Vec().train('%s/pdbnr.enriched.edgelist' % ckptpath, "%s/pdbnr.enriched.emb" % ckptpath)
+    Node2Vec().train('%s/pdbnr.complex.edgelist' % ckptpath, "%s/pdbnr.complex.emb" % ckptpath)
 
     # retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 
