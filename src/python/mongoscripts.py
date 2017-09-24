@@ -280,6 +280,10 @@ def load_uniprot(start=db.uniprot.count({})):   # http://www.uniprot.org/help/fa
 #     return cluster_dic
 
 
+def read_biogrid_interactions():
+    pass
+
+
 def main():
     load_pdb_sequences(collection=db.pdbnr, filename=args["pdbnr_fasta"])
     # load_ecod_sequences()

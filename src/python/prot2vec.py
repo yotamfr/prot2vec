@@ -7,6 +7,9 @@ from gensim.models.word2vec import Word2Vec
 from pymongo import MongoClient
 from tqdm import tqdm
 
+from sklearn.preprocessing import OneHotEncoder
+from scipy import sparse
+
 from models import EcodDomain
 from models import Uniprot
 from models import PdbChain
@@ -21,7 +24,7 @@ import itertools
 import networkx as nx
 import pandas as pd
 import numpy as np
-import math
+import json
 import os
 
 import utils
@@ -81,6 +84,8 @@ def get_cdhit_clusters(ratio, fasta_filename, parse=lambda seq: seq.split('>')[1
     for cluster, ids in cluster_dic.items():
         for seqid in ids:
             reverse_dic[seqid] = cluster
+    with open('%s.%s.json' % (fasta_filename, ratio), 'w') as f:
+        json.dump(reverse_dic, f)
     logger.info("Detected %s clusters (>%s similarity) groups..." % (len(cluster_dic), ratio))
 
     return cluster_dic, reverse_dic
@@ -218,10 +223,10 @@ class PdbGraph(Graph):
                 bar.set_description(str(self))
 
 
-class PdbGraphNr(Graph):
+class PdbGraphNR(Graph):
 
     def __init__(self, edgelist_filename):
-        super(PdbGraphNr, self).__init__(edgelist_filename)
+        super(PdbGraphNR, self).__init__(edgelist_filename)
 
     def init(self):
         logger.info(self)
@@ -435,11 +440,79 @@ def retrofit_ecod_wordvecs(inpath, outpath, th=0.95):
     return outpath
 
 
-class Node2Vec(object):
+class Dictionary(object):
 
     def __init__(self, name=None):
         self._model = dict()
         self._name = name
+
+    def load(self, emb):
+        pass
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def vectors(self):
+        return self._model.values()
+
+    def wordvecs(self, keys):
+        return np.matrix([self[key] for key in keys])
+
+    def similarity(self, w1, w2):
+        return dot(matutils.unitvec(self[w1]), matutils.unitvec(self[w2]))
+
+    def __getitem__(self, key):
+        return self._model[key]
+
+    def __setitem__(self, key, val):
+        self._model[key] = val
+
+    def __contains__(self, key):
+        return key in self._model
+
+    def __len__(self):
+        return len(self._model)
+
+    @property
+    def vocab(self):
+        return self._model.keys()
+
+
+class Clstr2Vec(Dictionary):
+
+    def __init__(self, name="Clstr2Vec"):
+        super(Clstr2Vec, self).__init__(name)
+        self.data = dict()
+
+    def load(self, emb):
+        if os.path.exists(emb):
+            logger.info("Reading input Model from src=%s" % emb)
+            with open(emb, 'r') as f:
+                data = self.data = json.load(f)
+                labels = OneHotEncoder().fit_transform([[val] for val in data.values()])
+                self._model = {key: labels[i] for i, key in enumerate(data.keys())}
+        else:
+            logger.error("%s not found" % emb)
+
+    def wordvecs(self, keys):
+        data = {key: self.data[key] for key in keys}
+        labels = OneHotEncoder().fit_transform([[val] for val in data.values()])
+        sparse_vectors = {key: labels[i] for i, key in enumerate(data.keys())}
+        return np.matrix([sparse_vectors[key].toarray()[0] for key in keys])
+
+    def __getitem__(self, key):
+        return self._model[key].toarray()[0]
+
+    def __setitem__(self, key, val):
+        self._model[key] = sparse.csr_matrix(val)
+
+
+class Node2Vec(Dictionary):
+
+    def __init__(self, name="Node2Vec"):
+        super(Node2Vec, self).__init__(name)
 
     def load(self, emb):
         if os.path.exists(emb):
@@ -453,7 +526,6 @@ class Node2Vec(object):
                     self[row[0]] = tmp
                 else:
                     self[row[0]] = np.array(row[1:emb_dim + 1])
-
         else:
             logger.error("%s not found" % emb)
 
@@ -468,7 +540,8 @@ class Node2Vec(object):
                 translation_dict[i] = nodes[i]
             nx.write_edgelist(G, '%s/translated.edgelist' % ckptpath, data=False)
             num_cc = nx.number_connected_components(G)
-            logger.info("Training Node2Vec.: #nodes=%s, #edges=%s #CC=%s" % (len(nodes), len(edges), num_cc))
+            logger.info("Training Node2Vec.: #nodes=%s, #edges=%s #CC=%s"
+                        % (len(nodes), len(edges), num_cc))
             os.system("node2vec -i:%s/translated.edgelist -o:%s/translated.emb -d:%s -v"
                       % (ckptpath, ckptpath, emb_dim))
             df = pd.read_csv("%s/translated.emb" % ckptpath, header=None, skiprows=1, sep=" ")
@@ -479,30 +552,6 @@ class Node2Vec(object):
             df.to_csv(emb, sep=" ", index=False, header=None)
         else:
             logger.error("%s not found" % edgelist)
-
-    @property
-    def name(self):
-        return self._name if self._name else "Node2Vec"
-
-    @property
-    def vectors(self):
-        return self._model.values()
-
-    def similarity(self, w1, w2):
-        return dot(matutils.unitvec(self[w1]), matutils.unitvec(self[w2]))
-
-    def __getitem__(self, key):
-        return self._model[key]
-
-    def __setitem__(self, key, val):
-        self._model[key] = val
-
-    def __contains__(self, key):
-        return key in self._model
-
-    @property
-    def vocab(self):
-        return self._model.keys()
 
 
 def create_uniprot_edgelist(perc, num_iter):
@@ -533,10 +582,13 @@ def main():
     # G.coalesce(thicken)
     # G.to_edgelist(dst)
 
-    # Node2Vec().train('%s/random.uniprot.edgelist' % ckptpath, "%s/random.uniprot.emb" % ckptpath)
+    # parse_uniprot_id = lambda seq: seq.split('>')[1].split('...')[0].split('|')[1]
+    # _, _ = get_cdhit_clusters(0.6, UNIPROT, parse_uniprot_id)
+
+    Node2Vec().train('%s/random.uniprot.edgelist' % ckptpath, "%s/random.uniprot.emb" % ckptpath)
 
     dst = '%s/pdbnr.complex.edgelist' % ckptpath
-    G = PdbGraphNr(dst)
+    G = PdbGraphNR(dst)
     # G.coalesce(thicken)
     G.to_edgelist(dst)
 

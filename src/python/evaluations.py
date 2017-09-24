@@ -1,9 +1,7 @@
 import os
 import datetime
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
-from Bio import SeqIO
 from pymongo import MongoClient
 
 import matplotlib.pyplot as plt
@@ -23,7 +21,6 @@ from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.externals import joblib
@@ -33,12 +30,12 @@ from sklearn.metrics import precision_recall_curve
 from sklearn.metrics import average_precision_score
 
 import utils
-logger = utils.get_logger("baselines")
+logger = utils.get_logger("evaluations")
 
 # from src.interactions import STRINGSPECEIS
 # from src.uniprot_pfam_goa_mongo import exp_codes
 
-from prot2vec import Node2Vec
+from prot2vec import Node2Vec, Clstr2Vec
 
 from models import EcodDomain
 from models import PdbChain
@@ -127,7 +124,7 @@ def load_multiple_data(sample_size, collection, Model, dictionaries=[WORD2VEC], 
 
     sample = collection.aggregate([{"$sample": {"size": sample_size}}])
 
-    ids, wordvecs, annots, terms = [], {D.name: [] for D in dictionaries}, [], set()
+    words, wordvecs, annots, terms = [], {D.name: [] for D in dictionaries}, [], set()
 
     for _ in tqdm(range(sample_size), desc="sequences processed"):
         seq = Model(next(sample))
@@ -139,14 +136,12 @@ def load_multiple_data(sample_size, collection, Model, dictionaries=[WORD2VEC], 
         goterms = seq.get_go_terms(aspect)
         if not len(goterms):
             continue
-        for D in dictionaries:
-            wordvecs[D.name].append(D[key])
         annots.append(goterms)
         terms |= goterms
-        ids.append(key)
+        words.append(key)
 
     for D in dictionaries:
-        wordvecs[D.name] = np.matrix(wordvecs[D.name])
+        wordvecs[D.name] = D.wordvecs(words)
 
     mlb = MultiLabelBinarizer(classes=list(terms), sparse_output=False)
     y = mlb.fit_transform(annots)
@@ -456,7 +451,7 @@ def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
 def main3(dictionaries, collection, Model, sample_size):
 
     for model in dictionaries:
-        model.load("%s/%s.emb" % (ckptpath, model.name))
+        model.load("%s/%s" % (ckptpath, model.name))
 
     wordsvecs, labels, classes = load_multiple_data(sample_size, collection, Model, dictionaries)
 
@@ -607,8 +602,15 @@ if __name__ == "__main__":
 
     # model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
 
-    main3([Node2Vec("random.pdb"), Node2Vec("pdbnr.complex"), Node2Vec("pdbnr.enriched")], db.pdbnr, PdbChain, 50000)
+    main3([Node2Vec("random.pdb.emb"),
+           Node2Vec("pdbnr.complex.emb"),
+           Node2Vec("pdbnr.enriched.emb")
+           ], db.pdbnr, PdbChain, 50000)
 
-    # main3([Node2Vec("random.uniprot"), Node2Vec("uniprot.60"), Node2Vec("uniprot.80")], db.uniprot, Uniprot, 50000)
+    main3([Clstr2Vec("sprot.clstr.60.json"),
+           Node2Vec("random.uniprot.emb"),
+           Node2Vec("uniprot.60.emb"),
+           Node2Vec("uniprot.80.emb")
+           ], db.uniprot, Uniprot, 50000)
 
     # main4(["pdb.60"], "F", 50000)
