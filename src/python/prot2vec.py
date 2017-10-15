@@ -41,7 +41,7 @@ datapath = args["data_path"]
 ECOD = args['ecod_fasta']
 PDB = args['pdb_fasta']
 PDBNR = args['pdbnr_fasta']
-UNIPROT = args['uniprot_fasta']
+UNIPROT = args['uniprot_sprot_fasta']
 
 client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
@@ -284,6 +284,37 @@ class EcodGraph(Graph):
             if not i % 50:
                 self.to_edgelist(self.edgelist)
                 bar.set_description(str(self))
+
+
+class BioGridGraph(Graph):
+
+    def __init__(self, edgelist_filename, organism_name="Homo_sapiens"):
+        self.organism = organism_name
+        super(BioGridGraph, self).__init__(edgelist_filename)
+
+    def init(self):
+        logger.info(self)
+        logger.info("Initiating Graph from BioGrid collection")
+        interactions = db.biogrid.find({})
+        for interact in interactions:
+            u = interact["BioGRID_ID_Interactor_A"]
+            v = interact["BioGRID_ID_Interactor_B"]
+            self.add_edge(u, v)
+
+
+# class IntActGraph(Graph):
+#
+#     def __init__(self, edgelist_filename, organism_name="Homo_sapiens"):
+#         self.organism = organism_name
+#         super(IntActGraph, self).__init__(edgelist_filename)
+#
+#     def init(self):
+#         logger.info(self)
+#         logger.info("Initiating Graph from IntAct collection")
+#         interactions = db.intact.find({})
+#         for interact in interactions:
+#             e = IntActEdge(interact)
+#             self.add_edge(e.source, e.target)
 
 
 def complex(pdb): return pdb[:4]
@@ -575,24 +606,96 @@ def create_ecod_edgelist(perc=95):
     G.to_edgelist(dst)
 
 
+class NGram2Vec(object):
+
+    def __init__(self, opts):
+        n = opts["ngram_size"]
+        c = opts["win_size"]
+        d = opts["dim_size"]
+        mc = opts["min_count"]
+        dbname = opts["db"]
+        if not os.path.exists("%s/n-gram" % ckptpath):
+            os.makedirs("%s/n-gram" % ckptpath)
+        unique_str = "%s-gram:%s:dim=%s:win=%s:mc=%s" % (n, dbname, d, c, mc)
+        model_filename = "%s/n-gram/%s" % (ckptpath, unique_str)
+        if os.path.exists(model_filename):
+            self.model = Word2Vec.load(model_filename)
+        else:
+            sentences_path = "%s/n-gram/%s-gram:%s.sentences" % (ckptpath, n, dbname)
+            sequences = map(lambda prot: prot.seq, map(Uniprot, db.uniprot.find({"db": dbname})))
+            sentences = (" ".join(NGram2Vec.get_sequence_ngrams(seq, n, k))
+                         for seq in sequences for k in range(n))
+            mode = 'r' if os.path.exists(sentences_path) else 'w+'
+            with open(sentences_path, mode) as f:
+                if mode == 'w+': f.writelines(sentences)    # file was created
+                src = LineSentence(f)
+                self.model = Word2Vec(src,
+                                      size=d,
+                                      window=c,
+                                      min_count=mc,
+                                      workers=4, sg=1)
+                self.model.save(model_filename)
+
+    @staticmethod
+    def get_sequence_ngrams(seq, n, offset=0):
+        return (
+            filter(
+                lambda ngram: len(ngram) == n, [seq[i:min(i + n, len(seq))]
+                                                for i in range(offset, len(seq), n)]
+            )
+        )
+
+    def similarity(self, w1, w2):
+        return self.model.similarity(w1, w2)
+
+    def __getitem__(self, key):
+        return np.array(self.model[key], dtype=np.float64)
+
+    def __contains__(self, key):
+        return key in self.model
+
+
+class BagOfNGrams(object):
+
+    def __init__(self, ngram_size, db="sp", dim_size=100, win_size=25, min_count=2,
+                 collection=db.uniprot, Model=Uniprot, name="BagOfNGrams"):
+
+        self.ngram_size = ngram_size
+        self.dim_size = dim_size
+        self.ngram_model = NGram2Vec({
+            "ngram_size": ngram_size,
+            "dim_size": dim_size,
+            "win_size": win_size,
+            "min_count": min_count,
+            "db": db
+        })
+        self.collection = collection
+        self.Model = Model
+        self.name = name
+
+    def __getitem__(self, seq):
+        n, bow = self.ngram_size, np.zeros(self.dim_size)
+        for k in range(n):
+            ngrams = NGram2Vec.get_sequence_ngrams(seq, n, k)
+            for ngram in filter(lambda ngram: ngram in self.ngram_model, ngrams):
+                bow += self.ngram_model[ngram]
+        return bow / len(seq)
+
+    def __contains__(self, key):
+        return True
+
+    def wordvecs(self, keys):
+        Model, collection = self.Model, self.collection
+        data = map(Model, collection.find({"_id": {"$in": keys}}))
+        return np.matrix([self[seq.seq] for seq in data])
+
+
 def main():
+    model3 = BagOfNGrams(3)
+    # model4 = BagOfNGrams(4)
 
-    # dst = '%s/random.uniprot.edgelist' % ckptpath
-    # G = RandomGraph(dst, db.uniprot, Uniprot)
-    # G.coalesce(thicken)
-    # G.to_edgelist(dst)
 
-    # parse_uniprot_id = lambda seq: seq.split('>')[1].split('...')[0].split('|')[1]
-    # _, _ = get_cdhit_clusters(0.6, UNIPROT, parse_uniprot_id)
-
-    Node2Vec().train('%s/random.uniprot.edgelist' % ckptpath, "%s/random.uniprot.emb" % ckptpath)
-
-    dst = '%s/pdbnr.complex.edgelist' % ckptpath
-    G = PdbGraphNR(dst)
-    # G.coalesce(thicken)
-    G.to_edgelist(dst)
-
-    Node2Vec().train('%s/pdbnr.complex.edgelist' % ckptpath, "%s/pdbnr.complex.emb" % ckptpath)
+    # Node2Vec().train('%s/intact.all.edgelist' % ckptpath, "%s/intact.all.emb" % ckptpath)
 
     # retrofit_ecod_wordvecs("%s/ecod.simple.emb" % ckptpath, "%s/retrofitted.99.ecod.emb" % ckptpath, th=.99)
 

@@ -22,8 +22,6 @@ client = MongoClient('mongodb://localhost:27017/')
 dbname = args["db"]
 db = client[dbname]
 
-GOA = client["cafa3"].geneontology_annots
-
 ECOD = args["ecod_fasta"]
 PDB = ConnectorPDB(args["pdb_dir"])
 cullpdb = args["cull_pdb"]
@@ -129,7 +127,7 @@ class Uniprot(object):
 
     def get_go_terms(self, aspect=None):
         return set(map(lambda e: e["GO_ID"],
-                       GOA.find({"DB_Object_ID": self.uid})))
+                       db.goa_uniprot.find({"DB_Object_ID": self.uid})))
 
     def is_gene_product(self):
         return True
@@ -182,7 +180,7 @@ class PdbChain(object):
     def get_go_terms(self, aspect=None):
         criteria = {"DB_Object_ID": self.pid, "Aspect": aspect} \
             if aspect else {"DB_Object_ID": self.pid}
-        return set(map(lambda e: e["GO_ID"], db.goa.find(criteria)))
+        return set(map(lambda e: e["GO_ID"], db.goa_pdb.find(criteria)))
 
     def is_gene_product(self):
         return True
@@ -236,6 +234,31 @@ class Interface(object):
 
     def __str__(self):
         return self.name
+
+
+# class IntActEdge(object):
+#
+#     def __init__(self, doc):
+#         self.source = ":".join(doc['#ID(s)_interactor_A']
+#                                .split(':')[1:]).strip('"')
+#         self.target = ":".join(doc['ID(s)_interactor_B']
+#                                .split(':')[1:]).strip('"')
+#
+#     @property
+#     def source(self):
+#         return self.__src
+#
+#     @source.setter
+#     def source(self, val):
+#         self.__src = val
+#
+#     @property
+#     def target(self):
+#         return self.__trg
+#
+#     @target.setter
+#     def target(self, val):
+#         self.__trg = val
 
 
 class Locus(object):
@@ -391,7 +414,7 @@ class EcodDomain(object):
 
     def get_go_terms(self, aspect=None):
         return utils.reduce(lambda x, y: x | y,
-                            [set(map(lambda e: e["GO_ID"], db.goa.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
+                            [set(map(lambda e: e["GO_ID"], db.goa_pdb.find({"PDB_ID": self.pdb, "Chain": locus.chain})))
                              for locus in self.loci], set())
 
     def __str__(self):

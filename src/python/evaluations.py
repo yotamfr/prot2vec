@@ -4,6 +4,8 @@ import numpy as np
 from tqdm import tqdm
 from pymongo import MongoClient
 
+from Bio import SeqIO
+
 import matplotlib.pyplot as plt
 
 from scipy import interp
@@ -32,12 +34,10 @@ from sklearn.metrics import average_precision_score
 import utils
 logger = utils.get_logger("evaluations")
 
-# from src.interactions import STRINGSPECEIS
-# from src.uniprot_pfam_goa_mongo import exp_codes
 
-from prot2vec import Node2Vec, Clstr2Vec
 
-from models import EcodDomain
+from prot2vec import Node2Vec, Clstr2Vec, BagOfNGrams
+
 from models import PdbChain
 from models import Uniprot
 
@@ -61,8 +61,8 @@ HMMERBATCHSIZE = 10
 
 # CAFA2_cutoff = datetime.datetime(2013, 6, 1, 0, 0)
 CAFA2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
+CAFA3_cutoff = datetime.datetime(2017, 1, 1, 0, 0)
 now = datetime.datetime.utcnow()
-# now = CAFA2_cutoff
 
 random_state = np.random.RandomState(0)
 np.random.seed(101)
@@ -88,6 +88,151 @@ BINARY = {
                                   bootstrap=True, oob_score=False, n_jobs=1, random_state=random_state, verbose=0,
                                   warm_start=False, class_weight=None)
 }
+
+
+def load_validation_set(annots_tsv, seqs_fasta, aspect=None):
+
+    logger.info("Loading validation set.")
+
+    validation_set, validation_seqs, validation_terms = dict(), dict(), dict()
+
+    fasta_sequences = SeqIO.parse(open(seqs_fasta), 'fasta')
+    for fasta in fasta_sequences:
+        validation_seqs[fasta.id] = fasta.seq
+
+    with open(annots_tsv, 'r') as f:
+        for line in f:
+            seq_id, go_id, go_asp = line.strip().split('\t')
+            if aspect and go_asp != aspect:
+                continue
+            try:
+                if go_id in validation_terms:
+                    validation_terms[go_id] += 1
+                else:
+                    validation_terms[go_id] = 1
+                if seq_id in validation_set:
+                    validation_set[seq_id].add(go_id)
+                else:
+                    validation_set[seq_id] = {go_id}
+            except TypeError:
+                pass
+
+    logger.info("Loaded %s annots." % sum(validation_terms.values()))
+
+    return validation_set, validation_seqs, validation_terms
+
+
+def load_training_set(go_terms, collection, Model):
+
+    logger.info("Loading training set.")
+
+    query = {"DB": "UniProtKB",
+             "GO_ID": {"$in": list(go_terms)},
+             "Date": {"$lte": CAFA3_cutoff}}
+    training_annots = db.goa_uniprot.find(query)
+    training_num = db.goa_uniprot.count(query)
+
+    training_set, training_seqs, training_terms = dict(), dict(), dict()
+
+    for _ in tqdm(range(training_num), desc="sequences processed"):
+        go_doc = next(training_annots)
+        seq_id = go_doc["DB_Object_ID"]
+        go_id = go_doc["GO_ID"]
+        seq_doc = collection.find_one({"_id": seq_id})
+        if not seq_doc:
+            continue
+        seq = Model(seq_doc)
+        if seq_id not in training_seqs:
+            training_seqs[seq_id] = seq.seq
+        if go_id in training_terms:
+            training_terms[go_id] += 1
+        else:
+            training_terms[go_id] = 1
+        if seq_id in training_set:
+            training_set[seq_id].add(go_id)
+        else:
+            training_set[seq_id] = {go_id}
+
+    logger.info("Loaded %s annots." % sum(training_terms.values()))
+
+    return training_set, training_seqs, training_terms
+
+
+def validate_sequence(seq_id, seq, collection, Model, models):
+    doc = collection.find_one({"_id": seq_id})
+    if not doc:
+        return False
+    prot = Model(doc)
+    if prot.seq != seq:
+        return False
+    if not np.all([seq_id in D for D in models]):
+        return False
+    return True
+
+
+def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
+                        aspect=None, plot_hist=True):
+
+    validation_set, validation_seqs, go_terms = load_validation_set(annots_tsv, seqs_fasta, aspect)
+
+    mlb = MultiLabelBinarizer(classes=list(go_terms.keys()), sparse_output=True)
+
+    valid_ids, valid_X, valid_y = [], {D.name: [] for D in models}, []
+
+    pbar1 = tqdm(range(len(validation_set)), desc="sequences processed")
+    for seq_id, annots in validation_set.items():
+        pbar1.update(1)
+        if not validate_sequence(seq_id, validation_seqs[seq_id], collection, Model, models):
+            continue
+        valid_ids.append(seq_id)
+        valid_y.append(annots)
+    pbar1.close()
+
+    for D in models:
+        valid_X[D.name] = D.wordvecs(valid_ids)
+
+    valid_y = mlb.fit_transform(valid_y)
+
+    logger.info("valid_X.shape=%s valid_y.shape=%s\n"
+                % (valid_X[models[0].name].shape, valid_y.shape))
+
+    if plot_hist:
+        plt.hist(list(map(lambda annots: len(annots), validation_set.values())), bins=200)
+        plt.title("Annotations per sequence")
+        plt.xlabel("#GO-terms annotations")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        plt.show()
+
+        plt.hist(list(filter(lambda val: val < 200, go_terms.values())), bins=200)
+        plt.title("Annotations per GO-term")
+        plt.xlabel("#Annotations in data")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        plt.show()
+
+    training_set, training_seqs, _ = load_training_set(go_terms.keys(), collection, Model)
+
+    train_ids, train_X, train_y = [], {D.name: [] for D in models}, []
+
+    pbar2 = tqdm(range(len(training_set)), desc="sequences processed")
+    for seq_id, annots in training_set.items():
+        pbar2.update(1)
+        if not np.all([seq_id in D for D in models]):
+            continue
+        train_ids.append(seq_id)
+        train_y.append(annots)
+    pbar2.close()
+
+    for D in models:
+        train_X[D.name] = D.wordvecs(train_ids)
+
+    train_y = mlb.transform(train_y)
+
+    logger.info("train_X.shape=%s train_y.shape=%s\n"
+                % (train_X[models[0].name].shape, train_y.shape))
+
+    return train_X, valid_X, train_y, valid_y, mlb.classes_
 
 
 def load_data(sample_size, collection, Model, aspect=None):
@@ -149,10 +294,6 @@ def load_multiple_data(sample_size, collection, Model, dictionaries=[WORD2VEC], 
     logger.info("X.shape=%s y.shape=%s\n" % (wordvecs[dictionaries[0].name].shape, y.shape))
 
     return wordvecs, y, mlb.classes_
-
-
-def train_multicalss_classifiers(X_train, y_train, X_test, y_test, datadir=ONECLASSDIR, calssifier=""):
-    pass
 
 
 def train_oneclass_classifiers(X_train, y_train, calssifier="OneClassSVM"):
@@ -598,19 +739,19 @@ def main4(models, aspect, sample_size):
 
 if __name__ == "__main__":
 
-    # model = Node2Vec()
+    load_multiple_data2(args["cafa3_sprot_goa"], args["cafa3_sprot_seq"],
+                        db.uniprot, Uniprot, [BagOfNGrams(3)])
 
-    # model.train('%s/uniprot.80.edgelist' % ckptpath, "%s/uniprot.80.emb" % ckptpath)
+    main3([Node2Vec("random.uniprot.emb"),
+           Node2Vec("intact.all.emb"),
+           Node2Vec("uniprot.60.emb"),
+           # Node2Vec("uniprot.80.emb"),
+           # Clstr2Vec("sprot.clstr.60.json")
+           ], db.uniprot, Uniprot, 50000)
 
     main3([Node2Vec("random.pdb.emb"),
            Node2Vec("pdbnr.complex.emb"),
            Node2Vec("pdbnr.enriched.emb")
            ], db.pdbnr, PdbChain, 50000)
-
-    main3([Clstr2Vec("sprot.clstr.60.json"),
-           Node2Vec("random.uniprot.emb"),
-           Node2Vec("uniprot.60.emb"),
-           Node2Vec("uniprot.80.emb")
-           ], db.uniprot, Uniprot, 50000)
 
     # main4(["pdb.60"], "F", 50000)

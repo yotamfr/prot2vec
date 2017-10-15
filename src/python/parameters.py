@@ -24,22 +24,40 @@ parser.add_argument("--max_paths", type=int, default=10**7, help="Max paths to s
 args = parser.parse_args()
 
 arguments = {
-    "pdb_fasta": "{}/pdbaa".format(args.datapath),
-    "pdbnr_fasta": "{}/pdbaa.nr".format(args.datapath),
-    "pdb_gaf": "{}/goa_pdb.gaf".format(args.datapath),
-    "obo_file": "{}/go-basic.obo".format(args.datapath),
-    "ecod_fasta": "{}/ecod.latest.fasta.txt".format(args.datapath),
-    "uniprot_fasta": "{}/uniprot_sprot.fasta".format(args.datapath),
-    # "ecod_fasta": "{}/ecod.earliest.fasta.txt".format(args.datapath),
-    "cull_pdb": "{}/cull_pdb.txt".format(args.datapath),
-    "pdb_dir": "{}/../structures".format(args.datapath),
-    "clstr_pdb": "{}/pdb.95.clstr".format(args.datapath),
-    "clstr_ecod": "{}/ecod.95.clstr".format(args.datapath),
+
+    "uniprot_sprot_fasta": "{}/Uniprot/uniprot_sprot.fasta".format(args.datapath),
+    "uniprot_trembl_fasta": "{}/Uniprot/uniprot_trembl.fasta".format(args.datapath),
+
+    "goa_uniprot_all": "{}/GO/goa_uniprot_all.gpa".format(args.datapath),
+
+    "cafa3_sprot_goa": "{}/cafa/CAFA3_training_data/uniprot_sprot_exp.txt".format(args.datapath),
+    "cafa3_sprot_seq": "{}/cafa/CAFA3_training_data/uniprot_sprot_exp.fasta".format(args.datapath),
+
     "ckpt_path": "{}".format(args.ckptpath),
     "data_path": "{}".format(args.datapath),
+
     "db": args.dbname,
     "word_embedding_dim": 128,
     "seq_length": args.seq_length,
     "batch_size": 32,
-    "learning_rate": args.learning_rate
+    "learning_rate": args.learning_rate,
+
+    "pdb_fasta": "{}/pdbaa".format(args.datapath),
+    "pdbnr_fasta": "{}/pdbaa.nr".format(args.datapath),
+    "ecod_fasta": "{}/ecod.latest.fasta.txt".format(args.datapath),
+    # "pdb_gaf": "{}/goa_pdb.gaf".format(args.datapath),
+    "cull_pdb": "{}/PDB/cull_pdb.txt".format(args.datapath),
+    "pdb_dir": "{}/PDB/structures".format(args.datapath),
+
+    # "obo_file": "{}/go-basic.obo".format(args.datapath),
+
+    # "biogrid_organism": "{}/BioGRID/BIOGRID-ORGANISM-3.4.152.tab2".format(args.datapath),
+    # "biogrid_all": "{}/BioGRID/BIOGRID-ALL-3.4.152.tab2.txt".format(args.datapath),
+    # "biogrid_ids": "{}/BioGRID/BIOGRID-IDENTIFIERS-3.4.152.tab.txt".format(args.datapath),
+    #
+    # "intact_all": "{}/IntAct/all/psimitab/intact.txt".format(args.datapath),
+    #
+    # "clstr_pdb": "{}/pdb.95.clstr".format(args.datapath),
+    # "clstr_ecod": "{}/ecod.95.clstr".format(args.datapath),
+
 }
