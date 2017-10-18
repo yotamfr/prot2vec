@@ -658,7 +658,7 @@ class NGram2Vec(object):
 class BagOfNGrams(object):
 
     def __init__(self, ngram_size, db="sp", dim_size=100, win_size=25, min_count=2,
-                 collection=db.uniprot, Model=Uniprot, name="BagOfNGrams"):
+                 collection=db.uniprot, Model=Uniprot):
 
         self.ngram_size = ngram_size
         self.dim_size = dim_size
@@ -671,7 +671,11 @@ class BagOfNGrams(object):
         })
         self.collection = collection
         self.Model = Model
-        self.name = name
+        self._name = "bag_of_%s-grams" % ngram_size
+
+    @property
+    def name(self):
+        return self._name
 
     def __getitem__(self, seq):
         n, bow = self.ngram_size, np.zeros(self.dim_size)

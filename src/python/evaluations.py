@@ -59,6 +59,20 @@ TRAININGDATA = "../CAFA/CAFA3/CAFA3_training_data/uniprot_sprot_exp.fasta"
 TRAININGLABELS = "../CAFA/CAFA3/CAFA3_training_data/uniprot_sprot_exp.txt"
 HMMERBATCHSIZE = 10
 
+
+Experimental_Codes = {
+
+    "ECO:0000269": "EXP",
+    "ECO:0000314": "IDA",
+
+    "ECO:0000353": "IPI",
+    "ECO:0000315": "IMP",
+
+    "ECO:0000316": "IGI",
+    "ECO:0000270": "IEP"
+}
+exp_codes = list(Experimental_Codes.keys())
+
 # CAFA2_cutoff = datetime.datetime(2013, 6, 1, 0, 0)
 CAFA2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
 CAFA3_cutoff = datetime.datetime(2017, 1, 1, 0, 0)
@@ -90,9 +104,9 @@ BINARY = {
 }
 
 
-def load_validation_set(annots_tsv, seqs_fasta, aspect=None):
+def load_validation_set(annots_tsv, seqs_fasta, aspect):
 
-    logger.info("Loading validation set.")
+    logger.info("Loading validation set of %s." % aspect)
 
     validation_set, validation_seqs, validation_terms = dict(), dict(), dict()
 
@@ -103,7 +117,7 @@ def load_validation_set(annots_tsv, seqs_fasta, aspect=None):
     with open(annots_tsv, 'r') as f:
         for line in f:
             seq_id, go_id, go_asp = line.strip().split('\t')
-            if aspect and go_asp != aspect:
+            if aspect != 'unspecified' and aspect != go_asp:
                 continue
             try:
                 if go_id in validation_terms:
@@ -122,13 +136,15 @@ def load_validation_set(annots_tsv, seqs_fasta, aspect=None):
     return validation_set, validation_seqs, validation_terms
 
 
-def load_training_set(go_terms, collection, Model):
+def load_training_set(go_terms, collection, Model, exp):
 
     logger.info("Loading training set.")
 
     query = {"DB": "UniProtKB",
              "GO_ID": {"$in": list(go_terms)},
              "Date": {"$lte": CAFA3_cutoff}}
+    if exp:
+        query["ECO_Evidence_code"] = {"$in": exp_codes}
     training_annots = db.goa_uniprot.find(query)
     training_num = db.goa_uniprot.count(query)
 
@@ -171,13 +187,12 @@ def validate_sequence(seq_id, seq, collection, Model, models):
 
 
 def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
-                        aspect=None, plot_hist=True):
+                        aspect, exp=False, plot_hist=False, save_numpy=True):
 
+    valid_ids, valid_X, valid_labels = [], {D.name: [] for D in models}, []
     validation_set, validation_seqs, go_terms = load_validation_set(annots_tsv, seqs_fasta, aspect)
 
-    mlb = MultiLabelBinarizer(classes=list(go_terms.keys()), sparse_output=True)
-
-    valid_ids, valid_X, valid_y = [], {D.name: [] for D in models}, []
+    mlb, classes = MultiLabelBinarizer(sparse_output=True), []
 
     pbar1 = tqdm(range(len(validation_set)), desc="sequences processed")
     for seq_id, annots in validation_set.items():
@@ -185,13 +200,28 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         if not validate_sequence(seq_id, validation_seqs[seq_id], collection, Model, models):
             continue
         valid_ids.append(seq_id)
-        valid_y.append(annots)
+        valid_labels.append(annots)
     pbar1.close()
 
     for D in models:
-        valid_X[D.name] = D.wordvecs(valid_ids)
+        wordvecs = D.wordvecs(valid_ids)
+        valid_X[D.name] = wordvecs
 
-    valid_y = mlb.fit_transform(valid_y)
+    valid_labels_fname = "%s/labels_%s_valid.npy" % (datapath, aspect)
+    valid_cls_fname = "%s/classes_%s_valid.npy" % (datapath, aspect)
+
+    if os.path.exists(valid_labels_fname) and os.path.exists(valid_cls_fname):
+        valid_y = np.load(valid_labels_fname).tolist()
+        classes = np.load(valid_cls_fname).tolist()
+    elif save_numpy:
+        mlb.fit(valid_labels)
+        classes = mlb.classes_
+        valid_y = mlb.transform(valid_labels)
+        np.save(valid_labels_fname, valid_y)
+        np.save(valid_cls_fname, classes)
+    else:
+        valid_y = mlb.fit_transform(valid_labels)
+        classes = mlb.classes_
 
     logger.info("valid_X.shape=%s valid_y.shape=%s\n"
                 % (valid_X[models[0].name].shape, valid_y.shape))
@@ -211,9 +241,9 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         plt.grid(True)
         plt.show()
 
-    training_set, training_seqs, _ = load_training_set(go_terms.keys(), collection, Model)
+    training_set, training_seqs, _ = load_training_set(go_terms.keys(), collection, Model, exp)
 
-    train_ids, train_X, train_y = [], {D.name: [] for D in models}, []
+    train_ids, train_X, train_labels = [], {D.name: [] for D in models}, []
 
     pbar2 = tqdm(range(len(training_set)), desc="sequences processed")
     for seq_id, annots in training_set.items():
@@ -221,18 +251,28 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         if not np.all([seq_id in D for D in models]):
             continue
         train_ids.append(seq_id)
-        train_y.append(annots)
+        train_labels.append(annots)
     pbar2.close()
 
     for D in models:
-        train_X[D.name] = D.wordvecs(train_ids)
+        wordvecs = D.wordvecs(train_ids)
+        train_X[D.name] = wordvecs
 
-    train_y = mlb.transform(train_y)
+    train_labels_fname = "%s/labels_%s_%s_train.npy" % (datapath, aspect, 'exp' if exp else 'nexp')
+    if os.path.exists(train_labels_fname):
+        train_y = np.load(train_labels_fname).tolist()
+    elif save_numpy:
+        mlb.fit(valid_labels)
+        train_y = mlb.transform(train_labels)
+        np.save(train_labels_fname, train_y)
+    else:
+        mlb.fit(valid_labels)
+        train_y = mlb.transform(train_labels)
 
     logger.info("train_X.shape=%s train_y.shape=%s\n"
                 % (train_X[models[0].name].shape, train_y.shape))
 
-    return train_X, valid_X, train_y, valid_y, mlb.classes_
+    return train_X, valid_X, train_y, valid_y, classes
 
 
 def load_data(sample_size, collection, Model, aspect=None):
@@ -589,6 +629,78 @@ def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
     plt.show()
 
 
+class GoAspect(object):
+
+    def __init__(self, aspect=None):
+        self._aspect = aspect
+
+    @property
+    def aspect(self):
+        return self._aspect if self._aspect else 'unspecified'
+
+    def __eq__(self, other):
+        return (str(self) == str(other)) or (self.aspect == other)
+
+    def __str__(self):
+        aspect = self._aspect
+        return "Biological_Process" if aspect == 'P'\
+            else "Molecular_Function" if aspect == 'F'\
+            else "Cellular_Component" if aspect == 'C'\
+            else "unspecified" if not aspect\
+            else "unknown"
+
+
+def main5(models, collection, Model, annotations_fname, sequences_fname,
+          n_classes=100, aspect=GoAspect(), exp=False):
+
+    training_set, validation_set, y_train, y_valid, classes = \
+        load_multiple_data2(annotations_fname, sequences_fname, collection, Model, models,
+                            aspect=aspect, exp=exp)
+
+    assert n_classes < len(classes)
+    idx = np.random.randint(len(classes), size=n_classes)
+    cls = classes[idx]
+
+    for model in models:
+
+        logger.info("training %s ..." % model.name)
+
+        X_train, X_valid = training_set[model.name], validation_set[model.name]
+
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_valid = scaler.transform(X_valid)
+
+        y_train, y_truth = y_train[:, idx], y_valid[:, idx].toarray()
+
+        # Learn to predict each class against the other
+        classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=4)
+        y_pred = classifier.fit(X_train, y_train).decision_function(X_valid)
+
+        logger.info("Measuring %s Performance on %s" % (model.name, aspect))
+
+        # Compute ROC curve and ROC area for each class
+        precision = dict()
+        recall = dict()
+        average_precision = dict()
+        for i in range(n_classes):
+            precision[cls[i]], recall[cls[i]], _ = precision_recall_curve(y_truth[:, i], y_pred[:, i])
+            average_precision[cls[i]] = average_precision_score(y_truth[:, i], y_pred[:, i])
+
+            # Compute Precision-Recall and plot curve
+            precision["micro"], recall["micro"], _ = precision_recall_curve(y_truth.ravel(), y_pred.ravel())
+            average_precision["micro"] = average_precision_score(y_truth, y_pred, average="micro")
+
+        # Compute micro-average ROC curve and ROC area
+        precision["micro"], recall["micro"], _ = precision_recall_curve(y_truth.ravel(), y_pred.ravel())
+        average_precision["micro"] = average_precision_score(y_truth, y_pred, average="micro")
+
+        title = 'Precision-Recall %s: #Sequences: %s, #GO-Terms: %s' % \
+                (model.name, y_truth.shape[0], y_truth.shape[1])
+        plot_precision_recall(recall, precision, average_precision, cls, title)
+
+
 def main3(dictionaries, collection, Model, sample_size):
 
     for model in dictionaries:
@@ -737,10 +849,11 @@ def main4(models, aspect, sample_size):
     except ValueError as err:
         logger.error(err)
 
+
 if __name__ == "__main__":
 
-    load_multiple_data2(args["cafa3_sprot_goa"], args["cafa3_sprot_seq"],
-                        db.uniprot, Uniprot, [BagOfNGrams(3)])
+    main5([BagOfNGrams(3)], db.uniprot, Uniprot,
+          args["cafa3_sprot_goa"], args["cafa3_sprot_seq"], 8, GoAspect('F'), exp=True)
 
     main3([Node2Vec("random.uniprot.emb"),
            Node2Vec("intact.all.emb"),
