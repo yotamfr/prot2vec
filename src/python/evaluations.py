@@ -659,7 +659,7 @@ def main5(models, collection, Model, annotations_fname, sequences_fname,
 
     assert n_classes < len(classes)
     idx = np.random.randint(len(classes), size=n_classes)
-    cls = classes[idx]
+    cls = np.array(classes)[idx]
 
     for model in models:
 
@@ -853,7 +853,7 @@ def main4(models, aspect, sample_size):
 if __name__ == "__main__":
 
     main5([BagOfNGrams(3)], db.uniprot, Uniprot,
-          args["cafa3_sprot_goa"], args["cafa3_sprot_seq"], 8, GoAspect('F'), exp=True)
+          args["cafa3_sprot_goa"], args["cafa3_sprot_seq"], 1000, GoAspect('F'), exp=True)
 
     main3([Node2Vec("random.uniprot.emb"),
            Node2Vec("intact.all.emb"),
