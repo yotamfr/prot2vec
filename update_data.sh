@@ -22,7 +22,7 @@ function wgetAndGunzip () {
 
    rm -f "$data/$fname"
    wget -O "$data/$fname" "$url/$fname"
-   gunzip "$data/$fname"
+   gunzip -f "$data/$fname"
 }
 
 
