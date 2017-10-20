@@ -1,5 +1,15 @@
 #!/bin/bash
+
+if [ -z "$1" ]
+  then
+    echo "No data directory supplied"
+    exit
+fi
+
 DATA=$1
+mkdir -p "$DATA"
+
+
 FNAME_GOA_UNIPROT="goa_uniprot_all.gpa.gz"
 FNAME_TREMBL="uniprot_trembl.fasta.gz"
 URL_GOA_UNIPROT="ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
