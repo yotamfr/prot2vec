@@ -11,3 +11,6 @@ figures
 .Rproj.user
 
 *.pyc
+*.spec
+build/
+dist/

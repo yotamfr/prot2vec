@@ -1,5 +1,3 @@
-#!/bin/python3
-
 import sys
 import datetime
 from Bio.UniProt import GOA
@@ -13,7 +11,7 @@ dbname = 'prot2vec'
 db = client[dbname]
 
 
-def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat structure
+def load_gaf(filename, start=db.goa.count({})):   # load GOA in a flat structure
 
     print("Loading %s" % filename)
 
@@ -21,10 +19,18 @@ def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat s
     with open(filename, 'r') as handler:
         goa_iterator = GOA.gafiterator(handler)
         for _ in goa_iterator:
-            sys.stdout.write("Counting annotations: %s" % num_annots)
+            sys.stdout.write("\rCounting annotations\t%s" % num_annots)
             num_annots += 1
 
+    db.goa.create_index("DB_Object_ID")
+    db.goa.create_index("DB")
+    db.goa.create_index("GO_ID")
+    db.goa.create_index("Evidence")
+    db.goa.create_index("Aspect")
+    db.goa.create_index("Date")
+
     print("Loading %s GO annotations..." % num_annots)
+
     with open(filename, 'r') as handler:
         goa_iterator = GOA.gafiterator(handler)
         for i in tqdm(range(num_annots), desc="annotations already processed"):
@@ -52,7 +58,7 @@ def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat s
                 "Taxon_ID": data['Taxon_ID'],
                 "Aspect": data['Aspect']
             }
-            db.goa_uniprot.update_one({
+            db.goa.update_one({
                 "_id": i}, {
                 '$set': json
             }, upsert=True)

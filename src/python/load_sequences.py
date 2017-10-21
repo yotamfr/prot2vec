@@ -1,5 +1,3 @@
-#!/bin/python3
-
 import sys
 import datetime
 from Bio import SeqIO
@@ -28,6 +26,7 @@ def add_single_uniprot(fasta):
         "created_at": datetime.datetime.utcnow(),
         "header": header
     }
+
     db.uniprot.update_one({
         "_id": unique_identifier}, {
         "$set": prot
@@ -41,10 +40,15 @@ def load_fasta(src_fasta, start=db.uniprot.count({})):
     num_seq = 0
     fasta_sequences = SeqIO.parse(open(src_fasta), 'fasta')
     for _ in fasta_sequences:
-        sys.stdout.write("Counting sequences: %s" % num_seq)
+        sys.stdout.write("\rCounting sequences\t%s" % num_seq)
         num_seq += 1
 
+    db.uniprot.create_index("db")
+    db.uniprot.create_index("entry_name")
+    db.uniprot.create_index("primary_accession")
+
     print("\nLoading %s Uniprot sequences to %s ...\n" % (num_seq, dbname))
+
     fasta_sequences = SeqIO.parse(open(src_fasta), 'fasta')
     for i in tqdm(range(num_seq), desc="sequences already processed"):
         if i < start:
