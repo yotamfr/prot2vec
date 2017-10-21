@@ -9,3 +9,5 @@ data
 models
 figures
 .Rproj.user
+
+*.pyc

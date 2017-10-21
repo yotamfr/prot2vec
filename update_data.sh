@@ -10,12 +10,17 @@ DATA=$1
 mkdir -p "$DATA"
 
 
-URL_UNIPROT_KB="ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
-FNAME_TREMBL="uniprot_trembl.fasta.gz"
-URL_GOA_UNIPROT="ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
-FNAME_GOA_UNIPROT="goa_uniprot_all.gpa.gz"
+URL_FASTA="ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
+FASTA_FNAME="uniprot_trembl.fasta.gz"
 
-function wgetAndGunzip () {
+URL_GOA_UNIPROT="ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
+GAF_FNAME="goa_uniprot_all.gaf.gz"
+
+#URL_GOA_PDB="ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/PDB"
+#GAF_FNAME="goa_pdb.gaf.gz"
+
+
+function wget_and_gunzip () {
    url=$1
    fname=$2
    data=$DATA
@@ -25,10 +30,13 @@ function wgetAndGunzip () {
    gunzip -f "$data/$fname"
 }
 
+wget_and_gunzip "$URL_GOA_UNIPROT" "$GAF_FNAME"
+src/python/load_annotations.py "../../$DATA/$GAF_FNAME"
 
-wgetAndGunzip "$URL_GOA_UNIPROT" "$FNAME_GOA_UNIPROT"
 
-wgetAndGunzip "$URL_UNIPROT_KB" "$FNAME_TREMBL"
+#wget_and_gunzip "$URL_FASTA" "$FASTA_FNAME"
+#src/python/load_sequences.py "../../$DATA/$FASTA_FNAME"
+
 
 
 
