@@ -5,28 +5,37 @@ from pymongo import MongoClient
 
 import argparse
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--gaf", type=str, help="Give full path to Gene Ontology GAF file")
+parser.add_argument("--collection", type=str, choices=['goa_pdb', 'goa_uniprot'],
+                    default="goa_uniprot", help="Give collection name.")
+
+args = parser.parse_args()
+
 client = MongoClient('mongodb://localhost:27017/')
-dbname = 'prot2vec'
-db = client[dbname]
+db_name = 'prot2vec'
+collection = client[db_name][args.collection]
 
 
-def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat structure
+def load_gaf(filename, start=collection.count({})):   # load GOA in a flat structure
 
     print("Loading %s" % filename)
 
-    db.goa_uniprot.create_index("DB_Object_ID")
-    db.goa_uniprot.create_index("DB")
-    db.goa_uniprot.create_index("GO_ID")
-    db.goa_uniprot.create_index("Evidence")
-    db.goa_uniprot.create_index("Aspect")
-    db.goa_uniprot.create_index("Date")
+    collection.create_index("DB_Object_ID")
+    collection.create_index("DB")
+    collection.create_index("GO_ID")
+    collection.create_index("Evidence")
+    collection.create_index("Aspect")
+    collection.create_index("Date")
 
     with open(filename, 'r') as handler:
+
         goa_iterator = GOA.gafiterator(handler)
+
         for i, data in enumerate(goa_iterator):
 
             if i % 100 == 0:
-                sys.stdout.write("\rProcessing annotations\t%s" % i)
+                sys.stdout.write("\rProcessed annotations\t%s" % i)
 
             if i < start:
                 continue
@@ -52,7 +61,7 @@ def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat s
                 "Aspect": data['Aspect']
             }
 
-            db.goa_uniprot.update_one({
+            collection.update_one({
                 "_id": i}, {
                 '$set': json
             }, upsert=True)
@@ -61,10 +70,8 @@ def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat s
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("gaf", type=str, help="Give full path to Gene Ontology GAF file")
-    args = parser.parse_args()
     load_gaf(args.gaf, 0)
+
 
 if __name__ == "__main__":
     main()
