@@ -44,7 +44,7 @@ def load_fasta(src_fasta, start=db.uniprot.count({})):
 
         fasta_sequences = SeqIO.parse(f, 'fasta')
 
-        for i, seq in fasta_sequences:
+        for i, seq in enumerate(fasta_sequences):
 
             sys.stdout.write("\rProcessing sequences\t%s" % i)
 
