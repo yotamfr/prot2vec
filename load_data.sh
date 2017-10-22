@@ -51,10 +51,10 @@ sudo service mongod restart
 
 cleanup "$DATA/$GAF_FNAME"
 wget_and_gunzip "$URL_GOA" "$GAF_FNAME"
-dist/load_annotations/load_annotations --fasta "$DATA/$GAF_FNAME" --collection goa_pdb
+dist/load_annotations/load_annotations --gaf "$DATA/$GAF_FNAME" --collection goa_pdb
 cleanup "$DATA/$GAF_FNAME"
 
 cleanup "$DATA/$FASTA_FNAME"
 wget_and_gunzip "$URL_FASTA" "$FASTA_FNAME"
-dist/load_sequences/load_sequences --gaf "$DATA/$FASTA_FNAME" --collection sprot
+dist/load_sequences/load_sequences --fasta "$DATA/$FASTA_FNAME" --collection sprot
 cleanup "$DATA/$FASTA_FNAME"
