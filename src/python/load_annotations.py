@@ -37,8 +37,8 @@ def load_gaf(filename, start=collection.count({})):   # load GOA in a flat struc
             if i % 100 == 0:
                 sys.stdout.write("\rProcessed annotations\t%s" % i)
 
-            if i < start:
-                continue
+            if i < start: continue
+
             date = datetime.datetime.strptime(data['Date'], "%Y%m%d").date()
 
             json = {

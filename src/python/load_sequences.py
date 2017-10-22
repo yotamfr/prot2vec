@@ -1,6 +1,6 @@
 import sys
 import datetime
-from Bio import SeqIO
+from Bio.SeqIO import parse
 from pymongo import MongoClient
 
 import argparse
@@ -49,12 +49,14 @@ def load_fasta(src_fasta, start=collection.count({})):
 
     with open(src_fasta, 'r') as f:
 
-        fasta_sequences = SeqIO.parse(f, 'fasta')
+        fasta_sequences = parse(f, 'fasta')
 
         for i, seq in enumerate(fasta_sequences):
 
             if i % 100 == 0:
                 sys.stdout.write("\rProcessed sequences\t%s" % i)
+
+            if i < start: continue
 
             add_single_uniprot(seq)
 
