@@ -25,7 +25,8 @@ def load_gaf(filename, start=db.goa_uniprot.count({})):   # load GOA in a flat s
         goa_iterator = GOA.gafiterator(handler)
         for i, data in enumerate(goa_iterator):
 
-            sys.stdout.write("\rProcessing annotations\t%s" % i)
+            if i % 100 == 0:
+                sys.stdout.write("\rProcessing annotations\t%s" % i)
 
             if i < start:
                 continue

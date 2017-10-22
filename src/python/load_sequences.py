@@ -46,7 +46,8 @@ def load_fasta(src_fasta, start=db.uniprot.count({})):
 
         for i, seq in enumerate(fasta_sequences):
 
-            sys.stdout.write("\rProcessing sequences\t%s" % i)
+            if i % 100 == 0:
+                sys.stdout.write("\rProcessing sequences\t%s" % i)
 
             if i < start:
                 continue
