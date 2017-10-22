@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import sys
 import datetime
 from Bio.UniProt import GOA

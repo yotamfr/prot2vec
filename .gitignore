@@ -13,4 +13,3 @@ figures
 *.pyc
 *.spec
 build/
-dist/
