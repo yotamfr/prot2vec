@@ -2,7 +2,6 @@ import sys
 import datetime
 from Bio import SeqIO
 from pymongo import MongoClient
-from tqdm import tqdm
 
 import argparse
 
@@ -37,23 +36,21 @@ def load_fasta(src_fasta, start=db.uniprot.count({})):
 
     print("Loading %s" % src_fasta)
 
-    num_seq = 0
-    fasta_sequences = SeqIO.parse(open(src_fasta), 'fasta')
-    for _ in fasta_sequences:
-        sys.stdout.write("\rCounting sequences\t%s" % num_seq)
-        num_seq += 1
-
     db.uniprot.create_index("db")
     db.uniprot.create_index("entry_name")
     db.uniprot.create_index("primary_accession")
 
-    print("\nLoading %s Uniprot sequences to %s ...\n" % (num_seq, dbname))
+    with open(src_fasta, 'r') as f:
 
-    fasta_sequences = SeqIO.parse(open(src_fasta), 'fasta')
-    for i in tqdm(range(num_seq), desc="sequences already processed"):
-        if i < start:
-            continue
-        add_single_uniprot(next(fasta_sequences))
+        fasta_sequences = SeqIO.parse(f, 'fasta')
+
+        for i, seq in fasta_sequences:
+
+            sys.stdout.write("\rProcessing sequences\t%s" % i)
+
+            if i < start:
+                continue
+            add_single_uniprot(seq)
 
     print("\nFinished!")
 
