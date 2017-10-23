@@ -56,7 +56,8 @@ def load_fasta(src_fasta, start=collection.count({})):
             if i % 100 == 0:
                 sys.stdout.write("\rProcessed sequences\t%s" % i)
 
-            if i < start: continue
+            if i < start:
+                continue
 
             add_single_uniprot(seq)
 

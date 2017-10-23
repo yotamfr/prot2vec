@@ -7,14 +7,28 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--gaf", type=str, help="Give full path to Gene Ontology GAF file")
-parser.add_argument("--collection", type=str, choices=['goa_pdb', 'goa_uniprot'],
+parser.add_argument("--collection", type=str, choices=['goa_pdb', 'goa_gaf', 'goa_uniprot'],
                     default="goa_uniprot", help="Give collection name.")
-
+parser.add_argument('--exp', action='store_true', default=False)
 args = parser.parse_args()
 
 client = MongoClient('mongodb://localhost:27017/')
 db_name = 'prot2vec'
 collection = client[db_name][args.collection]
+
+
+Experimental_Codes = {
+
+    "ECO:0000269": "EXP",
+    "ECO:0000314": "IDA",
+
+    "ECO:0000353": "IPI",
+    "ECO:0000315": "IMP",
+
+    "ECO:0000316": "IGI",
+    "ECO:0000270": "IEP"
+}
+exp_codes = set(Experimental_Codes.values())
 
 
 def load_gaf(filename, start=collection.count({})):   # load GOA in a flat structure
@@ -37,7 +51,8 @@ def load_gaf(filename, start=collection.count({})):   # load GOA in a flat struc
             if i % 100 == 0:
                 sys.stdout.write("\rProcessed annotations\t%s" % i)
 
-            if i < start: continue
+            if i < start or (args.exp and data['Evidence'] not in exp_codes):
+                continue
 
             date = datetime.datetime.strptime(data['Date'], "%Y%m%d").date()
 
