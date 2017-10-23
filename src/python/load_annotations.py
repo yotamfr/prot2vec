@@ -6,13 +6,17 @@ from pymongo import MongoClient
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--gaf", type=str, help="Give full path to Gene Ontology GAF file")
-parser.add_argument("--collection", type=str, choices=['goa_pdb', 'goa_gaf', 'goa_uniprot'],
+parser.add_argument("--input", type=str, required=True,
+                    help="Give full path to Gene Ontology GAF file")
+parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                    help="Supply the URL of MongoDB")
+parser.add_argument("--collection", type=str, choices=['goa_pdb', 'goa_uniprot'],
                     default="goa_uniprot", help="Give collection name.")
-parser.add_argument('--exp', action='store_true', default=False)
+parser.add_argument('--exp', action='store_true', default=False,
+                    help="Load only experimentally validated annotations.")
 args = parser.parse_args()
 
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(args.mongo_url)
 db_name = 'prot2vec'
 collection = client[db_name][args.collection]
 
@@ -84,9 +88,5 @@ def load_gaf(filename, start=collection.count({})):   # load GOA in a flat struc
     print("\nFinished!")
 
 
-def main():
-    load_gaf(args.gaf, 0)
-
-
 if __name__ == "__main__":
-    main()
+    load_gaf(args.input, 0)

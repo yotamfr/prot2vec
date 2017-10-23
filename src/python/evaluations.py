@@ -106,7 +106,7 @@ BINARY = {
 
 def load_validation_set(annots_tsv, seqs_fasta, aspect):
 
-    logger.info("Loading validation set of %s." % aspect)
+    logger.info("Loading validation set of %s aspect." % aspect)
 
     validation_set, validation_seqs, validation_terms = dict(), dict(), dict()
 
@@ -136,13 +136,13 @@ def load_validation_set(annots_tsv, seqs_fasta, aspect):
     return validation_set, validation_seqs, validation_terms
 
 
-def load_training_set(go_terms, collection, Model, exp):
+def load_training_set(go_terms, collection, Model, exp, date_cutoff=CAFA3_cutoff):
 
-    logger.info("Loading training set.")
+    logger.info("Loading training set earlier than %s." % date_cutoff)
 
     query = {"DB": "UniProtKB",
              "GO_ID": {"$in": list(go_terms)},
-             "Date": {"$lte": CAFA3_cutoff}}
+             "Date": {"$lte": date_cutoff}}
     if exp:
         query["ECO_Evidence_code"] = {"$in": exp_codes}
     training_annots = db.goa_uniprot.find(query)
@@ -169,7 +169,7 @@ def load_training_set(go_terms, collection, Model, exp):
         else:
             training_set[seq_id] = {go_id}
 
-    logger.info("Loaded %s annots." % sum(training_terms.values()))
+    logger.info("Loaded %s annots." % np.sum(training_terms.values()))
 
     return training_set, training_seqs, training_terms
 
@@ -207,8 +207,8 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         wordvecs = D.wordvecs(valid_ids)
         valid_X[D.name] = wordvecs
 
-    valid_labels_fname = "%s/labels_%s_valid.npy" % (datapath, aspect)
-    valid_cls_fname = "%s/classes_%s_valid.npy" % (datapath, aspect)
+    valid_labels_fname = "%s/labels_%s_valid.npy" % (ckptpath, aspect)
+    valid_cls_fname = "%s/classes_%s_valid.npy" % (ckptpath, aspect)
 
     if os.path.exists(valid_labels_fname) and os.path.exists(valid_cls_fname):
         valid_y = np.load(valid_labels_fname).tolist()
@@ -241,7 +241,8 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         plt.grid(True)
         plt.show()
 
-    training_set, training_seqs, _ = load_training_set(go_terms.keys(), collection, Model, exp)
+    training_set, training_seqs, _ = load_training_set(
+        go_terms.keys(), collection, Model, exp)
 
     train_ids, train_X, train_labels = [], {D.name: [] for D in models}, []
 
@@ -258,7 +259,8 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         wordvecs = D.wordvecs(train_ids)
         train_X[D.name] = wordvecs
 
-    train_labels_fname = "%s/labels_%s_%s_train.npy" % (datapath, aspect, 'exp' if exp else 'nexp')
+    train_labels_fname = "%s/labels_%s_%s_train.npy" %\
+                         (ckptpath, aspect, 'exp' if exp else 'nexp')
     if os.path.exists(train_labels_fname):
         train_y = np.load(train_labels_fname).tolist()
     elif save_numpy:
@@ -853,7 +855,8 @@ def main4(models, aspect, sample_size):
 if __name__ == "__main__":
 
     main5([BagOfNGrams(3)], db.uniprot, Uniprot,
-          args["cafa3_sprot_goa"], args["cafa3_sprot_seq"], 1000, GoAspect('F'), exp=True)
+          args["cafa3_sprot_goa"], args["cafa3_sprot_seq"],
+          1000, GoAspect(), exp=True)
 
     main3([Node2Vec("random.uniprot.emb"),
            Node2Vec("intact.all.emb"),

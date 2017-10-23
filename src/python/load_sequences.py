@@ -6,13 +6,16 @@ from pymongo import MongoClient
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--fasta", type=str, help="Give full path to uniprot fasta file")
+parser.add_argument("--input", type=str, required=True,
+                    help="Give full path to uniprot fasta file")
+parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                    help="Supply the URL of MongoDB")
 parser.add_argument("--collection", type=str, choices=['uniprot', 'sprot'],
                     default="uniprot", help="Give collection name.")
 
 args = parser.parse_args()
 
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(args.mongo_url)
 db_name = 'prot2vec'
 collection = client[db_name][args.collection]
 
@@ -64,9 +67,5 @@ def load_fasta(src_fasta, start=collection.count({})):
     print("\nFinished!")
 
 
-def main():
-    load_fasta(args.fasta, 0)
-
-
 if __name__ == "__main__":
-    main()
+    load_fasta(args.input, 0)
