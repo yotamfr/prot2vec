@@ -75,7 +75,7 @@ exp_codes = list(Experimental_Codes.keys())
 
 # CAFA2_cutoff = datetime.datetime(2013, 6, 1, 0, 0)
 CAFA2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
-CAFA3_cutoff = datetime.datetime(2017, 1, 1, 0, 0)
+CAFA3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
 now = datetime.datetime.utcnow()
 
 random_state = np.random.RandomState(0)
