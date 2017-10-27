@@ -37,17 +37,16 @@ class KmerSentences(object):
     @staticmethod
     def get_ngram_sentences(seq, n, offset=0):
         return (
-            filter(
+            list(filter(
                 lambda ngram: len(ngram) == n, [seq[i:min(i + n, len(seq))]
                                                 for i in range(offset, len(seq), n)]
-            )
+            ))
         )
 
     def __iter__(self):
         for seq in map(lambda p: p['sequence'], collection.find({})):
             for o in range(self.k):
-                for sent in KmerSentences.get_ngram_sentences(seq, self.k, o):
-                    yield sent
+                yield KmerSentences.get_ngram_sentences(seq, self.k, o)
 
 
 class Word2VecWrapper(object):
