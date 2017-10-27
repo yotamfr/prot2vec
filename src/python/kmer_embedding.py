@@ -89,7 +89,7 @@ class Word2VecWrapper(object):
 
     def kmeans(self, k):
         w2v = self
-        a_acids = np.array(w2v.vocab.keys())
+        a_acids = np.array(list(w2v.vocab.keys()))
         vectors = np.array([w2v[aa] for aa in a_acids])
         km = KMeans(n_clusters=k).fit(vectors)
         return a_acids, km.labels_
@@ -108,5 +108,3 @@ if __name__=="__main__":
     if args.stats:
         print(w2v.stats(8))
     print("Finished!")
-
-
