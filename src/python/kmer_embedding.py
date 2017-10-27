@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from gensim.models.word2vec import Word2Vec
+from gensim.models.word2vec import LineSentence
 from sklearn.cluster import KMeans
 from pymongo import MongoClient
 
@@ -9,7 +10,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--kmer", type=int, required=True,
                     help="Give the length of the kmer.")
-parser.add_argument("-c", "--context", type=int, required=True,
+parser.add_argument("-w", "--win_size", type=int, required=True,
                     help="Give the length of the context window.")
 parser.add_argument("-d", "--emb_dim", type=int, required=True,
                     help="Give the dimension of the embedding vector.")
@@ -49,9 +50,26 @@ class KmerSentences(object):
         ))
 
     def __iter__(self):
-        for doc in collection.find({}):
+        sample = collection.find({})
+        for doc in sample:
             for o in range(self.k):
-                yield KmerSentences.get_ngram_sentences(doc["sequence"], self.k, o)
+                seq = doc["sequence"]
+                sent = KmerSentences.get_ngram_sentences(seq, self.k, o)
+                yield sent
+
+    @staticmethod
+    def get_file_stream(k):
+        src = args.source
+        fname = "%s/%s_%s-mer.sentences" % (ckptpath, src, k)
+        sequences = map(lambda doc: doc["sequence"], collection.find({}))
+        sentences = (" ".join(KmerSentences.get_ngram_sentences(seq, k, o))
+                         for seq in sequences for o in range(k))
+        mode = 'r' if os.path.exists(fname) else 'w+'
+        with open(fname, mode) as f:
+            if mode == 'w+':
+                f.writelines(sentences)    # file was created
+            stream = LineSentence(f)
+            return stream
 
 
 class Word2VecWrapper(object):
@@ -62,7 +80,7 @@ class Word2VecWrapper(object):
         t = args.num_threads
         k, c, d, mc = ngram_size, win_size, dim_size, min_count
 
-        unique_str = "%s_%s-mer_d%s_c%s_mc%s" % (s, k, d, c, mc)
+        unique_str = "%s_%s-mer_dim%s_win%s_mc%s" % (s, k, d, c, mc)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
         if not args.train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
@@ -103,7 +121,7 @@ class Word2VecWrapper(object):
 
 if __name__=="__main__":
     print("Training W2V...")
-    w2v = Word2VecWrapper(args.kmer, args.context, args.emb_dim)
+    w2v = Word2VecWrapper(args.kmer, args.win_size, args.emb_dim)
     print("Done Training!")
     if args.stats:
         print(w2v.stats(8))
