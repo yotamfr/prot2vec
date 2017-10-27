@@ -16,7 +16,7 @@ parser.add_argument("-i", "--collection", type=str, choices=['uniprot', 'sprot']
                     default="sprot", help="Give the collection name.")
 parser.add_argument("-o", "--outputdir", type=str,  required=False,
                     default="models", help="Specify the output directory")
-parser.add_argument("-t", "--num_workers", type=int,  required=False,
+parser.add_argument("-t", "--num_threads", type=int,  required=False,
                     default=4, help="Specify the output directory")
 args = parser.parse_args()
 
@@ -53,6 +53,8 @@ class KmerSentences(object):
 class Word2VecWrapper(object):
 
     def __init__(self, ngram_size, win_size, dim_size=100, min_count=2):
+
+        t = args.num_threads
         k, c, d, mc = ngram_size, win_size, dim_size, min_count
 
         unique_str = "%s:%s-mer:dim=%s:c=%s:mc=%s" % (k, collection, d, c, mc)
@@ -64,7 +66,7 @@ class Word2VecWrapper(object):
                                    size=d,
                                    window=c,
                                    min_count=mc,
-                                   workers=4, sg=1)
+                                   workers=t, sg=1)
             self._model.save(model_filename)
 
     def similarity(self, w1, w2):
