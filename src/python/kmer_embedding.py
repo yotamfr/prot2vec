@@ -57,7 +57,7 @@ class Word2VecWrapper(object):
         k, c, d, mc = ngram_size, win_size, dim_size, min_count
 
         unique_str = "%s:%s-mer:dim=%s:c=%s:mc=%s" % (k, collection, d, c, mc)
-        model_filename = "%s/n-gram/%s" % (ckptpath, unique_str)
+        model_filename = "%s/%s" % (ckptpath, unique_str)
         if os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
