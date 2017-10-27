@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from gensim.models.word2vec import Word2Vec
+from sklearn.cluster import KMeans
 from pymongo import MongoClient
 
 import argparse
@@ -20,6 +21,10 @@ parser.add_argument("-o", "--outputdir", type=str,  required=False,
                     default="models", help="Specify the output directory")
 parser.add_argument("-t", "--num_threads", type=int,  required=False,
                     default=4, help="Specify the output directory")
+parser.add_argument('--train', action='store_true', default=False,
+                    help="Specify whether to retrain the model.")
+parser.add_argument('--stats', action='store_true', default=True,
+                    help="Print statistics when done training.")
 args = parser.parse_args()
 
 client = MongoClient(args.mongo_url)
@@ -38,17 +43,15 @@ class KmerSentences(object):
 
     @staticmethod
     def get_ngram_sentences(seq, n, offset=0):
-        return (
-            list(filter(
-                lambda ngram: len(ngram) == n, [seq[i:min(i + n, len(seq))]
-                                                for i in range(offset, len(seq), n)]
-            ))
-        )
+        return list(filter(
+            lambda ngram: len(ngram) == n, [seq[i:min(i + n, len(seq))]
+                                            for i in range(offset, len(seq), n)]
+        ))
 
     def __iter__(self):
-        for seq in map(lambda p: p['sequence'], collection.find({})):
+        for doc in collection.find({}):
             for o in range(self.k):
-                yield KmerSentences.get_ngram_sentences(seq, self.k, o)
+                yield KmerSentences.get_ngram_sentences(doc["sequence"], self.k, o)
 
 
 class Word2VecWrapper(object):
@@ -59,9 +62,9 @@ class Word2VecWrapper(object):
         t = args.num_threads
         k, c, d, mc = ngram_size, win_size, dim_size, min_count
 
-        unique_str = "%s_%s-mer_dim=%s_c=%s_mc=%s" % (s, k, d, c, mc)
+        unique_str = "%s_%s-mer_d%s_c%s_mc%s" % (s, k, d, c, mc)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
-        if os.path.exists(model_filename):
+        if not args.train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
             self._model = Word2Vec(KmerSentences(k),
@@ -81,9 +84,29 @@ class Word2VecWrapper(object):
         return key in self._model
 
     @property
-    def model(self):
-        return self._model
+    def vocab(self):
+        return self._model.wv.vocab
+
+    def kmeans(self, k):
+        w2v = self
+        a_acids = np.array(w2v.vocab.keys())
+        vectors = np.array([w2v[aa] for aa in a_acids])
+        km = KMeans(n_clusters=k).fit(vectors)
+        return a_acids, km.labels_
+
+    def stats(self, k):
+        a_acids, labels = self.kmeans(k)
+        return '\n'.join("cluster %s: %s" %
+                         (lbl, ' '.join(a_acids[labels == lbl]))
+                         for lbl in np.unique(labels))
 
 
 if __name__=="__main__":
-    Word2VecWrapper(args.kmer, args.context, args.emb_dim)
+    print("Training W2V...")
+    w2v = Word2VecWrapper(args.kmer, args.context, args.emb_dim)
+    print("Done Training!")
+    if args.stats:
+        print w2v.stats(8)
+    print("Finished!")
+
+
