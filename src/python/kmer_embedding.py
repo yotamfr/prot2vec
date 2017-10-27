@@ -106,7 +106,7 @@ if __name__=="__main__":
     w2v = Word2VecWrapper(args.kmer, args.context, args.emb_dim)
     print("Done Training!")
     if args.stats:
-        print w2v.stats(8)
+        print(w2v.stats(8))
     print("Finished!")
 
 
