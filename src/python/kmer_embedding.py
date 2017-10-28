@@ -58,8 +58,8 @@ class KmerSentences(object):
 
     def __iter__(self):
         for item in self.src:
+            seq = item["sequence"]
             for o in range(self.k):
-                seq = item["sequence"]
                 sent = KmerSentences.get_ngram_sentences(seq, self.k, o)
                 yield sent
 
