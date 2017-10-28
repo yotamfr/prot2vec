@@ -3,7 +3,6 @@ import operator
 import numpy as np
 from itertools import combinations
 from gensim.models.word2vec import Word2Vec
-from gensim.models.word2vec import LineSentence
 from sklearn.cluster import KMeans
 from pymongo import MongoClient
 import argparse
@@ -45,8 +44,8 @@ AA = [u'A', u'C', u'E', u'D', u'G', u'F', u'I', u'H', u'K', u'M', u'L',
 
 class KmerSentences(object):
 
-    def __init__(self, kmer, src):
-        self.src = src
+    def __init__(self, kmer, source):
+        self.source = source
         self.k = kmer
 
     @staticmethod
@@ -57,25 +56,11 @@ class KmerSentences(object):
         ))
 
     def __iter__(self):
-        for item in self.src:
+        for item in self.source():
             seq = item["sequence"]
             for o in range(self.k):
                 sent = KmerSentences.get_ngram_sentences(seq, self.k, o)
                 yield sent
-
-    @staticmethod
-    def get_file_stream(k):
-        src = args.source
-        fname = "%s/%s_%s-mer.sentences" % (ckptpath, src, k)
-        sequences = map(lambda doc: doc["sequence"], src)
-        sentences = (" ".join(KmerSentences.get_ngram_sentences(seq, k, o))
-                         for seq in sequences for o in range(k))
-        mode = 'r' if os.path.exists(fname) else 'w+'
-        with open(fname, mode) as f:
-            if mode == 'w+':
-                f.writelines(sentences)    # file was created
-            stream = LineSentence(f)
-            return stream
 
 
 class Word2VecWrapper(object):
@@ -83,16 +68,16 @@ class Word2VecWrapper(object):
     def __init__(self, kmer_size, win_size, dim_size, min_count=2,
                  src='sprot', n_threads=3, b_train=False, ckptpath='models'):
 
-        s, t = src, n_threads
+        t = n_threads
         k, c, d, mc = kmer_size, win_size, dim_size, min_count
 
-        unique_str = "%s_%s-mer_dim%s_win%s_mc%s" % (s, k, d, c, mc)
+        unique_str = "%s_%s-mer_dim%s_win%s_mc%s" % (src, k, d, c, mc)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
         if not b_train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
             collection = db[src]
-            stream = KmerSentences(k, collection.find({}))
+            stream = KmerSentences(k, source=lambda: collection.find({}))
             print("Training W2V on %s (size=%s, window=%s, min_count=%s, workers=%s)"
                   % (src, d, c, mc, t))
             self._model = Word2Vec(stream,
