@@ -1,11 +1,14 @@
 import os
+import operator
 import numpy as np
+from itertools import combinations
 from gensim.models.word2vec import Word2Vec
 from gensim.models.word2vec import LineSentence
 from sklearn.cluster import KMeans
 from pymongo import MongoClient
-
 import argparse
+
+np.random.seed(1809)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--kmer", type=int, required=True,
@@ -24,7 +27,7 @@ parser.add_argument("-t", "--num_threads", type=int,  required=False,
                     default=4, help="Specify the output directory")
 parser.add_argument('--train', action='store_true', default=False,
                     help="Specify whether to retrain the model.")
-parser.add_argument('--stats', action='store_true', default=True,
+parser.add_argument('--stats', action='store_true', default=False,
                     help="Print statistics when done training.")
 args = parser.parse_args()
 
@@ -35,6 +38,10 @@ collection = client[db_name][args.source]
 ckptpath = args.outputdir
 if not os.path.exists(ckptpath):
     os.makedirs(ckptpath)
+
+
+AA = [u'A', u'C', u'E', u'D', u'G', u'F', u'I', u'H', u'K', u'M', u'L',
+      u'N', u'Q', u'P', u'S', u'R', u'T', u'W', u'V', u'Y', u'X']
 
 
 class KmerSentences(object):
@@ -107,16 +114,25 @@ class Word2VecWrapper(object):
 
     def kmeans(self, k):
         w2v = self
-        a_acids = np.array(list(w2v.vocab.keys()))
-        vectors = np.array([w2v[aa] for aa in a_acids])
+        keys = np.array(list(w2v.vocab.keys()))
+        vectors = np.array([w2v[aa] for aa in keys])
         km = KMeans(n_clusters=k).fit(vectors)
-        return a_acids, km.labels_
+        return keys, km.labels_
 
     def stats(self, k):
-        a_acids, labels = self.kmeans(k)
-        return '\n'.join("cluster %s: %s" %
-                         (lbl, ' '.join(a_acids[labels == lbl]))
+        keys, labels = self.kmeans(k)
+        clstr = '\n'.join("cluster %s: %s" %
+                         (lbl, ' '.join(keys[labels == lbl]))
                          for lbl in np.unique(labels))
+        cs = combinations(keys, 2)
+        ds = {c: self.similarity(c[0], c[1]) for c in cs}
+        hi_i = max(ds.items(), key=operator.itemgetter(1))[0]
+        lo_i = min(ds.items(), key=operator.itemgetter(1))[0]
+        av = np.mean(list(ds.values()))
+        hi_s = "highest similarity: sim(%s, %s)=%s" % (hi_i[0], hi_i[1], ds[hi_i])
+        lo_s = "lowest similarity: sim(%s, %s)=%s" % (lo_i[0], lo_i[1], ds[lo_i])
+        av_s = "average similarity: %s" % av
+        return '\n'.join([clstr, hi_s, lo_s, av_s])
 
 
 if __name__=="__main__":

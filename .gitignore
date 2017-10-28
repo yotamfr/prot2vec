@@ -12,3 +12,7 @@ figures
 *.pyc
 *.spec
 build/
+
+*.ipynb*
+prot2vec.ipynb
+.ipynb_checkpoints
