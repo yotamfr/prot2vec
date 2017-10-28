@@ -31,7 +31,7 @@ parser.add_argument('--stats', action='store_true', default=False,
 args = parser.parse_args()
 
 client = MongoClient(args.mongo_url)
-db = client['prot2vec']
+collection = client['prot2vec'][args.source]
 
 ckptpath = args.outputdir
 if not os.path.exists(ckptpath):
@@ -44,8 +44,7 @@ AA = [u'A', u'C', u'E', u'D', u'G', u'F', u'I', u'H', u'K', u'M', u'L',
 
 class KmerSentences(object):
 
-    def __init__(self, kmer, source):
-        self.source = source
+    def __init__(self, kmer):
         self.k = kmer
 
     @staticmethod
@@ -56,11 +55,9 @@ class KmerSentences(object):
         ))
 
     def __iter__(self):
-        for item in self.source():
-            seq = item["sequence"]
+        for seq in map(lambda p: p['sequence'], collection.find({})):
             for o in range(self.k):
-                sent = KmerSentences.get_ngram_sentences(seq, self.k, o)
-                yield sent
+                yield KmerSentences.get_ngram_sentences(seq, self.k, o)
 
 
 class Word2VecWrapper(object):
@@ -76,11 +73,9 @@ class Word2VecWrapper(object):
         if not b_train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
-            collection = db[src]
-            stream = KmerSentences(k, source=lambda: collection.find({}))
             print("Training W2V on %s (size=%s, window=%s, min_count=%s, workers=%s)"
                   % (src, d, c, mc, t))
-            self._model = Word2Vec(stream,
+            self._model = Word2Vec(KmerSentences(k),
                                    size=d,
                                    window=c,
                                    min_count=mc,
