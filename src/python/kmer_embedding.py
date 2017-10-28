@@ -21,9 +21,9 @@ parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/
                     help="Supply the URL of MongoDB")
 parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
                     default="sprot", help="Give source name.")
-parser.add_argument("-o", "--outputdir", type=str,  required=False,
+parser.add_argument("-o", "--outputdir", type=str, required=False,
                     default="models", help="Specify the output directory")
-parser.add_argument("-t", "--num_threads", type=int,  required=False,
+parser.add_argument("-t", "--num_threads", type=int, required=False,
                     default=4, help="Specify the output directory")
 parser.add_argument('--train', action='store_true', default=False,
                     help="Specify whether to retrain the model.")
@@ -32,8 +32,7 @@ parser.add_argument('--stats', action='store_true', default=False,
 args = parser.parse_args()
 
 client = MongoClient(args.mongo_url)
-db_name = 'prot2vec'
-collection = client[db_name][args.source]
+db = client['prot2vec']
 
 ckptpath = args.outputdir
 if not os.path.exists(ckptpath):
@@ -46,7 +45,8 @@ AA = [u'A', u'C', u'E', u'D', u'G', u'F', u'I', u'H', u'K', u'M', u'L',
 
 class KmerSentences(object):
 
-    def __init__(self, kmer):
+    def __init__(self, kmer, src):
+        self.src = src
         self.k = kmer
 
     @staticmethod
@@ -57,10 +57,9 @@ class KmerSentences(object):
         ))
 
     def __iter__(self):
-        sample = collection.find({})
-        for doc in sample:
+        for item in self.src:
             for o in range(self.k):
-                seq = doc["sequence"]
+                seq = item["sequence"]
                 sent = KmerSentences.get_ngram_sentences(seq, self.k, o)
                 yield sent
 
@@ -68,7 +67,7 @@ class KmerSentences(object):
     def get_file_stream(k):
         src = args.source
         fname = "%s/%s_%s-mer.sentences" % (ckptpath, src, k)
-        sequences = map(lambda doc: doc["sequence"], collection.find({}))
+        sequences = map(lambda doc: doc["sequence"], src)
         sentences = (" ".join(KmerSentences.get_ngram_sentences(seq, k, o))
                          for seq in sequences for o in range(k))
         mode = 'r' if os.path.exists(fname) else 'w+'
@@ -81,18 +80,20 @@ class KmerSentences(object):
 
 class Word2VecWrapper(object):
 
-    def __init__(self, ngram_size, win_size, dim_size, min_count=2):
+    def __init__(self, ngram_size, win_size, dim_size, min_count=2,
+                 src='sprot', n_threads=4, b_train=False, ckptpath='models'):
 
-        s = args.source
-        t = args.num_threads
+        s, t = src, n_threads
         k, c, d, mc = ngram_size, win_size, dim_size, min_count
 
         unique_str = "%s_%s-mer_dim%s_win%s_mc%s" % (s, k, d, c, mc)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
-        if not args.train and os.path.exists(model_filename):
+        if not b_train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
-            self._model = Word2Vec(KmerSentences(k),
+            collection = db[src]
+            stream = KmerSentences(k, collection.find({}))
+            self._model = Word2Vec(stream,
                                    size=d,
                                    window=c,
                                    min_count=mc,
@@ -135,9 +136,14 @@ class Word2VecWrapper(object):
         return '\n'.join([clstr, hi_s, lo_s, av_s])
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
+
     print("Training W2V...")
-    w2v = Word2VecWrapper(args.kmer, args.win_size, args.emb_dim)
+    w2v = Word2VecWrapper(args.kmer, args.win_size, args.emb_dim,
+                          n_threads=args.num_threads,
+                          b_train=args.train,
+                          ckptpath=ckptpath,
+                          src=args.source)
     print("Done Training!")
     if args.stats:
         print(w2v.stats(8))
