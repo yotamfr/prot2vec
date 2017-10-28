@@ -80,11 +80,11 @@ class KmerSentences(object):
 
 class Word2VecWrapper(object):
 
-    def __init__(self, ngram_size, win_size, dim_size, min_count=2,
-                 src='sprot', n_threads=4, b_train=False, ckptpath='models'):
+    def __init__(self, kmer_size, win_size, dim_size, min_count=2,
+                 src='sprot', n_threads=3, b_train=False, ckptpath='models'):
 
         s, t = src, n_threads
-        k, c, d, mc = ngram_size, win_size, dim_size, min_count
+        k, c, d, mc = kmer_size, win_size, dim_size, min_count
 
         unique_str = "%s_%s-mer_dim%s_win%s_mc%s" % (s, k, d, c, mc)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
@@ -93,6 +93,8 @@ class Word2VecWrapper(object):
         else:
             collection = db[src]
             stream = KmerSentences(k, collection.find({}))
+            print("Training W2V on %s (size=%s, window=%s, min_count=%s, workers=%s)"
+                  % (src, d, c, mc, t))
             self._model = Word2Vec(stream,
                                    size=d,
                                    window=c,
@@ -123,8 +125,8 @@ class Word2VecWrapper(object):
     def stats(self, k):
         keys, labels = self.kmeans(k)
         clstr = '\n'.join("cluster %s: %s" %
-                         (lbl, ' '.join(keys[labels == lbl]))
-                         for lbl in np.unique(labels))
+                          (lbl, ' '.join(keys[labels == lbl]))
+                          for lbl in np.unique(labels))
         cs = combinations(keys, 2)
         ds = {c: self.similarity(c[0], c[1]) for c in cs}
         hi_i = max(ds.items(), key=operator.itemgetter(1))[0]
@@ -138,13 +140,11 @@ class Word2VecWrapper(object):
 
 if __name__ == "__main__":
 
-    print("Training W2V...")
     w2v = Word2VecWrapper(args.kmer, args.win_size, args.emb_dim,
                           n_threads=args.num_threads,
                           b_train=args.train,
                           ckptpath=ckptpath,
                           src=args.source)
-    print("Done Training!")
+
     if args.stats:
         print(w2v.stats(8))
-    print("Finished!")
