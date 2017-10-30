@@ -6,6 +6,7 @@ prot2vec.Rproj
 .idea/
 
 data
+data/
 models
 figures
 
