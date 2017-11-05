@@ -5,37 +5,10 @@ from itertools import combinations
 from gensim.models.word2vec import Word2Vec
 from sklearn.cluster import KMeans
 from pymongo import MongoClient
+from tqdm import tqdm
 import argparse
 
 np.random.seed(1809)
-
-parser = argparse.ArgumentParser()
-parser.add_argument("-n", "--kmer", type=int, required=True,
-                    help="Give the length of the kmer.")
-parser.add_argument("-w", "--win_size", type=int, required=True,
-                    help="Give the length of the context window.")
-parser.add_argument("-d", "--emb_dim", type=int, required=True,
-                    help="Give the dimension of the embedding vector.")
-parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
-                    help="Supply the URL of MongoDB")
-parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
-                    default="sprot", help="Give source name.")
-parser.add_argument("-o", "--outputdir", type=str, required=False,
-                    default="models", help="Specify the output directory")
-parser.add_argument("-t", "--num_threads", type=int, required=False,
-                    default=4, help="Specify the output directory")
-parser.add_argument('--train', action='store_true', default=False,
-                    help="Specify whether to retrain the model.")
-parser.add_argument('--stats', action='store_true', default=False,
-                    help="Print statistics when done training.")
-args = parser.parse_args()
-
-client = MongoClient(args.mongo_url)
-collection = client['prot2vec'][args.source]
-
-ckptpath = args.outputdir
-if not os.path.exists(ckptpath):
-    os.makedirs(ckptpath)
 
 
 AA = [u'A', u'C', u'E', u'D', u'G', u'F', u'I', u'H', u'K', u'M', u'L',
@@ -55,9 +28,14 @@ class KmerSentences(object):
         ))
 
     def __iter__(self):
-        for seq in map(lambda p: p['sequence'], collection.find({})):
+        n = collection.count({})
+        pbar = tqdm(range(n), desc="sequences loaded")
+        stream = map(lambda p: p['sequence'], collection.find({}))
+        for seq in stream:
             for o in range(self.k):
                 yield KmerSentences.get_ngram_sentences(seq, self.k, o)
+            pbar.update(1)
+        pbar.close()
 
 
 class Word2VecWrapper(object):
@@ -119,6 +97,34 @@ class Word2VecWrapper(object):
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-n", "--kmer", type=int, required=True,
+                        help="Give the length of the kmer.")
+    parser.add_argument("-w", "--win_size", type=int, required=True,
+                        help="Give the length of the context window.")
+    parser.add_argument("-d", "--emb_dim", type=int, required=True,
+                        help="Give the dimension of the embedding vector.")
+    parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                        help="Supply the URL of MongoDB")
+    parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
+                        default="sprot", help="Give source name.")
+    parser.add_argument("-o", "--outputdir", type=str, required=False,
+                        default="models", help="Specify the output directory")
+    parser.add_argument("-t", "--num_threads", type=int, required=False,
+                        default=4, help="Specify the output directory")
+    parser.add_argument('--train', action='store_true', default=False,
+                        help="Specify whether to retrain the model.")
+    parser.add_argument('--stats', action='store_true', default=False,
+                        help="Print statistics when done training.")
+    args = parser.parse_args()
+
+    client = MongoClient(args.mongo_url)
+    collection = client['prot2vec'][args.source]
+
+    ckptpath = args.outputdir
+    if not os.path.exists(ckptpath):
+        os.makedirs(ckptpath)
 
     w2v = Word2VecWrapper(args.kmer, args.win_size, args.emb_dim,
                           n_threads=args.num_threads,
