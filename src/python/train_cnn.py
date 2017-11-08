@@ -1,5 +1,4 @@
 import os
-import sys
 import datetime
 import numpy as np
 
@@ -76,7 +75,7 @@ class ToAC(object):
         return AC
 
 
-def train(model, train_dataset, test_dataset):
+def train(model, train_dataset, test_dataset, output_dir):
 
     print("Training Model: #TRN=%d , #VLD=%d, #CLS=%d" %
           (len(train_dataset), len(test_dataset), model.n_classes))
@@ -93,7 +92,8 @@ def train(model, train_dataset, test_dataset):
 
     for epoch in range(num_epochs):
 
-        # pbar = tqdm(range(len(dataset)), "samples ingested")
+        pbar = tqdm(range(len(train_dataset)), "training ... ")
+
         loader = DataLoader(train_dataset, batch_size)
         for i, (seqs, lbls) in enumerate(loader):
 
@@ -112,17 +112,15 @@ def train(model, train_dataset, test_dataset):
             if (i + 1) % 100 == 0:
 
                 test_loss = eval(model, criterion, test_dataset)
-                print('Epoch [%d/%d], Step [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
-                      % (epoch + 1, num_epochs, i + 1, len(train_dataset) // batch_size,
-                         train_loss.data[0], test_loss))
+                pbar.set_description('Epoch [%d/%d], Step [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
+                                     % (epoch + 1, num_epochs, i + 1, len(train_dataset) // batch_size,
+                                        train_loss.data[0], test_loss))
+            pbar.update(batch_size)
 
-
-            # pbar.update(batch_size)
-
-        # pbar.close()
+        pbar.close()
 
         # Save the Trained Model
-        # torch.save(cnn.state_dict(), 'cnn.pkl')
+        torch.save(model.state_dict(), '%s/cnn.pkl' % output_dir)
 
 
 def eval(model, criterion, dataset):
@@ -143,9 +141,9 @@ def main():
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']
 
-    data_dir = args.input_dir
-    if not os.path.exists(data_dir):
-        os.mkdir(data_dir)
+    input_dir = args.input_dir
+    if not os.path.exists(input_dir):
+        os.mkdir(input_dir)
 
     out_dir = args.output_dir
     if not os.path.exists(out_dir):
@@ -155,24 +153,24 @@ def main():
 
     if args.source == 'CAFA3':
 
-        cafa3_train_dir = '%s/CAFA3_training_data' % data_dir
+        cafa3_train_dir = '%s/CAFA3_training_data' % input_dir
         if not os.path.exists(cafa3_train_dir):
-            wget_and_unzip('CAFA3_training_data', data_dir, cafa3_train_url)
+            wget_and_unzip('CAFA3_training_data', input_dir, cafa3_train_url)
 
-        cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (data_dir, cafa3_train_dir)
-        cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (data_dir, cafa3_train_dir)
+        cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (input_dir, cafa3_train_dir)
+        cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (input_dir, cafa3_train_dir)
         seq_id2seq, seq_id2go_id, go_id2seq_id = \
             load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, GoAspect('F'))
         filter_sequences_by(lambda seq: len(seq) < 32, seq_id2seq, seq_id2go_id)
         train_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
 
-        cafa3_targets_dir = '%s/Target files' % data_dir
-        cafa3_mapping_dir = '%s/Mapping files' % data_dir
+        cafa3_targets_dir = '%s/Target files' % input_dir
+        cafa3_mapping_dir = '%s/Mapping files' % input_dir
         if not os.path.exists(cafa3_targets_dir) or not os.path.exists(cafa3_mapping_dir):
-            wget_and_unzip('CAFA3_targets', data_dir, cafa3_targets_url)
+            wget_and_unzip('CAFA3_targets', input_dir, cafa3_targets_url)
 
         annots_fname = 'leafonly_MFO_unique.txt'
-        annots_fpath = '%s/CAFA3_benchmark20170605/groundtruth/%s' % (data_dir, annots_fname)
+        annots_fpath = '%s/CAFA3_benchmark20170605/groundtruth/%s' % (input_dir, annots_fname)
         trg_id2seq, _, _ = load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
         num_mapping = count_lines(annots_fpath, sep=bytes('\n', 'utf8'))
         src_mapping = open(annots_fpath, 'r')
@@ -194,18 +192,21 @@ def main():
         train_set.mlb, valid_set.mlb, test_set.mlb = mlb, mlb, mlb
         print(mlb.classes_)
 
-        cnn = CNN_AC(len(mlb.classes_))
+        output_dir = args.output_dir
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
 
-        train(cnn, train_set, test_set)
+        cnn = CNN_AC(len(mlb.classes_))
+        train(cnn, train_set, test_set, output_dir)
 
     elif args.source == 'CAFA2':
 
         sub_dir = cafa2_targets_dir = 'CAFA-2013-targets'
-        if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
-            wget_and_unzip(sub_dir, data_dir, cafa2_targets_url)
+        if not os.path.exists('%s/%s' % (input_dir, sub_dir)):
+            wget_and_unzip(sub_dir, input_dir, cafa2_targets_url)
         sub_dir = cafa2_data_dir = 'CAFA2Supplementary_data'
-        if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
-            wget_and_unzip(sub_dir, data_dir, cafa2_data_url)
+        if not os.path.exists('%s/%s' % (input_dir, sub_dir)):
+            wget_and_unzip(sub_dir, input_dir, cafa2_data_url)
 
         cafa2_targets_dir = './CAFA2Supplementary_data/data/CAFA2-targets'
         cafa2_benchmark_dir = './CAFA2Supplementary_data/data/benchmark'
