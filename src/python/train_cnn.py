@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torchvision.datasets as dsets
 import torchvision.transforms as transforms
+from sklearn.preprocessing import MultiLabelBinarizer
+
 from torch.autograd import Variable
 
 from gensim.models.word2vec import Word2Vec
@@ -29,13 +31,12 @@ cafa3_train_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_training_
 cafa2_data_url = 'https://ndownloader.figshare.com/files/3658395'
 cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-targets.tgz'
 
-cafa3_benchmark_dir = './CAFA3_benchmark20170605/groundtruth'
-
 
 # CNN Model (2 conv layer)
-class CNN(nn.Module):
+class CNN_AC(nn.Module):
     def __init__(self, n_classes):
-        super(CNN, self).__init__()
+        super(CNN_AC, self).__init__()
+        self.n_classes = n_classes
         self.layer1 = nn.Sequential(
             nn.Conv2d(1, 16, kernel_size=5, padding=2),
             nn.BatchNorm2d(16),
@@ -75,9 +76,10 @@ class ToAC(object):
         return AC
 
 
-def train(dataset):
+def train(model, train_dataset, test_dataset):
 
-    print("Training CNN...\n")
+    print("Training Model: #TRN=%d , #VLD=%d, #CLS=%d" %
+          (len(train_dataset), len(test_dataset), model.n_classes))
 
     # Hyper Parameters
 
@@ -85,40 +87,55 @@ def train(dataset):
     num_epochs = 5
     learning_rate = 0.003
 
-    cnn = CNN(len(dataset.classes))
-
     # Loss and Optimizer
     criterion = nn.MultiLabelMarginLoss()
-    optimizer = torch.optim.Adam(cnn.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     for epoch in range(num_epochs):
 
         # pbar = tqdm(range(len(dataset)), "samples ingested")
+        loader = DataLoader(train_dataset, batch_size)
+        for i, (seqs, lbls) in enumerate(loader):
 
-        for i, (seqs, lbls) in enumerate(DataLoader(dataset, batch_size)):
-
+            model.train()
             sequences = Variable(torch.from_numpy(seqs).float())
             labels = Variable(torch.from_numpy(lbls).long())
 
             # Forward + Backward + Optimize
             optimizer.zero_grad()
-            outputs = cnn(sequences)
+            outputs = model(sequences)
 
-            loss = criterion(outputs, labels)
-            loss.backward()
+            train_loss = criterion(outputs, labels)
+            train_loss.backward()
             optimizer.step()
 
             if (i + 1) % 100 == 0:
-                print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f'
-                      % (epoch + 1, num_epochs, i + 1, len(dataset) // batch_size, loss.data[0]))
+
+                test_loss = eval(model, criterion, test_dataset)
+                print('Epoch [%d/%d], Step [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
+                      % (epoch + 1, num_epochs, i + 1, len(train_dataset) // batch_size,
+                         train_loss.data[0], test_loss))
+
 
             # pbar.update(batch_size)
 
         # pbar.close()
 
+        # Save the Trained Model
+        # torch.save(cnn.state_dict(), 'cnn.pkl')
 
-def eval(dataset):
-    pass
+
+def eval(model, criterion, dataset):
+    model.eval()
+    batch_size = 32
+    loss = 0.0
+    loader = DataLoader(dataset, batch_size)
+    for i, (seqs, lbls) in enumerate(loader):
+        sequences = Variable(torch.from_numpy(seqs).float())
+        labels = Variable(torch.from_numpy(lbls).long())
+        outputs = model(sequences)
+        loss += criterion(outputs, labels).data[0]
+    return loss
 
 
 def main():
@@ -138,34 +155,48 @@ def main():
 
     if args.source == 'CAFA3':
 
-        sub_dir = cafa3_train_dir = 'CAFA3_training_data'
-        if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
-            wget_and_unzip(sub_dir, data_dir, cafa3_train_url)
-        # sub_dir = cafa3_targets_dir = 'CAFA3_targets'
-        # if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
-        #     wget_and_unzip(sub_dir, data_dir, cafa3_targets_url)
-
-        # cafa3_targets_dir = '%s/Target files' % data_dir
-        # cafa3_mapping_dir = '%s/Mapping files' % data_dir
-        # load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
+        cafa3_train_dir = '%s/CAFA3_training_data' % data_dir
+        if not os.path.exists(cafa3_train_dir):
+            wget_and_unzip('CAFA3_training_data', data_dir, cafa3_train_url)
 
         cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (data_dir, cafa3_train_dir)
         cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (data_dir, cafa3_train_dir)
         seq_id2seq, seq_id2go_id, go_id2seq_id = \
             load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, GoAspect('F'))
+        filter_sequences_by(lambda seq: len(seq) < 32, seq_id2seq, seq_id2go_id)
+        train_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
 
-        seq_id2go_id, go_id2seq_id = rm_if_less_than(10, seq_id2go_id, go_id2seq_id)
-        train_dataset = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
-        train(train_dataset)
+        cafa3_targets_dir = '%s/Target files' % data_dir
+        cafa3_mapping_dir = '%s/Mapping files' % data_dir
+        if not os.path.exists(cafa3_targets_dir) or not os.path.exists(cafa3_mapping_dir):
+            wget_and_unzip('CAFA3_targets', data_dir, cafa3_targets_url)
+
+        annots_fname = 'leafonly_MFO_unique.txt'
+        annots_fpath = '%s/CAFA3_benchmark20170605/groundtruth/%s' % (data_dir, annots_fname)
+        trg_id2seq, _, _ = load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
+        num_mapping = count_lines(annots_fpath, sep=bytes('\n', 'utf8'))
+        src_mapping = open(annots_fpath, 'r')
+        trg_id2go_id, go_id2trg_id = MappingFileLoader(src_mapping, num_mapping, annots_fname).load()
+        filter_sequences_by(lambda seq: len(seq) < 32, trg_id2seq, trg_id2go_id)
+        test_set = Dataset(trg_id2seq, seq2vec, trg_id2go_id, transform=ToAC(32))
 
         seq_id2seq, seq_id2go_id, go_id2seq_id = \
             load_training_data_from_collections(db.goa_uniprot, db.uniprot,
-                                                cafa3_cutoff, GoAspect('F'))
+                                                cafa3_cutoff, today_cutoff, GoAspect('F'))
+        filter_sequences_by(lambda seq: len(seq) < 32, seq_id2seq, seq_id2go_id)
+        valid_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
 
-        # seq_id2go_id, go_id2seq_id = rm_if_less_than(10, seq_id2go_id, go_id2seq_id)
-        eval_dataset = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
-        eval(eval_dataset)
+        all_labels = []
+        all_labels.extend(train_set.labels)
+        all_labels.extend(valid_set.labels)
+        all_labels.extend(test_set.labels)
+        mlb = MultiLabelBinarizer(sparse_output=False).fit(all_labels)
+        train_set.mlb, valid_set.mlb, test_set.mlb = mlb, mlb, mlb
+        print(mlb.classes_)
 
+        cnn = CNN_AC(len(mlb.classes_))
+
+        train(cnn, train_set, test_set)
 
     elif args.source == 'CAFA2':
 

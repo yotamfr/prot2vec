@@ -140,17 +140,15 @@ def main():
         seq_id2seq, seq_id2go_id, go_id2seq_id = \
             load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, GoAspect('F'))
 
-        # seq_id2go_id, go_id2seq_id = rm_if_less_than(10, seq_id2go_id, go_id2seq_id)
         train_dataset = Dataset(seq_id2seq, seq2vec, seq_id2go_id)
         train(train_dataset)
 
         seq_id2seq, seq_id2go_id, go_id2seq_id = \
             load_training_data_from_collections(db.goa_uniprot, db.uniprot,
-                                                cafa3_cutoff, GoAspect('F'))
+                                                cafa3_cutoff, today_cutoff, GoAspect('F'))
 
         train(train_dataset)
 
-        # seq_id2go_id, go_id2seq_id = rm_if_less_than(10, seq_id2go_id, go_id2seq_id)
         eval_dataset = Dataset(seq_id2seq, seq2vec, seq_id2go_id)
         eval(eval_dataset)
 

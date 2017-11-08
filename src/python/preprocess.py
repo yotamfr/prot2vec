@@ -86,10 +86,10 @@ class GoAspect(object):
 
 
 class SequenceLoader(object):
-    def __init__(self, src_sequence, num_sequences, source_name='<?>'):
+    def __init__(self, src_sequence, num_sequences, source_name):
         self.sequence_source = src_sequence
         self.num_sequences = num_sequences
-        self.source_name = source_name
+        self.source_name = source_name if source_name else '<?>'
 
     def load(self):
         n = self.num_sequences if self.num_sequences else '<?>'
@@ -253,13 +253,20 @@ class Dataset(object):
         records.sort(key=lambda r: -len(r.seq))
 
         if uid2lbl:
-            labels = list(record.lbl for record in records)
             self.lbl2vec = lbl2vec if lbl2vec else \
-                MultiLabelBinarizer(sparse_output=False).fit(labels)
+                MultiLabelBinarizer(sparse_output=False).fit(self.labels)
 
     @property
-    def classes(self):
-        return self.lbl2vec.classes_ if self.lbl2vec else None
+    def mlb(self):
+        return self.lbl2vec if self.lbl2vec else None
+
+    @mlb.setter
+    def mlb(self, mlb):
+        self.lbl2vec = mlb
+
+    @property
+    def labels(self):
+        return list(record.lbl for record in self.records)
 
     @property
     def batch_size(self):
@@ -290,7 +297,7 @@ class DataLoader(object):
     def __iter__(self):
 
         dataset = self.dataset
-        classes = dataset.classes
+        classes = dataset.mlb.classes_
         batch_size = self.batch_size
 
         n = len(dataset)
@@ -319,12 +326,15 @@ class DataLoader(object):
 
 
 def load_training_data_from_collections(annot_collection, seq_collection,
-                                        cutoff_date, aspect, exp=True):
+                                        from_date, to_date, aspect, exp=True, names=None):
 
-    query = {"DB": "UniProtKB", "Date": {"$lte": cutoff_date}}
+    query = {"DB": "UniProtKB", "Date": {"$gte": from_date, "$lte": to_date}}
 
     if exp:
         query["Evidence"] = {"$in": exp_codes}
+    if names:
+        query["DB_Object_Symbol"] = {"$in": names}
+
     annot_src = annot_collection.find(query)
     annot_num = annot_collection.count(query)
     seq_id2go_id, go_id2seq_id = \
@@ -340,22 +350,29 @@ def load_training_data_from_collections(annot_collection, seq_collection,
     return seq_id2seq, seq_id2go_id, go_id2seq_id
 
 
-def rm_if_less_than(m, direct_dict, reverse_dict):
+def filter_labels_by(filter_func, direct_dict, reverse_dict):
     labels_to_be_deleted = set()
     for uid in reverse_dict.keys():
-        if len(reverse_dict[uid]) < m:
+        if filter_func(reverse_dict[uid]):
             labels_to_be_deleted.add(uid)
-
     uids_to_be_deleted = set()
     for uid in direct_dict:
         direct_dict[uid] -= labels_to_be_deleted
         if len(direct_dict[uid]) == 0:
             uids_to_be_deleted.add(uid)
-
     for uid in uids_to_be_deleted:
         del direct_dict[uid]
 
-    return direct_dict, reverse_dict
+
+def filter_sequences_by(filter_func, seq_dict, lbl_dict):
+    uids_to_be_deleted = set()
+    for uid in seq_dict:
+        if filter_func(seq_dict[uid]):
+            uids_to_be_deleted.add(uid)
+    for uid in uids_to_be_deleted:
+        if uid in lbl_dict:
+            del lbl_dict[uid]
+        del seq_dict[uid]
 
 
 def load_training_data_from_files(annots_tsv, fasta_fname, aspect):

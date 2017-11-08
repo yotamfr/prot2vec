@@ -45,6 +45,7 @@ def load_gaf(filename, start=collection.count({})):   # load GOA in a flat struc
     collection.create_index("Evidence")
     collection.create_index("Aspect")
     collection.create_index("Date")
+    collection.create_index("DB_Object_Symbol")
 
     with open(filename, 'r') as handler:
 
