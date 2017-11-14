@@ -1,12 +1,9 @@
 import os
-import datetime
 import numpy as np
 
 import torch
 import torch.nn as nn
-import torchvision.datasets as dsets
-import torchvision.transforms as transforms
-from sklearn.preprocessing import MultiLabelBinarizer
+
 
 from torch.autograd import Variable
 
@@ -19,16 +16,6 @@ from tqdm import tqdm
 from preprocess import *
 
 import argparse
-
-
-cafa2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
-cafa3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
-today_cutoff = datetime.datetime.now()
-
-cafa3_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_targets.tgz'
-cafa3_train_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_training_data.tgz'
-cafa2_data_url = 'https://ndownloader.figshare.com/files/3658395'
-cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-targets.tgz'
 
 
 # CNN Model (2 conv layer)
@@ -92,7 +79,7 @@ def train(model, train_dataset, test_dataset, output_dir):
 
     for epoch in range(num_epochs):
 
-        pbar = tqdm(range(len(train_dataset)), "training ... ")
+        # pbar = tqdm(range(len(train_dataset)), "training ... ")
 
         loader = DataLoader(train_dataset, batch_size)
         for i, (seqs, lbls) in enumerate(loader):
@@ -112,12 +99,12 @@ def train(model, train_dataset, test_dataset, output_dir):
             if (i + 1) % 100 == 0:
 
                 test_loss = eval(model, criterion, test_dataset)
-                pbar.set_description('Epoch [%d/%d], Step [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
+                print('Epoch [%d/%d], Step [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
                                      % (epoch + 1, num_epochs, i + 1, len(train_dataset) // batch_size,
                                         train_loss.data[0], test_loss))
-            pbar.update(batch_size)
+            # pbar.update(batch_size)
 
-        pbar.close()
+        # pbar.close()
 
         # Save the Trained Model
         torch.save(model.state_dict(), '%s/cnn.pkl' % output_dir)
@@ -145,71 +132,32 @@ def main():
     if not os.path.exists(input_dir):
         os.mkdir(input_dir)
 
-    out_dir = args.output_dir
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
-
-    seq2vec = Seq2Vec(Word2Vec.load(args.model))
+    output_dir = args.output_dir
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
 
     if args.source == 'CAFA3':
 
-        cafa3_train_dir = '%s/CAFA3_training_data' % input_dir
-        if not os.path.exists(cafa3_train_dir):
-            wget_and_unzip('CAFA3_training_data', input_dir, cafa3_train_url)
+        train_set, valid_set, test_set, mlb = \
+            load_cafa3(db, input_dir, 'F', Word2Vec.load(args.model),
+                       lambda seq: len(seq) < 32, lambda seqs: len(seqs) < 5,
+                       trans=ToAC(32))
 
-        cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (input_dir, cafa3_train_dir)
-        cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (input_dir, cafa3_train_dir)
-        seq_id2seq, seq_id2go_id, go_id2seq_id = \
-            load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, GoAspect('F'))
-        filter_sequences_by(lambda seq: len(seq) < 32, seq_id2seq, seq_id2go_id)
-        train_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
+        print("Splitting Dataset into Train and Test.")
 
-        cafa3_targets_dir = '%s/Target files' % input_dir
-        cafa3_mapping_dir = '%s/Mapping files' % input_dir
-        if not os.path.exists(cafa3_targets_dir) or not os.path.exists(cafa3_mapping_dir):
-            wget_and_unzip('CAFA3_targets', input_dir, cafa3_targets_url)
+        data_set = train_set.update(valid_set).update(test_set)
 
-        annots_fname = 'leafonly_MFO_unique.txt'
-        annots_fpath = '%s/CAFA3_benchmark20170605/groundtruth/%s' % (input_dir, annots_fname)
-        trg_id2seq, _, _ = load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
-        num_mapping = count_lines(annots_fpath, sep=bytes('\n', 'utf8'))
-        src_mapping = open(annots_fpath, 'r')
-        trg_id2go_id, go_id2trg_id = MappingFileLoader(src_mapping, num_mapping, annots_fname).load()
-        filter_sequences_by(lambda seq: len(seq) < 32, trg_id2seq, trg_id2go_id)
-        test_set = Dataset(trg_id2seq, seq2vec, trg_id2go_id, transform=ToAC(32))
-
-        seq_id2seq, seq_id2go_id, go_id2seq_id = \
-            load_training_data_from_collections(db.goa_uniprot, db.uniprot,
-                                                cafa3_cutoff, today_cutoff, GoAspect('F'))
-        filter_sequences_by(lambda seq: len(seq) < 32, seq_id2seq, seq_id2go_id)
-        valid_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=ToAC(32))
-
-        all_labels = []
-        all_labels.extend(train_set.labels)
-        all_labels.extend(valid_set.labels)
-        all_labels.extend(test_set.labels)
-        mlb = MultiLabelBinarizer(sparse_output=False).fit(all_labels)
-        train_set.mlb, valid_set.mlb, test_set.mlb = mlb, mlb, mlb
-        print(mlb.classes_)
-
-        output_dir = args.output_dir
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
+        train_set, valid_set = data_set.split()
 
         cnn = CNN_AC(len(mlb.classes_))
-        train(cnn, train_set, test_set, output_dir)
+        train(cnn, train_set, valid_set, output_dir)
 
     elif args.source == 'CAFA2':
 
-        sub_dir = cafa2_targets_dir = 'CAFA-2013-targets'
-        if not os.path.exists('%s/%s' % (input_dir, sub_dir)):
-            wget_and_unzip(sub_dir, input_dir, cafa2_targets_url)
-        sub_dir = cafa2_data_dir = 'CAFA2Supplementary_data'
-        if not os.path.exists('%s/%s' % (input_dir, sub_dir)):
-            wget_and_unzip(sub_dir, input_dir, cafa2_data_url)
-
-        cafa2_targets_dir = './CAFA2Supplementary_data/data/CAFA2-targets'
-        cafa2_benchmark_dir = './CAFA2Supplementary_data/data/benchmark'
+        train_set, valid_set, test_set, mlb = \
+            load_cafa2(db, input_dir, Word2Vec.load(args.model),
+                       lambda seq: len(seq) < 32, lambda seqs: len(seqs) < 5,
+                       trans=ToAC(32))
 
     else:
         print('Unrecognized source')

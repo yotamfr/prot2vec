@@ -1,17 +1,26 @@
 import os
 import sys
 import wget
-
+import datetime
 import numpy as np
 
 from numpy import unique
 from Bio.SeqIO import parse as parse_fasta
 
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.model_selection import StratifiedShuffleSplit
 
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
+
+
+cafa2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
+cafa3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
+today_cutoff = datetime.datetime.now()
+
+cafa3_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_targets.tgz'
+cafa3_train_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_training_data.tgz'
+cafa2_data_url = 'https://ndownloader.figshare.com/files/3658395'
+cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-targets.tgz'
 
 
 def blocks(files, size=8192*1024):
@@ -40,49 +49,11 @@ class GoAspect(object):
 
     def __str__(self):
         aspect = self._aspect
-        return "Biological_Process" if aspect == 'P' \
-            else "Molecular_Function" if aspect == 'F' \
-            else "Cellular_Component" if aspect == 'C' \
+        return "BPO" if aspect == 'P' \
+            else "MFO" if aspect == 'F' \
+            else "CCO" if aspect == 'C' \
             else "unspecified" if not aspect \
             else "unknown"
-
-
-# class Uniprot(object):
-#
-#     def __init__(self, doc):
-#         self.uid = doc["_id"]
-#         self.db_id = doc["db"]
-#         self.name = doc["entry_name"]
-#         self.seq = doc["sequence"]
-#
-#     @property
-#     def name(self):
-#         return self.__name
-#
-#     @name.setter
-#     def name(self, val):
-#         self.__name = val
-#
-#     @property
-#     def seq(self):
-#         return self.__seq
-#
-#     @seq.setter
-#     def seq(self, val):
-#         self.__seq = val
-#
-#     @property
-#     def uid(self):
-#         return self.__uid
-#
-#     @uid.setter
-#     def uid(self, val):
-#         self.__uid = val
-#
-#     def get_go_terms(self):
-#         return set(
-#             map(lambda e: e["GO_ID"], db.goa_uniprot.find({"DB_Object_ID": self.uid}))
-#         )
 
 
 class SequenceLoader(object):
@@ -233,13 +204,16 @@ class Identity(object):
 
 class Dataset(object):
 
-    def __init__(self, uid2seq, seq2vec, uid2lbl=None, lbl2vec=None, transform=Identity()):
+    def __init__(self, uid2seq, emb, uid2lbl=None, mlb=None, transform=Identity()):
 
-        self.lbl2vec = lbl2vec
-        self.seq2vec = seq2vec
+        self._mlb = mlb
+        self._emb = emb
         self.transform = transform
-        self.records = records = []
+        self.records = []
+        self.do_init(uid2seq, uid2lbl)
 
+    def do_init(self, uid2seq, uid2lbl):
+        records = self.records = []
         keys = uid2seq.keys() \
             if not uid2lbl \
             else uid2lbl.keys()
@@ -250,38 +224,62 @@ class Dataset(object):
             if uid2lbl:
                 record.lbl = uid2lbl[uid]
             records.append(record)
-        records.sort(key=lambda r: -len(r.seq))
+            
+    @staticmethod
+    def to_dictionaries(records):
+        uid2seq = {record.uid: record.seq for record in records}
+        uid2lbl = {record.uid: record.lbl for record in records}
+        return uid2seq, uid2lbl
 
-        if uid2lbl:
-            self.lbl2vec = lbl2vec if lbl2vec else \
-                MultiLabelBinarizer(sparse_output=False).fit(self.labels)
+    def update(self, other):
+        uid2seq, uid2lbl = Dataset.to_dictionaries(self.records)
+        for record in other.records:
+            if record.uid in uid2lbl:
+                uid2lbl[record.uid] |= record.lbl
+            else:
+                uid2lbl[record.uid] = record.lbl
+        uid2seq.update(Dataset.to_dictionaries(other.records)[0])
+        self.do_init(uid2seq, uid2lbl)
+        return self
+
+    def split(self, ratio=0.2):     # split and make sure distrib. of length is the same
+        data = np.array(sorted(self.records, key=lambda r: len(r.seq)))
+        n, mlb = len(data), self.mlb
+        train_indx = np.array([bool(i % round(1/ratio)) for i in range(n)])
+        test_indx = np.invert(train_indx)
+        train_records, test_records = data[train_indx], data[test_indx]
+        train_uid2sec, train_uid2lbl = Dataset.to_dictionaries(train_records)
+        test_uid2sec, test_uid2lbl = Dataset.to_dictionaries(test_records)
+        return Dataset(train_uid2sec, self._emb, train_uid2lbl, mlb,
+                       transform=self.transform),\
+               Dataset(test_uid2sec, self._emb, test_uid2lbl, mlb,
+                       transform=self.transform)
 
     @property
     def mlb(self):
-        return self.lbl2vec if self.lbl2vec else None
+        return self._mlb if self._mlb \
+            else MultiLabelBinarizer(sparse_output=True).fit(self.labels)
 
     @mlb.setter
     def mlb(self, mlb):
-        self.lbl2vec = mlb
+        self._mlb = mlb
 
     @property
     def labels(self):
         return list(record.lbl for record in self.records)
 
     @property
-    def batch_size(self):
-        return self.lbl2vec.classes_ if self.lbl2vec else None
+    def classes(self):
+        return self._mlb.classes_ if self._mlb else None
 
     def __len__(self):
         return len(self.records)
 
     def __getitem__(self, i):
-        seq2vec = self.seq2vec
-        lbl2vec = self.lbl2vec
+        emb, mlb, fn = self._emb, self._mlb, self.transform
         record = self.records[i]
-        f = self.transform
-        return f(seq2vec[record.seq]), lbl2vec.transform([record.lbl]) \
-            if lbl2vec else f(seq2vec[record.seq])
+        return fn(emb[record.seq]), mlb.transform([record.lbl]) \
+            if mlb else fn(emb[record.seq])
 
     def __iter__(self):
         for i in range(len(self)):
@@ -299,6 +297,8 @@ class DataLoader(object):
         dataset = self.dataset
         classes = dataset.mlb.classes_
         batch_size = self.batch_size
+
+        dataset.records.sort(key=lambda r: -len(r.seq))
 
         n = len(dataset)
 
@@ -327,9 +327,13 @@ class DataLoader(object):
 
 def load_training_data_from_collections(annot_collection, seq_collection,
                                         from_date, to_date, aspect, exp=True, names=None):
-
-    query = {"DB": "UniProtKB", "Date": {"$gte": from_date, "$lte": to_date}}
-
+    query = {"DB": "UniProtKB"}
+    if from_date and to_date:
+        query["Date"] = {"$gte": from_date, "$lte": to_date}
+    elif to_date:
+        query["Date"] = {"$lte": to_date}
+    elif from_date:
+        query["Date"] = {"$gte": from_date}
     if exp:
         query["Evidence"] = {"$in": exp_codes}
     if names:
@@ -355,12 +359,12 @@ def filter_labels_by(filter_func, direct_dict, reverse_dict):
     for uid in reverse_dict.keys():
         if filter_func(reverse_dict[uid]):
             labels_to_be_deleted.add(uid)
-    uids_to_be_deleted = set()
+    sequences_to_be_deleted = set()
     for uid in direct_dict:
         direct_dict[uid] -= labels_to_be_deleted
         if len(direct_dict[uid]) == 0:
-            uids_to_be_deleted.add(uid)
-    for uid in uids_to_be_deleted:
+            sequences_to_be_deleted.add(uid)
+    for uid in sequences_to_be_deleted:
         del direct_dict[uid]
 
 
@@ -409,14 +413,6 @@ def load_cafa3_targets(targets_dir, mapping_dir):
     return trg_id2seq, trg_id2seq_id, seq_id2trg_id
 
 
-def load_target_files(datadir):
-    pass
-
-
-def load_benchmark_files(datadir):
-    pass
-
-
 def unzip(src, trg):
     if ".zip" in src:
         res = os.system('unzip %s -d %s' % (src, trg))
@@ -434,3 +430,67 @@ def wget_and_unzip(sub_dir, rel_dir, url):
     fname = wget.download(url, out=rel_dir)
     unzip(fname, rel_dir)
     os.remove(fname)
+
+
+def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, trans=None):
+
+    aspect = GoAspect(asp)
+    seq2vec = Seq2Vec(aa_emb)
+    cafa3_train_dir = '%s/CAFA3_training_data' % data_dir
+    if not os.path.exists(cafa3_train_dir):
+        wget_and_unzip('CAFA3_training_data', data_dir, cafa3_train_url)
+
+    cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (data_dir, cafa3_train_dir)
+    cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (data_dir, cafa3_train_dir)
+    seq_id2seq, seq_id2go_id, go_id2seq_id = \
+        load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, asp)
+    if seqs_filter:
+        filter_sequences_by(seqs_filter, seq_id2seq, seq_id2go_id)
+    if lbls_filter:
+        filter_labels_by(lbls_filter, seq_id2go_id, go_id2seq_id)
+    train_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=trans)
+
+    cafa3_targets_dir = '%s/Target files' % data_dir
+    cafa3_mapping_dir = '%s/Mapping files' % data_dir
+    if not os.path.exists(cafa3_targets_dir) or not os.path.exists(cafa3_mapping_dir):
+        wget_and_unzip('CAFA3_targets', data_dir, cafa3_targets_url)
+
+    annots_fname = 'leafonly_%s_unique.txt' % aspect
+    annots_fpath = '%s/CAFA3_benchmark20170605/groundtruth/%s' % (data_dir, annots_fname)
+    trg_id2seq, _, _ = load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
+    num_mapping = count_lines(annots_fpath, sep=bytes('\n', 'utf8'))
+    src_mapping = open(annots_fpath, 'r')
+    trg_id2go_id, go_id2trg_id = MappingFileLoader(src_mapping, num_mapping, annots_fname).load()
+    if seqs_filter:
+        filter_sequences_by(seqs_filter, trg_id2seq, trg_id2go_id)
+    if lbls_filter:
+        filter_labels_by(lbls_filter, trg_id2go_id, go_id2trg_id)
+    test_set = Dataset(trg_id2seq, seq2vec, trg_id2go_id, transform=trans)
+
+    seq_id2seq, seq_id2go_id, go_id2seq_id = \
+        load_training_data_from_collections(db.goa_uniprot, db.uniprot,
+                                            cafa3_cutoff, today_cutoff, asp)
+    if seqs_filter:
+        filter_sequences_by(seqs_filter, seq_id2seq, seq_id2go_id)
+    if lbls_filter:
+        filter_labels_by(lbls_filter, seq_id2go_id, go_id2seq_id)
+    valid_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=trans)
+
+    all_labels = np.concatenate([train_set.labels, valid_set.labels, test_set.labels])
+    mlb = MultiLabelBinarizer(sparse_output=False).fit(all_labels)
+    train_set.mlb, valid_set.mlb, test_set.mlb = mlb, mlb, mlb
+
+    return train_set, valid_set, test_set, mlb
+
+
+def load_cafa2(db, data_dir, aa_emb, seqs_filter=None, lbls_filter=None, transform=None):
+
+    sub_dir = cafa2_targets_dir = 'CAFA-2013-targets'
+    if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
+        wget_and_unzip(sub_dir, data_dir, cafa2_targets_url)
+    sub_dir = cafa2_data_dir = 'CAFA2Supplementary_data'
+    if not os.path.exists('%s/%s' % (data_dir, sub_dir)):
+        wget_and_unzip(sub_dir, data_dir, cafa2_data_url)
+
+    cafa2_targets_dir = './CAFA2Supplementary_data/data/CAFA2-targets'
+    cafa2_benchmark_dir = './CAFA2Supplementary_data/data/benchmark'

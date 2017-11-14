@@ -9,10 +9,14 @@ data
 data/
 models
 figures
+virtualenv
+recurrentshop
 
 *.pyc
 *.spec
-build/
+*.egg*
+build
+dist
 
 *.ipynb*
 prot2vec.ipynb
