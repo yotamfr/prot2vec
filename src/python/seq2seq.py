@@ -104,7 +104,6 @@ class AttentionDecoderCell(ExtendedRNNCell):
         h = multiply([o, Activation(self.activation)(c)])
         y = Activation(self.activation)(W2(h))
 
-
         return Model([x, h_tm1, c_tm1], [y, h, c])
 
 
@@ -114,13 +113,13 @@ def AttentionSeq2Seq(output_dim, output_length, batch_input_shape=None,
                      bidirectional=True, unroll=False, stateful=False, dropout=0.0, ):
     '''
     This is an attention Seq2seq model based on [3].
-    Here, there is a soft allignment between the input and output sequence elements.
-    A bidirection encoder is used by default. There is no hidden state transfer in this
+    Here, there is a soft alignment between the input and output sequence elements.
+    A bidirectional encoder is used by default. There is no hidden state transfer in this
     model.
     The  math:
             Encoder:
             X = Input Sequence of length m.
-            H = Bidirection_LSTM(X); Note that here the LSTM has return_sequences = True,
+            H = Bidirectional_LSTM(X); Note that here the LSTM has return_sequences = True,
             so H is a sequence of vectors of length m.
             Decoder:
     y(i) = LSTM(s(i-1), y(i-1), v(i)); Where s is the hidden state of the LSTM (h and c)

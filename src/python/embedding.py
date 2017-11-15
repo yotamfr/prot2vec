@@ -468,9 +468,7 @@ def clstr_stats(w2v, k):
     return '\n'.join([clstr, hi_s, lo_s, av_s])
 
 
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser()
+def add_arguments(parser):
     parser.add_argument("-n", "--kmer", type=int, required=True,
                         help="Give the length of the kmer.")
     parser.add_argument("-w", "--win_size", type=int, required=True,
@@ -493,6 +491,12 @@ if __name__ == "__main__":
                         help="Print statistics when done training.")
     parser.add_argument("-v", '--verbose', action='store_true', default=True,
                         help="Run in verbose mode.")
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
     args = parser.parse_args()
 
     client = MongoClient(args.mongo_url)
