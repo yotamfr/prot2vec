@@ -392,8 +392,7 @@ class CBOW(Embedder):
             y_hat = tf.nn.bias_add(tf.matmul(h3, w4), b4)
 
             y = tf.one_hot(train_labels, vocabulary_size)
-            loss = tf.nn.softmax_cross_entropy_with_logits(
-                labels=y, logits=y_hat)
+            loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=y_hat)
             loss_fn = tf.reduce_sum(loss, axis=0)
 
         return graph, train_inp, train_labels, proj, loss_fn
@@ -444,8 +443,7 @@ class SkipGram(Embedder):
             y_hat = tf.nn.bias_add(tf.matmul(h2, w3), b3)
 
             y = tf.one_hot(train_labels, vocabulary_size)
-            loss = tf.nn.softmax_cross_entropy_with_logits(
-                labels=y, logits=y_hat)
+            loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=y_hat)
             loss_fn = tf.reduce_sum(loss, axis=0)
 
         return graph, train_inp, train_labels, proj, loss_fn
