@@ -175,7 +175,7 @@ class KmerSentencesLoader(object):
 class Word2VecWrapper(object):
 
     def __init__(self, model, kmer_size, win_size, dim_size, min_count=2,
-                 src='sprot', n_threads=3, b_train=False, ckptpath='models'):
+                 src='sprot', n_threads=3, b_train=False):
 
         t = n_threads
         k, c, d, mc = kmer_size, win_size, dim_size, min_count
@@ -233,10 +233,10 @@ class Embedder(object):
                               [vocabulary_size, emb_size],
                               initializer=tf.zeros_initializer)
 
-        if os.path.exists(os.path.join(gettempdir(), '%s.ckpt.meta' % self.name)) and not args.train:
+        if os.path.exists(os.path.join(ckptpath, '%s.ckpt.meta' % self.name)) and not args.train:
             with tf.Session() as sess:
                     saver = tf.train.Saver()
-                    saver.restore(sess, os.path.join(gettempdir(), '%s.ckpt' % self.name))
+                    saver.restore(sess, os.path.join(ckptpath, '%s.ckpt' % self.name))
                     self.embeddings = emb.eval()
         else:
             self._train(loader)
@@ -311,7 +311,7 @@ class Embedder(object):
 
     def save(self, sess):
         saver = tf.train.Saver()
-        save_path = os.path.join(gettempdir(), '%s.ckpt' % self.name)
+        save_path = os.path.join(ckptpath, '%s.ckpt' % self.name)
         if args.verbose: print("Saving to %s" % save_path)
         return saver.save(sess, save_path)
 
@@ -477,7 +477,7 @@ def tsne(embeddings):
 
 def plot(low_dim_embs):
     labels = [reverse_dictionary[i] for i in range(vocabulary_size)]
-    path = os.path.join(gettempdir(), 'plot.png')
+    path = os.path.join(ckptpath, 'plot.png')
     plot_with_labels(low_dim_embs, labels, path)
     print("Saving to %s" % path)
 
@@ -518,8 +518,8 @@ def add_arguments(parser):
                         default="sprot", help="Give source name.")
     parser.add_argument("-m", "--model", type=str, choices=['cbow', 'skipgram', 'gensim'],
                         default="gensim", help="Choose what type of model to use.")
-    parser.add_argument("-o", "--outputdir", type=str, required=False,
-                        default="models", help="Specify the output directory")
+    parser.add_argument("-o", "--out_dir", type=str, required=False,
+                        default=gettempdir(), help="Specify the output directory")
     parser.add_argument("-t", "--num_threads", type=int, required=False,
                         default=4, help="Specify the output directory")
     parser.add_argument('--train', action='store_true', default=False,
@@ -539,7 +539,7 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     collection = client['prot2vec'][args.source]
 
-    ckptpath = args.outputdir
+    ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
 
@@ -556,7 +556,6 @@ if __name__ == "__main__":
                               args.win_size, args.emb_dim,
                               n_threads=args.num_threads,
                               b_train=args.train,
-                              ckptpath=ckptpath,
                               src=args.source)
 
     else:
