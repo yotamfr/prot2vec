@@ -1,11 +1,13 @@
 import os
+import sys
 import operator
 import numpy as np
-import tensorflow as tf
 from itertools import combinations
 
 from gensim.models.word2vec import Word2Vec
 from gensim import matutils
+
+import tensorflow as tf
 
 from pymongo.errors import CursorNotFound
 from pymongo import MongoClient
@@ -33,6 +35,15 @@ dictionary = dict(zip(AA, range(len(AA))))
 vocabulary_size = 25
 n_clstr = 8
 
+valid_examples = [
+    dictionary['A'],
+    dictionary['V'],
+    dictionary['K'],
+    dictionary['R'],
+    dictionary['H'],
+    dictionary['C']
+]
+
 
 class SequenceBatchLoader(object):
     
@@ -45,8 +56,6 @@ class SequenceBatchLoader(object):
     def __iter__(self):
         
         self.stream = map(lambda p: p['sequence'], collection.find({}))
-        
-        pbar = tqdm(range(collection.count({})), desc="sequences loaded") if not args.verbose else None
 
         seq = self._get_sequence()
         seq_pos = 0
@@ -68,12 +77,7 @@ class SequenceBatchLoader(object):
                     self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=batch_pos, seq_pos=0)
 
             else:
-                if not args.verbose:
-                    pbar.update(self.batch_size)
                 yield batch_buffer, labels_buffer
-
-        if not args.verbose:
-            pbar.close()
             
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         return batch, labels, seq_pos, batch_pos
@@ -176,7 +180,7 @@ class Word2VecWrapper(object):
         t = n_threads
         k, c, d, mc = kmer_size, win_size, dim_size, min_count
 
-        unique_str = "%s_%s_%s-mer_dim%s_win%s_mc%s" % (src, model, k, d, c, mc)
+        unique_str = "gensim_%s_%s_%s-mer_dim%s_win%s" % (model, src, k, d, c)
         model_filename = "%s/%s.emb" % (ckptpath, unique_str)
         if not b_train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
@@ -201,6 +205,10 @@ class Word2VecWrapper(object):
         return key in self._model
 
     @property
+    def embeddings(self):
+        return np.array([self[reverse_dictionary[i]] for i in range(vocabulary_size)])
+
+    @property
     def vocab(self):
         return self._model.wv.vocab
 
@@ -208,6 +216,7 @@ class Word2VecWrapper(object):
 class Embedder(object):
 
     def __init__(self,
+                 model_name,
                  loader,
                  win_size,  # How many words to consider left and right.
                  emb_size,  # Dimension of the embedding vector.
@@ -218,21 +227,26 @@ class Embedder(object):
         self.win_size = win_size
         self.batch_size = batch_size
         self.hidden_size = hidden_size
+        self.name = model_name
 
-        valid_examples = [
-            dictionary['A'],
-            dictionary['V'],
-            dictionary['K'],
-            dictionary['R'],
-            dictionary['H'],
-            dictionary['C']
-        ]
+        emb = tf.get_variable("emb",
+                              [vocabulary_size, emb_size],
+                              initializer=tf.zeros_initializer)
+
+        if os.path.exists(os.path.join(gettempdir(), '%s.ckpt.meta' % self.name)) and not args.train:
+            with tf.Session() as sess:
+                    saver = tf.train.Saver()
+                    saver.restore(sess, os.path.join(gettempdir(), '%s.ckpt' % self.name))
+                    self.embeddings = emb.eval()
+        else:
+            self._train(loader)
+
+    def _train(self, loader):
 
         tf_graph, train_inputs, train_labels, embeddings, loss_fn = self._init_tf_graph()
 
         with tf_graph.as_default():
 
-            valid_dataset = tf.constant(valid_examples, dtype=tf.int32)
             global_step = tf.Variable(0, trainable=False)
             starter_learning_rate = 0.1
             learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
@@ -240,55 +254,76 @@ class Embedder(object):
             optimizer = (tf.train.GradientDescentOptimizer(learning_rate)
                          .minimize(loss_fn, global_step=global_step))
 
-            # Compute the cosine similarity between minibatch examples and all embeddings.
             norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
             normalized_embeddings = tf.divide(embeddings, norm)
-            valid_embeddings = tf.nn.embedding_lookup(
-                normalized_embeddings, valid_dataset)
-            similarity = tf.matmul(
-                valid_embeddings, normalized_embeddings, transpose_b=True)
+            similarity = tf.matmul(normalized_embeddings, tf.transpose(normalized_embeddings))
 
             initializer = tf.global_variables_initializer()
 
-        with tf.Session(graph=tf_graph) as session:
+        with tf.Session(graph=tf_graph) as sess:
             initializer.run()
             average_loss = 0
+            optimal_loss = np.inf
 
             for step, (batch_inputs, batch_labels) in enumerate(loader):
 
                 feed_dict = {train_inputs: batch_inputs, train_labels: batch_labels}
 
-                _, loss_val = session.run([optimizer, loss_fn], feed_dict=feed_dict)
+                _, loss_val = sess.run([optimizer, loss_fn], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                if step % 2000 == 0 and args.verbose:
-                    if step > 0:
-                        average_loss /= 2000
-                    print('Average loss at step ', step, ': ', average_loss)
+                mod = 1000
+                if step > 0 and step % mod == 0:
+
+                    self.embeddings = normalized_embeddings.eval()
+                    self.sim = similarity.eval()
+
+                    average_loss /= mod
+                    average_similarity = np.mean(self.sim)
+                    msg = 'Step : %d Average Loss : %6.4f Average Similarity : %.4f' \
+                          % (step,  average_loss, average_similarity)
+
+                    if args.verbose:
+                        print(msg)
+                        sim = similarity.eval()
+                        for i in range(len(valid_examples)):
+                            valid_word = reverse_dictionary[valid_examples[i]]
+                            top_k = 3  # number of nearest neighbors
+                            nearest = (-sim[i, :]).argsort()[1:top_k + 1]
+                            log_str = 'Nearest to %s:' % valid_word
+                            for k in range(top_k):
+                                close_word = reverse_dictionary[nearest[k]]
+                                log_str = '%s %s,' % (log_str, close_word)
+                            print(log_str)
+
+                    else:
+                        sys.stdout.write("\r" + msg)
+
+                    if average_loss < optimal_loss:
+                        optimal_loss = average_loss
+                        self.save(sess)
+
                     average_loss = 0
 
-                if step % 2000 == 0 and args.verbose:
-                    sim = similarity.eval()
-                    for i in range(len(valid_examples)):
-                        valid_word = reverse_dictionary[valid_examples[i]]
-                        top_k = 3  # number of nearest neighbors
-                        nearest = (-sim[i, :]).argsort()[1:top_k + 1]
-                        log_str = 'Nearest to %s:' % valid_word
-                        for k in range(top_k):
-                            close_word = reverse_dictionary[nearest[k]]
-                            log_str = '%s %s,' % (log_str, close_word)
-                        print(log_str)
+            self.embeddings = normalized_embeddings.eval()
+            self.sim = similarity.eval()
+            self.save(sess)
 
-            self.final_embeddings = normalized_embeddings.eval()
+    def save(self, sess):
+        saver = tf.train.Saver()
+        save_path = os.path.join(gettempdir(), '%s.ckpt' % self.name)
+        if args.verbose: print("Saving to %s" % save_path)
+        return saver.save(sess, save_path)
 
     def _init_tf_graph(self):
         return tf.Graph(), None, None, None, None
 
     def similarity(self, aa1, aa2):
         return np.dot(matutils.unitvec(self[aa1]), matutils.unitvec(self[aa2]))
+        # return self.sim[dictionary[aa1], dictionary[aa2]]
 
     def __getitem__(self, aa):
-        return self.final_embeddings[dictionary[aa]]
+        return self.embeddings[dictionary[aa]]
 
     def __contains__(self, aa):
         return aa in dictionary
@@ -300,14 +335,15 @@ class Embedder(object):
         return dict(zip(keys, values))
 
 
-class CBoW(Embedder):
+class CBOW(Embedder):
 
     def __init__(self,
                  win_size,  # How many words to consider left and right.
                  emb_size,  # Dimension of the embedding vector.
                  batch_size=8):
 
-        super(CBoW, self).__init__(CbowBatchLoader(win_size, batch_size),
+        my_name = "my_cbow_%s_1-mer_dim%s_win%s" % (args.source, emb_size, win_size)
+        super(CBOW, self).__init__(my_name, CbowBatchLoader(win_size, batch_size),
                                    win_size, emb_size, batch_size)
 
     def _init_tf_graph(self):
@@ -322,7 +358,7 @@ class CBoW(Embedder):
             train_inp = tf.placeholder(tf.int32, shape=[batch_size, win_size * 2])
             train_labels = tf.placeholder(tf.int32, shape=[batch_size])
 
-            proj = tf.Variable(tf.random_uniform([vocabulary_size, emb_size], -1.0, 1.0))
+            proj = tf.get_variable("emb", initializer=tf.random_uniform([vocabulary_size, emb_size], -1.0, 1.0))
 
             # x = tf.reduce_mean([tf.nn.embedding_lookup(proj, train_inp[:, j])
             #                     for j in range(win_size * 2)], axis=0)
@@ -369,8 +405,8 @@ class SkipGram(Embedder):
                  win_size,  # How many words to consider left and right.
                  emb_size=20,  # Dimension of the embedding vector.
                  batch_size=8):
-
-        super(SkipGram, self).__init__(SkipGramBatchLoader(win_size, batch_size),
+        my_name = "my_sg_%s_1-mer_dim%s_win%s" % (args.source, emb_size, win_size)
+        super(SkipGram, self).__init__(my_name, SkipGramBatchLoader(win_size, batch_size),
                                        win_size, emb_size, batch_size)
 
     def _init_tf_graph(self):
@@ -443,8 +479,9 @@ def tsne(embeddings):
 
 def plot(low_dim_embs):
     labels = [reverse_dictionary[i] for i in range(vocabulary_size)]
-    plot_with_labels(low_dim_embs, labels, os.path.join(gettempdir(), 'tsne.png'))
-    print("Saving to %s" % gettempdir())
+    path = os.path.join(gettempdir(), 'plot.png')
+    plot_with_labels(low_dim_embs, labels, path)
+    print("Saving to %s" % path)
 
 
 def kmeans(w2v, k):
@@ -481,8 +518,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
                         default="sprot", help="Give source name.")
-    parser.add_argument("-m", "--model", type=str, choices=['cbow', 'skipgram'],
-                        default="skipgram", help="Choose what type of model to use.")
+    parser.add_argument("-m", "--model", type=str, choices=['cbow', 'skipgram', 'gensim'],
+                        default="gensim", help="Choose what type of model to use.")
     parser.add_argument("-o", "--outputdir", type=str, required=False,
                         default="models", help="Specify the output directory")
     parser.add_argument("-t", "--num_threads", type=int, required=False,
@@ -508,21 +545,28 @@ if __name__ == "__main__":
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
 
-    w2v = CBoW(args.win_size, args.emb_dim, 8)
+    if args.model == 'cbow':
+        w2v = CBOW(args.win_size, args.emb_dim, batch_size=8)
+
+    elif args.model == 'skipgram':
+
+        w2v = SkipGram(args.win_size, args.emb_dim, batch_size=8)
+
+    elif args.model == 'gensim':
+
+        w2v = Word2VecWrapper(args.model, args.kmer,
+                              args.win_size, args.emb_dim,
+                              n_threads=args.num_threads,
+                              b_train=args.train,
+                              ckptpath=ckptpath,
+                              src=args.source)
+
+    else:
+        print("Unknown model")
+        exit(1)
 
     if args.stats and plt:
-        plot(tsne(w2v.final_embeddings))
-        plot(pca(w2v.final_embeddings))
-
-    if args.stats:
-        print(clstr_stats(w2v, n_clstr))
-
-    w2v = Word2VecWrapper(args.model, args.kmer,
-                          args.win_size, args.emb_dim,
-                          n_threads=args.num_threads,
-                          b_train=args.train,
-                          ckptpath=ckptpath,
-                          src=args.source)
-
+        plot(tsne(w2v.embeddings))
+        plot(pca(w2v.embeddings))
     if args.stats:
         print(clstr_stats(w2v, n_clstr))
