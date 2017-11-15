@@ -115,6 +115,10 @@ class CbowBatchLoader(SequenceBatchLoader):
             batch_pos += 1
             seq_pos += 1
 
+        # for i in range(args.batch_size):
+        #     print ([reverse_dictionary[j] for j in batch[i,: ]])
+        #     print (reverse_dictionary[labels[i]])
+
         return batch, labels, seq_pos, batch_pos
 
 
@@ -272,7 +276,7 @@ class Embedder(object):
                 _, loss_val = sess.run([optimizer, loss_fn], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                mod = 1000
+                mod = args.steps_per_stats
                 if step > 0 and step % mod == 0:
 
                     self.embeddings = normalized_embeddings.eval()
@@ -512,6 +516,8 @@ def add_arguments(parser):
                         help="Give the length of the context window.")
     parser.add_argument("-d", "--emb_dim", type=int, required=True,
                         help="Give the dimension of the embedding vector.")
+    parser.add_argument("-b", "--batch_size", type=int, default=8,
+                        help="Give the size of bach to use when training.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
     parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
@@ -528,6 +534,8 @@ def add_arguments(parser):
                         help="Print statistics when done training.")
     parser.add_argument("-v", '--verbose', action='store_true', default=False,
                         help="Run in verbose mode.")
+    parser.add_argument("--steps_per_stats", type=int, default=1000,
+                        help="How many training steps to do per stats logging, save.")
 
 
 if __name__ == "__main__":
@@ -544,11 +552,11 @@ if __name__ == "__main__":
         os.makedirs(ckptpath)
 
     if args.model == 'cbow':
-        w2v = CBOW(args.win_size, args.emb_dim, batch_size=8)
+        w2v = CBOW(args.win_size, args.emb_dim, batch_size=args.batch_size)
 
     elif args.model == 'skipgram':
 
-        w2v = SkipGram(args.win_size, args.emb_dim, batch_size=8)
+        w2v = SkipGram(args.win_size, args.emb_dim, batch_size=args.batch_size)
 
     elif args.model == 'gensim':
 
