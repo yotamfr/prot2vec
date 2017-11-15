@@ -29,6 +29,8 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib6
 easy_install -U pip
 
 pip3 install numpy
+pip3 install scikit-learn
+pip3 install matplotlib
 
 #pip install $PYTORCH_WHL
 #pip install torchvision
@@ -42,6 +44,9 @@ git clone https://www.github.com/datalogai/recurrentshop.git
 python recurrentshop/setup.py install
 
 pip3 install biopython
+pip3 install pymongo
+pip3 install gensim
+pip3 install tqdm
 
 
 

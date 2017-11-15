@@ -15,7 +15,12 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError as err:
+    plt = None
+    print(err)
+
 from tempfile import gettempdir
 
 import argparse
@@ -31,10 +36,9 @@ n_clstr = 8
 
 class SequenceBatchLoader(object):
     
-    def __init__(self, win_size, batch_size, is_verbose=False):
+    def __init__(self, win_size, batch_size):
         self.win_size = win_size
         self.batch_size = batch_size
-        self.verbose = is_verbose
         self.batch_buffer = np.ndarray(shape=(batch_size,), dtype=np.int32)
         self.labels_buffer = np.ndarray(shape=(batch_size,), dtype=np.int32)
 
@@ -42,11 +46,9 @@ class SequenceBatchLoader(object):
         
         self.stream = map(lambda p: p['sequence'], collection.find({}))
         
-        pbar = tqdm(range(collection.count({})), desc="sequences loaded") if self.verbose else None
+        pbar = tqdm(range(collection.count({})), desc="sequences loaded") if not args.verbose else None
 
         seq = self._get_sequence()
-        if self.verbose:
-            pbar.update(1)
         seq_pos = 0
 
         batch_buffer, labels_buffer = self.batch_buffer, self.labels_buffer
@@ -59,8 +61,6 @@ class SequenceBatchLoader(object):
             if seq_pos == 0:   # seq finished
                 try:
                     seq = self._get_sequence()
-                    if self.verbose:
-                        pbar.update(1)
                 except CursorNotFound:
                     break
 
@@ -68,9 +68,11 @@ class SequenceBatchLoader(object):
                     self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=batch_pos, seq_pos=0)
 
             else:
+                if not args.verbose:
+                    pbar.update(self.batch_size)
                 yield batch_buffer, labels_buffer
 
-        if self.verbose:
+        if not args.verbose:
             pbar.close()
             
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
@@ -259,7 +261,7 @@ class Embedder(object):
                 _, loss_val = session.run([optimizer, loss_fn], feed_dict=feed_dict)
                 average_loss += loss_val
 
-                if step % 2000 == 0:
+                if step % 2000 == 0 and args.verbose:
                     if step > 0:
                         average_loss /= 2000
                     print('Average loss at step ', step, ': ', average_loss)
@@ -489,7 +491,7 @@ def add_arguments(parser):
                         help="Specify whether to retrain the model.")
     parser.add_argument('--stats', action='store_true', default=False,
                         help="Print statistics when done training.")
-    parser.add_argument("-v", '--verbose', action='store_true', default=True,
+    parser.add_argument("-v", '--verbose', action='store_true', default=False,
                         help="Run in verbose mode.")
 
 
@@ -508,7 +510,7 @@ if __name__ == "__main__":
 
     w2v = CBoW(args.win_size, args.emb_dim, 8)
 
-    if args.stats:
+    if args.stats and plt:
         plot(tsne(w2v.final_embeddings))
         plot(pca(w2v.final_embeddings))
 
