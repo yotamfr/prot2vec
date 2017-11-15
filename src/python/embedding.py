@@ -506,11 +506,14 @@ if __name__ == "__main__":
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
 
-    # w2v = CBoW(args.win_size, args.emb_dim, 8)
-    #
-    # if args.stats:
-    #     plot(tsne(w2v.final_embeddings))
-    #     plot(pca(w2v.final_embeddings))
+    w2v = CBoW(args.win_size, args.emb_dim, 8)
+
+    if args.stats:
+        plot(tsne(w2v.final_embeddings))
+        plot(pca(w2v.final_embeddings))
+
+    if args.stats:
+        print(clstr_stats(w2v, n_clstr))
 
     w2v = Word2VecWrapper(args.model, args.kmer,
                           args.win_size, args.emb_dim,

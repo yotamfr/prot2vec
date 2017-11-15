@@ -28,10 +28,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib6
 
 easy_install -U pip
 
-pip install $PYTORCH_WHL
-pip install torchvision
-
 pip3 install numpy
+
+#pip install $PYTORCH_WHL
+#pip install torchvision
 
 pip3 install --upgrade tensorflow$GPU_FLAG
 pip3 install tf-nightly$GPU_FLAG
