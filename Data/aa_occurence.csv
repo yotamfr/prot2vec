@@ -1,0 +1,25 @@
+Amino acid,Short,Abbrev.,Codon(s),Occurrence in Archaean proteins (%)&,Occurrence in Bacteria proteins (%)&,Occurrence in Eukaryote proteins (%)&,Occurrence in human proteins (%)&,Essential‡ in humans
+Alanine,A,Ala,"GCU, GCC, GCA, GCG",8.2,10.06,7.63,7.01,No
+Cysteine,C,Cys,"UGU, UGC",0.98,0.94,1.76,2.3,Conditionally
+Aspartic acid,D,Asp,"GAU, GAC",6.21,5.59,5.4,4.73,No
+Glutamic acid,E,Glu,"GAA, GAG",7.69,6.15,6.42,7.09,Conditionally
+Phenylalanine,F,Phe,"UUU, UUC",3.86,3.89,3.87,3.65,Yes
+Glycine,G,Gly,"GGU, GGC, GGA, GGG",7.58,7.76,6.33,6.58,Conditionally
+Histidine,H,His,"CAU, CAC",1.77,2.06,2.44,2.63,Yes
+Isoleucine,I,Ile,"AUU, AUC, AUA",7.03,5.89,5.1,4.33,Yes
+Lysine,K,Lys,"AAA, AAG",5.27,4.68,5.64,5.72,Yes
+Leucine,L,Leu,"UUA, UUG, CUU, CUC, CUA, CUG",9.31,10.09,9.29,9.97,Yes
+Methionine,M,Met,AUG,2.35,2.38,2.25,2.13,Yes
+Asparagine,N,Asn,"AAU, AAC",3.68,3.58,4.28,3.58,No
+Pyrrolysine,O,Pyl,UAG*,0,0,0,0,No
+Proline,P,Pro,"CCU, CCC, CCA, CCG",4.26,4.61,5.41,6.31,No
+Glutamine,Q,Gln,"CAA, CAG",2.38,3.58,4.21,4.77,No
+Arginine,R,Arg,"CGU, CGC, CGA, CGG, AGA, AGG",5.51,5.88,5.71,5.64,Conditionally
+Serine,S,Ser,"UCU, UCC, UCA, UCG, AGU, AGC",6.17,5.85,8.34,8.33,No
+Threonine,T,Thr,"ACU, ACC, ACA, ACG",5.44,5.52,5.56,5.36,Yes
+Selenocysteine,U,Sec,UGA**,0,0,0,>0,No
+Valine,V,Val,"GUU, GUC, GUA, GUG",7.8,7.27,6.2,5.96,Yes
+Tryptophan,W,Trp,UGG,1.03,1.27,1.24,1.22,Yes
+Tyrosine,Y,Tyr,"UAU, UAC",3.35,2.94,2.87,2.66,Conditionally
+Stop codon†,-,Term,"UAA, UAG, UGA††",,,,-,-
+

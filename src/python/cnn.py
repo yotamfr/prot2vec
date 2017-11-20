@@ -3,15 +3,11 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-
-
 from torch.autograd import Variable
 
 from gensim.models.word2vec import Word2Vec
 
 from pymongo import MongoClient
-
-from tqdm import tqdm
 
 from preprocess import *
 

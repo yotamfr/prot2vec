@@ -6,7 +6,6 @@ prot2vec.Rproj
 .idea/
 
 data
-data/
 models
 figures
 virtualenv
@@ -21,3 +20,4 @@ dist
 *.ipynb*
 prot2vec.ipynb
 .ipynb_checkpoints
+.Rproj.user

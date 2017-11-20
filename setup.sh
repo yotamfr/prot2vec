@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
 GPU_FLAG=''
-PYTORCH_WHL='http://download.pytorch.org/whl/cu75/torch-0.2.0.post3-cp35-cp35m-manylinux1_x86_64.whl'
-
 
 while getopts ":g:" opt; do
   case $opt in
@@ -20,33 +18,41 @@ while getopts ":g:" opt; do
 done
 
 
-virtualenv --system-site-packages -p python3.5 virtualenv
+conda create -p virtualenv python=3.6
 
-source virtualenv/bin/activate
+conda install -p virtualenv pip -c anaconda
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib6
+conda install -p virtualenv numpy
+conda install -p virtualenv scikit-learn
+conda install -p virtualenv matplotlib
 
-easy_install -U pip
+conda install -p virtualenv pytorch torchvision -c soumith
+conda install -p virtualenv visdom -c conda-forge
 
-pip3 install numpy
-pip3 install scikit-learn
-pip3 install matplotlib
+conda install -p virtualenv --upgrade tensorflow$GPU_FLAG
+conda install -p virtualenv install tf-nightly$GPU_FLAG
+conda install -p virtualenv  tensorboard
 
-#pip install $PYTORCH_WHL
-#pip install torchvision
+conda install -p virtualenv keras -c conda-forge
 
-pip3 install --upgrade tensorflow$GPU_FLAG
-pip3 install tf-nightly$GPU_FLAG
-pip3 install tensorboard
+conda install -p virtualenv tqdm
 
-pip3 install keras
+conda install -p virtualenv gensim
+
+conda install -p virtualenv pymongo
+
+conda install -p virtualenv biopython
+
+
+source activate virtualenv
+
+pip install wget    # Does NOT install properly by conda
+
+pip install pandas 
+
 git clone https://www.github.com/datalogai/recurrentshop.git
 python recurrentshop/setup.py install
 
-pip3 install biopython
-pip3 install pymongo
-pip3 install gensim
-pip3 install tqdm
 
 
 
