@@ -83,7 +83,7 @@ class BatchLoader(object):
                     self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=batch_pos, seq_pos=0)
 
             else:
-                yield batch_buffer, labels_buffer
+                yield np.copy(batch_buffer), np.copy(labels_buffer)
 
         # pbar.close()
 
