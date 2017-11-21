@@ -44,11 +44,16 @@ conda install -p virtualenv pymongo
 conda install -p virtualenv biopython
 
 
+### activate virtualenv
 source activate virtualenv
 
 pip install wget    # Does NOT install properly by conda
 
 pip install pandas 
+
+### install virtualenv as kernel to ipython notebook
+pip install ipykernel
+python -m ipykernel install --user --name virtualenv
 
 git clone https://www.github.com/datalogai/recurrentshop.git
 python recurrentshop/setup.py install

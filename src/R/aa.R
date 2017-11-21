@@ -80,20 +80,20 @@ aa_sim[c('W', 'Y', 'F'), c('W', 'Y', 'F')] <- 1
 
 ### "Similar to", "analog"
 
-aa_sim[c('A', 'G'), c('A', 'G')] <- 1
-
-aa_sim[c('N', 'D'), c('N', 'D')] <- 1
-
-aa_sim[c('K', 'O'), c('K', 'O')] <- 1
-
-aa_sim[c('Q', 'E'), c('Q', 'E')] <- 1
-
-aa_sim[c('C', 'U'), c('C', 'U')] <- 1
+# aa_sim[c('A', 'G'), c('A', 'G')] <- 1
+# 
+# aa_sim[c('N', 'D'), c('N', 'D')] <- 1
+# 
+# aa_sim[c('K', 'O'), c('K', 'O')] <- 1
+# 
+# aa_sim[c('Q', 'E'), c('Q', 'E')] <- 1
+# 
+# aa_sim[c('C', 'U'), c('C', 'U')] <- 1
 
 
 ### Hydrophobic
 
-aa_sim[c('W', 'Y', 'F', 'I', 'L', 'V'), c('W', 'Y', 'F', 'I', 'L', 'V')] <- 1
+# aa_sim[c('W', 'Y', 'F', 'I', 'L', 'V'), c('W', 'Y', 'F', 'I', 'L', 'V')] <- 1
 
 
 ### write the data

@@ -1,8 +1,9 @@
 import os
-import sys
 import operator
 import numpy as np
 import pandas as pd
+
+from shutil import copyfile
 
 import torch
 import torch.nn as nn
@@ -10,15 +11,16 @@ from torch.autograd import Variable
 
 from itertools import combinations
 
-from gensim import matutils
+from gensim.matutils import unitvec
 
 from pymongo.errors import CursorNotFound
 from pymongo import MongoClient
-from tqdm import tqdm
 
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+
+from tqdm import tqdm
 
 try:
     import matplotlib.pyplot as plt
@@ -30,30 +32,41 @@ from tempfile import gettempdir
 
 import argparse
 
-np.random.seed(1809)
+aa_sim = pd.read_csv('Data/aa_sim.csv')
+aa_unlike = [np.where(aa_sim.loc[[w], :] == 0)[1] for w in range(0, 25)]
+AA = aa_sim.columns
+dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), AA))
+vocabulary_size = len(AA)
+n_clstr = 8
+
+print(dictionary)
+assert vocabulary_size == 25
 
 
 class BatchLoader(object):
     def __init__(self, win_size, batch_size, train):
         self.win_size = win_size
         self.batch_size = batch_size
-        self.batch_buffer = np.ndarray(shape=(batch_size,), dtype=np.int32)
-        self.labels_buffer = np.ndarray(shape=(batch_size,), dtype=np.int32)
         self.train = train
+        self.batch_buffer = np.ndarray([])
+        self.labels_buffer = np.ndarray([])
 
     def __iter__(self):
 
         if self.train:
-            self.stream = map(lambda p: p['sequence'], collection.find({}))
+            self.stream = collection.aggregate([{"$sample": {"size": args.size_train}}])
+            # pbar = tqdm(range(args.size_train), "sequences loaded")
         else:
-            self.stream = map(lambda p: p['sequence'], collection.aggregate([{"$sample": {"size": args.size_test}}]))
+            self.stream = collection.aggregate([{"$sample": {"size": args.size_test}}])
+            # pbar = tqdm(range(args.size_test), "sequences loaded")
 
         seq = self._get_sequence()
+        # pbar.update(1)
         seq_pos = 0
 
         batch_buffer, labels_buffer = self.batch_buffer, self.labels_buffer
 
-        while len(seq):
+        while self.stream.alive:
 
             batch_buffer, labels_buffer, seq_pos, batch_pos = \
                 self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=0, seq_pos=seq_pos)
@@ -61,7 +74,9 @@ class BatchLoader(object):
             if seq_pos == 0:  # seq finished
                 try:
                     seq = self._get_sequence()
+                    # pbar.update(1)
                 except CursorNotFound:
+                    print("Cursor not found")
                     break
 
                 batch_buffer, labels_buffer, seq_pos, batch_pos = \
@@ -70,11 +85,13 @@ class BatchLoader(object):
             else:
                 yield batch_buffer, labels_buffer
 
+        # pbar.close()
+
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         return batch, labels, seq_pos, batch_pos
 
     def _get_sequence(self):
-        return ""
+        return ''
 
 
 class WindowBatchLoader(BatchLoader):
@@ -85,7 +102,7 @@ class WindowBatchLoader(BatchLoader):
         self.labels_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
 
     def _get_sequence(self):
-        return np.array(list(map(lambda aa: dictionary[aa], next(self.stream))))
+        return np.array(list(map(lambda aa: dictionary[aa], next(self.stream)['sequence'])))
 
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         win = self.win_size
@@ -112,15 +129,16 @@ class WindowBatchLoader(BatchLoader):
 class SkipGramBatchLoader(BatchLoader):
     def __init__(self, win_size, batch_size, train=True):
         super(SkipGramBatchLoader, self).__init__(win_size, batch_size, train)
+        self.batch_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+        self.labels_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
 
     def _get_sequence(self):
-        return next(self.stream, None)
+        return next(self.stream)['sequence']
 
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         batch_size = self.batch_size
-        possible_context_sizes = range(1, self.win_size + 1)
         while batch_pos < batch_size:
-            win = np.random.choice(possible_context_sizes)
+            win = np.random.choice(self.win_size) + 1
             for offset in range(-win, win + 1):
                 label_pos = seq_pos + offset
                 if offset == 0 or label_pos < 0:
@@ -131,8 +149,8 @@ class SkipGramBatchLoader(BatchLoader):
                     break
                 if seq_pos == len(seq):  # seq finished before batch
                     return batch, labels, 0, batch_pos
-                labels[batch_pos] = dictionary[seq[label_pos]]
-                batch[batch_pos] = dictionary[seq[seq_pos]]
+                labels[batch_pos][0] = dictionary[seq[label_pos]]
+                batch[batch_pos][0] = dictionary[seq[seq_pos]]
                 batch_pos += 1
             seq_pos += 1
 
@@ -143,10 +161,18 @@ def get_negative_samples(words):
     return np.array([np.random.choice(aa_unlike[w[0]], 1) for w in words])
 
 
-def train(model, train_loader, test_loader):
+def save_checkpoint(state, is_best):
+    filename_late = "%s/w2v_%s_latest.tar" % (ckptpath, arch)
+    filename_best = "%s/w2v_%s_best.tar" % (ckptpath, arch)
+    torch.save(state, filename_late)
+    if is_best:
+        copyfile(filename_late, filename_best)
+
+
+def train_w2v(model, train_loader, test_loader):
     # Hyper Parameters
 
-    num_epochs = 2
+    num_epochs = args.num_epochs
     learning_rate = 0.003
 
     # Loss and Optimizer
@@ -154,10 +180,24 @@ def train(model, train_loader, test_loader):
 
     criterion = nn.MSELoss()
     train_loss = 0
+    best_loss = np.inf
+    start_epoch = 0
 
-    for epoch in range(num_epochs):
+    # optionally resume from a checkpoint
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '%s'" % args.resume)
+            checkpoint = torch.load(args.resume)
+            start_epoch = checkpoint['epoch']
+            best_loss = checkpoint['best_loss']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '%s' (epoch %s)" %
+                  (args.resume, checkpoint['epoch'] + 1))
+        else:
+            print("=> no checkpoint found at '%s'" % args.resume)
 
-        # pbar = tqdm(range(len(train_dataset)), "training ... ")
+    for epoch in range(start_epoch, num_epochs):
 
         for step, (context, word) in enumerate(train_loader):
             model.train()
@@ -174,15 +214,20 @@ def train(model, train_loader, test_loader):
                 for i, (c, w) in enumerate(test_loader):
                     loss = get_loss(w, c, model, criterion)
                     test_loss += loss.data[0]
-                print('Epoch [%d/%d], Train Loss: %.4f, Test Loss: %.4f'
+                print('Epoch [%d/%d], Train Loss: %.5f, Test Loss: %.5f'
                       % (epoch + 1, num_epochs, train_loss / args.steps_per_stats, test_loss / i))
                 train_loss = 0
 
-            # pbar.update(batch_size)
-
-        # pbar.close()
-
-        model.save()            # Save the Trained Model
+                # remember best prec@1 and save checkpoint
+                is_best = best_loss > test_loss
+                best_loss = min(best_loss, test_loss)
+                save_checkpoint({
+                    'epoch': epoch,
+                    'arch': arch,
+                    'state_dict': model.state_dict(),
+                    'best_loss': best_loss,
+                    'optimizer': optimizer.state_dict(),
+                }, is_best)
 
 
 def get_loss(word, context, model, criterion):
@@ -190,10 +235,8 @@ def get_loss(word, context, model, criterion):
     c = Variable(torch.from_numpy(context).long())
     w = Variable(torch.from_numpy(word).long())
     w_tag = Variable(torch.from_numpy(word_tag).long())
-
     l_pos = Variable(torch.from_numpy(np.ones((word.shape[0], 1))).float())
     l_neg = Variable(torch.from_numpy(np.zeros((word.shape[0], 1))).float())
-
     p_pos = model((w, c))
     p_neg = 1 - model((w_tag, c))
     return criterion(p_pos, l_pos) + criterion(p_neg, l_neg)
@@ -205,14 +248,14 @@ def embeddings(w2v):
 
 class Word2VecAPI(object):
     def __init__(self, w2v):
-        self.w2v = w2v
+        self._emb = np.array([unitvec(v) for v in embeddings(w2v)])
 
     @property
     def embeddings(self):
-        return embeddings(self.w2v)
+        return np.copy(self._emb)
 
     def __getitem__(self, aa):
-        return self.embeddings[dictionary[aa]]
+        return self._emb[dictionary[aa]]
 
     def __contains__(self, aa):
         return aa in dictionary
@@ -224,8 +267,7 @@ class Word2VecAPI(object):
         return dict(zip(keys, values))
 
     def similarity(self, aa1, aa2):
-        return np.dot(matutils.unitvec(self[aa1]), matutils.unitvec(self[aa2]))
-        # return self.sim[dictionary[aa1], dictionary[aa2]]
+        return np.dot(self[aa1], self[aa2])
 
 
 class Word2VecImpl(nn.Module):
@@ -254,9 +296,6 @@ class CBOW(Word2VecImpl):
         out = self.sig(out)
         return out
 
-    def save(self):
-        torch.save(self.state_dict(), '%s/cbow.pkl' % ckptpath)
-
 
 class SkipGram(Word2VecImpl):
     def __init__(self, emb_size):
@@ -270,11 +309,19 @@ class SkipGram(Word2VecImpl):
         out = self.sig(out).mean(2)
         return out
 
-    def save(self):
-        torch.save(self.state_dict(), '%s/sg.pkl' % ckptpath)
+
+def pca(embeddings):
+    pca = PCA(n_components=2)
+    return pca.fit_transform(embeddings)
 
 
-def plot_with_labels(low_dim_embs, labels, filename):
+def tsne(embeddings):
+    tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
+    return tsne.fit_transform(embeddings)
+
+
+def plot(low_dim_embs, fname=None):
+    labels = [reverse_dictionary[i] for i in range(vocabulary_size)]
     assert low_dim_embs.shape[0] >= len(labels), 'More labels than embeddings'
     plt.figure(figsize=(18, 18))  # in inches
     for i, label in enumerate(labels):
@@ -286,25 +333,11 @@ def plot_with_labels(low_dim_embs, labels, filename):
                      textcoords='offset points',
                      ha='right',
                      va='bottom')
-    plt.savefig(filename)
+    if fname:
+        fpath = os.path.join(ckptpath, fname)
+        print("Saving to %s" % fpath)
+        plt.savefig(fpath)
     plt.show()
-
-
-def pca(embeddings):
-    pca = PCA(n_components=2)
-    return pca.fit_transform(embeddings)
-
-
-def tsne(embeddings):
-    tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
-    return tsne.fit_transform(embeddings[:vocabulary_size, :])
-
-
-def plot(low_dim_embs):
-    labels = [reverse_dictionary[i] for i in range(vocabulary_size)]
-    path = os.path.join(ckptpath, 'plot.png')
-    plot_with_labels(low_dim_embs, labels, path)
-    print("Saving to %s" % path)
 
 
 def kmeans(w2v, k):
@@ -337,24 +370,26 @@ def add_arguments(parser):
                         help="Give the dimension of the embedding vector.")
     parser.add_argument("-b", "--batch_size", type=int, default=64,
                         help="Give the size of bach to use when training.")
+    parser.add_argument("-e", "--num_epochs", type=int, default=5,
+                        help="Give the number of epochs to use when training.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
     parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
                         default="sprot", help="Give source name.")
-    parser.add_argument("-m", "--model", type=str, choices=['cbow', 'skipgram'],
+    parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'skipgram'],
                         default="cbow", help="Choose what type of model to use.")
-    parser.add_argument("-i", "--input_dir", type=str, required=False,
-                        default=gettempdir(), help="Specify the input directory.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
-    parser.add_argument('--train', action='store_true', default=False,
-                        help="Specify whether to retrain the model.")
     parser.add_argument("-v", '--verbose', action='store_true', default=False,
                         help="Run in verbose mode.")
+    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
     parser.add_argument("--steps_per_stats", type=int, default=1000,
                         help="How many training steps to do per stats logging, save.")
-    parser.add_argument("--size_test", type=int, default=500,
+    parser.add_argument("--size_train", type=int, default=50000,
                         help="The number of sequences sampled to create the test set.")
+    parser.add_argument("--size_test", type=int, default=500,
+                        help="The number of sequences sampled to create the train set.")
 
 
 if __name__ == "__main__":
@@ -363,52 +398,33 @@ if __name__ == "__main__":
     add_arguments(parser)
     args = parser.parse_args()
 
-    aa_sim = pd.read_csv('%s/aa_sim.csv' % args.input_dir)
-    aa_unlike = [np.where(aa_sim.loc[[w], :] == 0)[1] for w in range(0, 25)]
-    AA = aa_sim.columns
-    reverse_dictionary = dict(zip(range(len(AA)), AA))
-    dictionary = dict(zip(AA, range(len(AA))))
-    vocabulary_size = 25
-    n_clstr = 8
-
     client = MongoClient(args.mongo_url)
     collection = client['prot2vec'][args.source]
 
+    arch = args.arch
     ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
 
-    if args.train:
-        if args.model == 'cbow':
-            w2v = CBOW(args.emb_dim)
-            train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
-            test_loader = WindowBatchLoader(args.win_size, args.batch_size // 2, False)
-            train(w2v, train_loader, test_loader)
+    if arch == 'cbow':
+        w2v = CBOW(args.emb_dim)
+        train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
+        test_loader = WindowBatchLoader(args.win_size, args.batch_size // 2, False)
+        train_w2v(w2v, train_loader, test_loader)
 
-        elif args.model == 'skipgram':
-            w2v = SkipGram(args.emb_dim)
-            train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
-            test_loader = WindowBatchLoader(args.win_size, args.batch_size // 2, False)
-            train(w2v, train_loader, test_loader)
-
-        else:
-            print("Unknown model")
-            exit(1)
+    elif arch == 'skipgram':
+        w2v = SkipGram(args.emb_dim)
+        train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
+        test_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2, False)
+        train_w2v(w2v, train_loader, test_loader)
 
     else:
-        if args.model == 'cbow':
-            pass
+        print("Unknown model")
+        exit(1)
 
-        elif args.model == 'skipgram':
-            pass
-
-        else:
-            print("Unknown model")
-            exit(1)
-
-    if args.verbose and plt:
-        plot(tsne(embeddings(w2v)))
-        plot(pca(embeddings(w2v)))
     if args.verbose:
         api = Word2VecAPI(w2v)
         print(clstr_stats(api, n_clstr))
+    if args.verbose and plt:
+        plot(tsne(api.embeddings), 'w2v_%s_tsne.png' % arch)
+        plot(pca(api.embeddings), 'w2v_%s_pca.png' % arch)
