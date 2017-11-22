@@ -122,10 +122,16 @@ def train(model, train_loader, test_loader):
             inp = torch.from_numpy(batch_inputs).long()
             lbl = torch.from_numpy(batch_labels).long().view(-1)
 
+            print(inp)
+            print(lbl)
+
             if use_cuda:
                 inp.cuda()
                 lbl.cuda()
                 model.cuda()
+
+            print(inp)
+            print(lbl)
 
             x = Variable(inp)
             y = Variable(lbl)
@@ -154,9 +160,6 @@ def train(model, train_loader, test_loader):
                         inp.cuda()
                         lbl.cuda()
                         model.cuda()
-
-                    print(inp)
-                    print(lbl)
 
                     x = Variable(inp)
                     y = Variable(lbl)
