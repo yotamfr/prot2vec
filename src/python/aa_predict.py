@@ -125,8 +125,9 @@ def train(model, train_loader, test_loader):
             y = Variable(torch.from_numpy(batch_labels).long().view(-1))
 
             if device != 'cpu':
-                x = cuda(x)
-                y = cuda(y)
+                x.cuda()
+                y.cuda()
+                model.cuda()
 
             y_hat = model(x)
 
@@ -146,8 +147,8 @@ def train(model, train_loader, test_loader):
                     y = Variable(torch.from_numpy(w).long().view(-1))
 
                     if device != 'cpu':
-                        x = cuda(x)
-                        y = cuda(y)
+                        x.cuda()
+                        y.cuda()
 
                     y_hat = model(x)
 
@@ -169,11 +170,6 @@ def train(model, train_loader, test_loader):
                     'optimizer': optimizer.state_dict(),
                 }, is_best)
 
-
-def cuda(var):
-    with torch.cuda.device(int(device[-1])):
-        var = Variable(var.data.cuda())
-    return var
 
 def save_checkpoint(state, is_best):
     filename_late = "%s/predict_%s_latest.tar" % (ckptpath, arch)
