@@ -155,6 +155,9 @@ def train(model, train_loader, test_loader):
                         lbl.cuda()
                         model.cuda()
 
+                    print(inp)
+                    print(lbl)
+
                     x = Variable(inp)
                     y = Variable(lbl)
 
