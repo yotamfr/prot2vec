@@ -11,8 +11,6 @@ from torch.autograd import Variable
 
 from itertools import combinations
 
-from gensim.matutils import unitvec
-
 from pymongo.errors import CursorNotFound
 from pymongo import MongoClient
 
@@ -20,7 +18,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-from tqdm import tqdm
+from gensim.matutils import unitvec
 
 try:
     import matplotlib.pyplot as plt
@@ -50,23 +48,21 @@ class BatchLoader(object):
         self.train = train
         self.batch_buffer = np.ndarray([])
         self.labels_buffer = np.ndarray([])
+        self.test_set = list(collection_test.aggregate([{"$sample": {"size": size_test}}]))
 
     def __iter__(self):
 
         if self.train:
-            self.stream = collection.aggregate([{"$sample": {"size": args.size_train}}])
-            # pbar = tqdm(range(args.size_train), "sequences loaded")
+            self.stream = collection_train.aggregate([{"$sample": {"size": size_train}}])
         else:
-            self.stream = collection.aggregate([{"$sample": {"size": args.size_test}}])
-            # pbar = tqdm(range(args.size_test), "sequences loaded")
+            self.stream = (seq for seq in self.test_set)
 
         seq = self._get_sequence()
-        # pbar.update(1)
         seq_pos = 0
 
         batch_buffer, labels_buffer = self.batch_buffer, self.labels_buffer
 
-        while self.stream.alive:
+        while True:
 
             batch_buffer, labels_buffer, seq_pos, batch_pos = \
                 self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=0, seq_pos=seq_pos)
@@ -74,9 +70,8 @@ class BatchLoader(object):
             if seq_pos == 0:  # seq finished
                 try:
                     seq = self._get_sequence()
-                    # pbar.update(1)
-                except CursorNotFound:
-                    print("Cursor not found")
+                except (CursorNotFound, StopIteration) as e:
+                    print(e)
                     break
 
                 batch_buffer, labels_buffer, seq_pos, batch_pos = \
@@ -84,8 +79,6 @@ class BatchLoader(object):
 
             else:
                 yield np.copy(batch_buffer), np.copy(labels_buffer)
-
-        # pbar.close()
 
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         return batch, labels, seq_pos, batch_pos
@@ -248,7 +241,7 @@ def embeddings(w2v):
 
 class Word2VecAPI(object):
     def __init__(self, w2v):
-        self._emb = np.array([unitvec(v) for v in embeddings(w2v)])
+        self._emb = np.copy(embeddings(w2v))
 
     @property
     def embeddings(self):
@@ -267,7 +260,7 @@ class Word2VecAPI(object):
         return dict(zip(keys, values))
 
     def similarity(self, aa1, aa2):
-        return np.dot(self[aa1], self[aa2])
+        return np.dot(unitvec(self[aa1]), unitvec(self[aa2]))
 
 
 class Word2VecImpl(nn.Module):
@@ -363,6 +356,19 @@ def clstr_stats(w2v, k):
     return '\n'.join([clstr, hi_s, lo_s, av_s])
 
 
+def nn_stats(w2v):
+    for i in range(vocabulary_size):
+        aa = reverse_dictionary[i]
+        top_k = 3  # number of nearest neighbors
+        nearest = sorted(list(range(vocabulary_size)),
+                         key=lambda o: -w2v.similarity(aa, reverse_dictionary[o]))
+        log_str = 'Nearest to %s:' % aa
+        for k in range(1, top_k+1):
+            close_word = reverse_dictionary[nearest[k]]
+            log_str = '%s %s,' % (log_str, close_word)
+        print(log_str)
+
+
 def add_arguments(parser):
     parser.add_argument("-w", "--win_size", type=int, required=True,
                         help="Give the length of the context window.")
@@ -374,8 +380,6 @@ def add_arguments(parser):
                         help="Give the number of epochs to use when training.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
-    parser.add_argument("-s", "--source", type=str, choices=['uniprot', 'sprot'],
-                        default="sprot", help="Give source name.")
     parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'skipgram'],
                         default="cbow", help="Choose what type of model to use.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
@@ -388,7 +392,7 @@ def add_arguments(parser):
                         help="How many training steps to do per stats logging, save.")
     parser.add_argument("--size_train", type=int, default=50000,
                         help="The number of sequences sampled to create the test set.")
-    parser.add_argument("--size_test", type=int, default=500,
+    parser.add_argument("--size_test", type=int, default=1000,
                         help="The number of sequences sampled to create the train set.")
 
 
@@ -399,12 +403,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     client = MongoClient(args.mongo_url)
-    collection = client['prot2vec'][args.source]
+    db = client['prot2vec']
+    collection_train = db['uniprot']
+    collection_test = db['sprot']
 
     arch = args.arch
     ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
+
+    size_train = args.size_train
+    size_test = args.size_test
 
     if arch == 'cbow':
         w2v = CBOW(args.emb_dim)
@@ -425,6 +434,7 @@ if __name__ == "__main__":
     if args.verbose:
         api = Word2VecAPI(w2v)
         print(clstr_stats(api, n_clstr))
+        print(nn_stats(api))
     if args.verbose and plt:
         plot(tsne(api.embeddings), 'w2v_%s_tsne.png' % arch)
         plot(pca(api.embeddings), 'w2v_%s_pca.png' % arch)
