@@ -26,7 +26,13 @@ conda install -p virtualenv numpy
 conda install -p virtualenv scikit-learn
 conda install -p virtualenv matplotlib
 
-conda install -p virtualenv pytorch torchvision -c soumith
+
+if [ -z $GPU_FLAG ] ; then
+    conda install -p virtualenv pytorch torchvision cuda80 -c soumith
+else
+    conda install -p virtualenv pytorch torchvision -c soumith
+fi
+
 conda install -p virtualenv visdom -c conda-forge
 
 conda install -p virtualenv --upgrade tensorflow$GPU_FLAG
@@ -35,21 +41,21 @@ conda install -p virtualenv  tensorboard
 
 conda install -p virtualenv keras -c conda-forge
 
-conda install -p virtualenv tqdm
-
-conda install -p virtualenv gensim
-
-conda install -p virtualenv pymongo
-
-conda install -p virtualenv biopython
-
 
 ### activate virtualenv
 source activate virtualenv
 
 pip install wget    # Does NOT install properly by conda
 
-pip install pandas 
+pip install pandas
+
+pip install biopython
+
+pip install gensim
+
+pip install pymongo
+
+pip install tqdm
 
 ### install virtualenv as kernel to ipython notebook
 pip install ipykernel
