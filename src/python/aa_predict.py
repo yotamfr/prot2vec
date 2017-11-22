@@ -118,17 +118,20 @@ def train(model, train_loader, test_loader):
     for epoch in range(start_epoch, num_epochs):
 
         for step, (batch_inputs, batch_labels) in enumerate(train_loader):
-            model.train()
-            optimizer.zero_grad()
 
-            x = Variable(torch.from_numpy(batch_inputs).long())
-            y = Variable(torch.from_numpy(batch_labels).long().view(-1))
+            inp = torch.from_numpy(batch_inputs).long()
+            lbl = torch.from_numpy(batch_labels).long().view(-1)
 
-            if device != 'cpu':
-                x.cuda()
-                y.cuda()
+            if use_cuda:
+                inp.cuda()
+                lbl.cuda()
                 model.cuda()
 
+            x = Variable(inp)
+            y = Variable(lbl)
+
+            model.train()
+            optimizer.zero_grad()
             y_hat = model(x)
 
             loss = criterion(y_hat, y)
@@ -142,13 +145,23 @@ def train(model, train_loader, test_loader):
             if (step + 1) % args.steps_per_stats == 0:
                 test_loss = 0
                 f1 = 0
-                for i, (c, w) in enumerate(test_loader):
-                    x = Variable(torch.from_numpy(c).long())
-                    y = Variable(torch.from_numpy(w).long().view(-1))
+                for i, (batch_inputs, batch_labels) in enumerate(test_loader):
 
-                    if device != 'cpu':
+                    inp = torch.from_numpy(batch_inputs).long()
+                    lbl = torch.from_numpy(batch_labels).long().view(-1)
+
+                    if use_cuda:
+                        inp.cuda()
+                        lbl.cuda()
+                        model.cuda()
+
+                    x = Variable(inp)
+                    y = Variable(lbl)
+
+                    if use_cuda:
                         x.cuda()
                         y.cuda()
+                        model.cuda()
 
                     y_hat = model(x)
 
@@ -156,6 +169,7 @@ def train(model, train_loader, test_loader):
                     f1 += f1_score(y.data.numpy(), pred, average='micro')
                     loss = criterion(y_hat, y)
                     test_loss += loss.data[0]
+
                 print('Epoch [%d/%d], Train Loss: %.5f, Test Loss: %.5f, Test F1: %.2f'
                       % (epoch + 1, num_epochs, train_loss / args.steps_per_stats, test_loss / i, f1 / i))
                 train_loss = 0
@@ -227,6 +241,7 @@ if __name__ == "__main__":
     arch = args.arch
 
     device = args.device
+    use_cuda = device != 'cpu'
 
     ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
