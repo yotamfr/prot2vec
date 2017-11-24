@@ -167,8 +167,8 @@ def train(model, train_loader, test_loader):
                     y = Variable(lbl)
                     y_hat = model(x)
 
-                    pred = y_hat.data.numpy().argmax(axis=1)
-                    f1 += f1_score(y.data.numpy(), pred, average='micro')
+                    pred = y_hat.data.cpu().numpy().argmax(axis=1)
+                    f1 += f1_score(y.data.cpu().numpy(), pred, average='micro')
                     loss = criterion(y_hat, y)
                     test_loss += loss.data[0]
 
