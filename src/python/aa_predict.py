@@ -24,9 +24,9 @@ import argparse
 class CNN(nn.Module):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__()
+        hidden_size = 1024
         self.win_size = win_size
         self.emb_size = emb_size
-        hidden_size = 1024
         self.emb = nn.Embedding(vocabulary_size, emb_size)
         self.conv1 = nn.Sequential(
             nn.Conv2d(1, 64, kernel_size=(emb_size, 3), padding=2),
@@ -76,9 +76,9 @@ class MLP(nn.Module):
 
     def __init__(self, emb_size, win_size):
         super(MLP, self).__init__()
+        hidden_size = 512
         self.win_size = win_size
         self.emb_size = emb_size
-        hidden_size = 512
         self.emb = nn.Embedding(vocabulary_size, emb_size)
         self.layer1 = nn.Sequential(
             nn.Linear(2 * win_size * emb_size, hidden_size),
@@ -131,7 +131,8 @@ def train(model, train_loader, test_loader):
             start_epoch = checkpoint['epoch']
             best_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            if not use_cuda:    # TODO: Remove if bug is fixed
+                optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '%s' (epoch %s)" %
                   (args.resume, checkpoint['epoch'] + 1))
         else:
@@ -202,7 +203,7 @@ def train(model, train_loader, test_loader):
                     'epoch': epoch,
                     'state_dict': model.state_dict(),
                     'best_loss': best_loss,
-                    'optimizer': optimizer.state_dict(),
+                    'optimizer': optimizer.state_dict()
                 }, is_best)
 
 
