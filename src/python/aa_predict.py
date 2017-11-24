@@ -33,12 +33,20 @@ class CNN(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(2))
         self.layer2 = nn.Sequential(
-            nn.Conv2d(64, 32, kernel_size=emb_size, padding=2),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(64, 128, kernel_size=emb_size, padding=2),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(2))
         self.layer3 = nn.Sequential(
-            nn.Linear(160, hidden_size),
+            nn.Linear(640, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.Sigmoid())
+        self.layer4 = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.Sigmoid())
+        self.layer5 = nn.Sequential(
+            nn.Linear(hidden_size // 2, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.Sigmoid())
         self.fc = nn.Linear(hidden_size, vocabulary_size)
@@ -50,6 +58,8 @@ class CNN(nn.Module):
         out = self.layer2(out)
         out = out.view(out.size(0), -1)
         out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
         out = self.fc(out)
         out = self.sf(out)
         return out
