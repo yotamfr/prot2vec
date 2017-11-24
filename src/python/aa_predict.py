@@ -22,30 +22,36 @@ import argparse
 
 # CNN Model (2 conv layer)
 class CNN(nn.Module):
-    def __init__(self, emb_size, win_size, hidden_size):
+    def __init__(self, emb_size, win_size):
         super(CNN, self).__init__()
         self.win_size = win_size
         self.emb_size = emb_size
+        hidden_size = 1024
         self.emb = nn.Embedding(vocabulary_size, emb_size)
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=emb_size, padding=2),
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=(emb_size, 3), padding=2),
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(2))
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=emb_size, padding=2),
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=(emb_size, 3), padding=2),
             nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(2))
-        self.layer3 = nn.Sequential(
-            nn.Linear(640, hidden_size),
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=(emb_size, 3), padding=2),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(2))
+        self.lin1 = nn.Sequential(
+            nn.Linear(1024, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.Sigmoid())
-        self.layer4 = nn.Sequential(
+        self.lin2 = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.BatchNorm1d(hidden_size // 2),
             nn.Sigmoid())
-        self.layer5 = nn.Sequential(
+        self.lin3 = nn.Sequential(
             nn.Linear(hidden_size // 2, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.Sigmoid())
@@ -54,12 +60,13 @@ class CNN(nn.Module):
 
     def forward(self, x):
         out = self.emb(x).unsqueeze(1)
-        out = self.layer1(out)
-        out = self.layer2(out)
+        out = self.conv1(out)
+        out = self.conv2(out)
+        out = self.conv3(out)
         out = out.view(out.size(0), -1)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = self.layer5(out)
+        out = self.lin1(out)
+        out = self.lin2(out)
+        out = self.lin3(out)
         out = self.fc(out)
         out = self.sf(out)
         return out
@@ -67,10 +74,11 @@ class CNN(nn.Module):
 
 class MLP(nn.Module):
 
-    def __init__(self, emb_size, win_size, hidden_size):
+    def __init__(self, emb_size, win_size):
         super(MLP, self).__init__()
         self.win_size = win_size
         self.emb_size = emb_size
+        hidden_size = 512
         self.emb = nn.Embedding(vocabulary_size, emb_size)
         self.layer1 = nn.Sequential(
             nn.Linear(2 * win_size * emb_size, hidden_size),
@@ -260,13 +268,13 @@ if __name__ == "__main__":
         os.makedirs(ckptpath)
 
     if arch == 'mlp':
-        model = MLP(args.emb_dim, args.win_size, 512)
+        model = MLP(args.emb_dim, args.win_size)
         train_loader = WindowBatchLoader(args.win_size, args.batch_size)
         test_loader = WindowBatchLoader(args.win_size, args.batch_size, False)
         train(model, train_loader, test_loader)
 
     elif arch == 'cnn':
-        model = CNN(args.emb_dim, args.win_size, 256)
+        model = CNN(args.emb_dim, args.win_size)
         train_loader = WindowBatchLoader(args.win_size, args.batch_size)
         test_loader = WindowBatchLoader(args.win_size, args.batch_size, False)
         train(model, train_loader, test_loader)
