@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-GPU_FLAG=''
+GPU_FLAG=""
 
 while getopts ":g:" opt; do
   case $opt in
@@ -22,28 +22,28 @@ conda create -p virtualenv python=3.6
 
 conda install -p virtualenv pip -c anaconda
 
-conda install -p virtualenv numpy
-conda install -p virtualenv scikit-learn
-conda install -p virtualenv matplotlib
-
 
 if [ -z $GPU_FLAG ] ; then
-    conda install -p virtualenv pytorch torchvision cuda80 -c soumith
-else
     conda install -p virtualenv pytorch torchvision -c soumith
+
+else
+    conda install -p virtualenv pytorch torchvision cuda80 -c soumith
 fi
 
 conda install -p virtualenv visdom -c conda-forge
 
-conda install -p virtualenv --upgrade tensorflow$GPU_FLAG
-conda install -p virtualenv install tf-nightly$GPU_FLAG
-conda install -p virtualenv  tensorboard
-
-conda install -p virtualenv keras -c conda-forge
-
 
 ### activate virtualenv
 source activate virtualenv
+
+### use pip to install remaining packages
+pip install --upgrade tensorflow$GPU_FLAG
+pip install tf-nightly$GPU_FLAG
+pip install keras
+
+pip  install scikit-learn
+
+pip install matplotlib
 
 pip install wget    # Does NOT install properly by conda
 

@@ -88,6 +88,10 @@ class MLP(nn.Module):
         return out
 
 
+def device(device_str):
+    return int(device_str[-1])
+
+
 def train(model, train_loader, test_loader):
 
     # Hyper Parameters
@@ -122,16 +126,11 @@ def train(model, train_loader, test_loader):
             inp = torch.from_numpy(batch_inputs).long()
             lbl = torch.from_numpy(batch_labels).long().view(-1)
 
-            print(inp)
-            print(lbl)
-
             if use_cuda:
-                inp.cuda()
-                lbl.cuda()
-                model.cuda()
-
-            print(inp)
-            print(lbl)
+                with torch.cuda.device(device(args.device)):
+                    inp.cuda()
+                    lbl.cuda()
+                    model.cuda()
 
             x = Variable(inp)
             y = Variable(lbl)
@@ -157,18 +156,13 @@ def train(model, train_loader, test_loader):
                     lbl = torch.from_numpy(batch_labels).long().view(-1)
 
                     if use_cuda:
-                        inp.cuda()
-                        lbl.cuda()
-                        model.cuda()
+                        with torch.cuda.device(device(args.device)):
+                            inp.cuda()
+                            lbl.cuda()
+                            model.cuda()
 
                     x = Variable(inp)
                     y = Variable(lbl)
-
-                    if use_cuda:
-                        x.cuda()
-                        y.cuda()
-                        model.cuda()
-
                     y_hat = model(x)
 
                     pred = y_hat.data.numpy().argmax(axis=1)
@@ -246,8 +240,7 @@ if __name__ == "__main__":
 
     arch = args.arch
 
-    device = args.device
-    use_cuda = device != 'cpu'
+    use_cuda = args.device != 'cpu'
 
     ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
