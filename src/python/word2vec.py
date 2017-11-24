@@ -28,6 +28,8 @@ except ImportError as err:
 
 from tempfile import gettempdir
 
+import json
+
 import argparse
 
 aa_sim = pd.read_csv('Data/aa_sim.csv')
@@ -37,7 +39,8 @@ dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), A
 vocabulary_size = len(AA)
 n_clstr = 8
 
-print(dictionary)
+print(json.dumps(dictionary, indent=1))
+
 assert vocabulary_size == 25
 
 
@@ -380,7 +383,7 @@ def add_arguments(parser):
                         help="Give the number of epochs to use when training.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
-    parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'skipgram'],
+    parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'sg'],
                         default="cbow", help="Choose what type of model to use.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
@@ -408,6 +411,7 @@ if __name__ == "__main__":
     collection_test = db['sprot']
 
     arch = args.arch
+
     ckptpath = args.out_dir
     if not os.path.exists(ckptpath):
         os.makedirs(ckptpath)
@@ -421,7 +425,7 @@ if __name__ == "__main__":
         test_loader = WindowBatchLoader(args.win_size, args.batch_size // 2, False)
         train_w2v(w2v, train_loader, test_loader)
 
-    elif arch == 'skipgram':
+    elif arch == 'sg':
         w2v = SkipGram(args.emb_dim)
         train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
         test_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2, False)

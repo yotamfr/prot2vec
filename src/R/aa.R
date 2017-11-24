@@ -96,6 +96,26 @@ aa_sim[c('W', 'Y', 'F'), c('W', 'Y', 'F')] <- 1
 # aa_sim[c('W', 'Y', 'F', 'I', 'L', 'V'), c('W', 'Y', 'F', 'I', 'L', 'V')] <- 1
 
 
+### All traits
+
+hydrophobic <- aa_feat[aa_feat$hydrophobic==1, "Short"]
+aliphatic <- aa_feat[aa_feat$aliphatic==1, "Short"]
+aromatic <- aa_feat[aa_feat$aromatic==1, "Short"]
+acidic <- aa_feat[aa_feat$acidic==1, "Short"]
+basic <- aa_feat[aa_feat$basic==1, "Short"]
+polar <- aa_feat[aa_feat$polar==1, "Short"]
+small <- aa_feat[aa_feat$small==1, "Short"]
+tiny <- aa_feat[aa_feat$tiny==1, "Short"]
+
+aa_sim[hydrophobic, hydrophobic] <- 1
+aa_sim[aliphatic, aliphatic] <- 1
+aa_sim[aromatic, aromatic] <- 1
+aa_sim[acidic, acidic] <- 1
+aa_sim[basic, basic] <- 1
+aa_sim[polar, polar] <- 1
+aa_sim[small, small] <- 1
+aa_sim[tiny, tiny] <- 1
+
 ### write the data
 write.csv(aa_feat, 'Data/aa_feat.csv')
 write.csv(aa_sim, 'Data/aa_sim.csv', row.names = F)

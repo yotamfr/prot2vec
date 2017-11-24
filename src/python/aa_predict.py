@@ -208,8 +208,8 @@ def train(model, train_loader, test_loader):
 
 
 def save_checkpoint(state, is_best):
-    filename_late = "%s/predict_%s_latest.tar" % (ckptpath, arch)
-    filename_best = "%s/predict_%s_best.tar" % (ckptpath, arch)
+    filename_late = "%s/aapred_%s_latest.tar" % (ckptpath, arch)
+    filename_best = "%s/aapred_%s_best.tar" % (ckptpath, arch)
     torch.save(state, filename_late)
     if is_best:
         copyfile(filename_late, filename_best)
