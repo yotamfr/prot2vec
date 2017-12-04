@@ -126,15 +126,19 @@ def train(model, train_loader, test_loader):
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '%s'" % args.resume)
-            checkpoint = torch.load(args.resume)
+            checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage)
             start_epoch = checkpoint['epoch']
             best_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
-            # optimizer.load_state_dict(checkpoint['optimizer'])  # TODO: see if bug is fixed
+            optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '%s' (epoch %s)" %
                   (args.resume, checkpoint['epoch'] + 1))
         else:
             print("=> no checkpoint found at '%s'" % args.resume)
+
+    if use_cuda:
+        with torch.cuda.device(device(args.device)):
+            model.cuda()
 
     for epoch in range(start_epoch, num_epochs):
 
@@ -147,7 +151,6 @@ def train(model, train_loader, test_loader):
                 with torch.cuda.device(device(args.device)):
                     inp = inp.cuda()
                     lbl = lbl.cuda()
-                    model.cuda()
 
             x = Variable(inp)
             y = Variable(lbl)
@@ -197,7 +200,7 @@ def train(model, train_loader, test_loader):
 
                 save_checkpoint({
                     'epoch': epoch,
-                    'state_dict': model.cpu().state_dict(),
+                    'state_dict': model.state_dict(),
                     'best_loss': best_loss,
                     'optimizer': optimizer.state_dict()
                 }, is_best)
