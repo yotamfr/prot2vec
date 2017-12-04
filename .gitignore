@@ -6,8 +6,11 @@ prot2vec.Rproj
 .idea/
 
 data
+Data/*.obo
+
 models
 figures
+
 virtualenv
 recurrentshop
 

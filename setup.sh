@@ -17,6 +17,13 @@ while getopts ":g:" opt; do
   esac
 done
 
+### Prerequisites
+
+#sudo apt-get install blast2
+#sudo apt-get install ncbi-blast+
+
+#wget http://raptorx.uchicago.edu/download/eHVlZmVuZy5jdWlAa2F1c3QuZWR1LnNh/25/ #nr90.tar.gz
+
 
 conda create -p virtualenv python=3.6
 
@@ -57,12 +64,16 @@ pip install pymongo
 
 pip install tqdm
 
+pip install networkx
+
+pip install obonet
+
 ### install virtualenv as kernel to ipython notebook
 pip install ipykernel
 python -m ipykernel install --user --name virtualenv
 
-git clone https://www.github.com/datalogai/recurrentshop.git
-python recurrentshop/setup.py install
+#git clone https://www.github.com/datalogai/recurrentshop.git
+#python recurrentshop/setup.py install
 
 
 
