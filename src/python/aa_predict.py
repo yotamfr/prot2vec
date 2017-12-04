@@ -20,7 +20,6 @@ from tempfile import gettempdir
 import argparse
 
 
-# CNN Model (2 conv layer)
 class CNN(nn.Module):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__()
@@ -131,8 +130,7 @@ def train(model, train_loader, test_loader):
             start_epoch = checkpoint['epoch']
             best_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
-            if not use_cuda:    # TODO: Remove if bug is fixed
-                optimizer.load_state_dict(checkpoint['optimizer'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '%s' (epoch %s)" %
                   (args.resume, checkpoint['epoch'] + 1))
         else:
@@ -140,6 +138,7 @@ def train(model, train_loader, test_loader):
 
     if use_cuda:
         with torch.cuda.device(device(args.device)):
+            optimizer.cuda()
             model.cuda()
 
     for epoch in range(start_epoch, num_epochs):
@@ -201,9 +200,9 @@ def train(model, train_loader, test_loader):
                 best_loss = min(best_loss, test_loss)
                 save_checkpoint({
                     'epoch': epoch,
-                    'state_dict': model.state_dict(),
+                    'state_dict': model.cpu().state_dict(),
                     'best_loss': best_loss,
-                    'optimizer': optimizer.state_dict()
+                    'optimizer': optimizer.cpu().state_dict()
                 }, is_best)
 
 
