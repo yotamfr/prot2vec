@@ -136,10 +136,6 @@ def train(model, train_loader, test_loader):
         else:
             print("=> no checkpoint found at '%s'" % args.resume)
 
-    if use_cuda:
-        with torch.cuda.device(device(args.device)):
-            model.cuda()
-
     for epoch in range(start_epoch, num_epochs):
 
         for step, (batch_inputs, batch_labels) in enumerate(train_loader):
@@ -151,6 +147,7 @@ def train(model, train_loader, test_loader):
                 with torch.cuda.device(device(args.device)):
                     inp = inp.cuda()
                     lbl = lbl.cuda()
+                    model.cuda()
 
             x = Variable(inp)
             y = Variable(lbl)
