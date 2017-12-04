@@ -12,7 +12,7 @@ parser.add_argument("-d", "--data_dir", type=str, default="./data/raw",
                     help="Supply working directory for the data")
 parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                     help="Supply the URL of MongoDB")
-parser.add_argument("c", "--collection", type=str, required=True,
+parser.add_argument("-c", "--collection", type=str, required=True,
                     choices=['uniprot', 'sprot', 'goa_uniprot', 'goa_pdb'],
                     help="The name of the collection that you want load.")
 parser.add_argument('--exp', action='store_true', default=False,
