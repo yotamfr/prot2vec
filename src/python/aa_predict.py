@@ -130,7 +130,7 @@ def train(model, train_loader, test_loader):
             start_epoch = checkpoint['epoch']
             best_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])  # TODO: see if bug is fixed
             print("=> loaded checkpoint '%s' (epoch %s)" %
                   (args.resume, checkpoint['epoch'] + 1))
         else:
