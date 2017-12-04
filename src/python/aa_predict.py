@@ -130,7 +130,7 @@ def train(model, train_loader, test_loader):
             start_epoch = checkpoint['epoch']
             best_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])  # TODO: see if bug is fixed
             print("=> loaded checkpoint '%s' (epoch %s)" %
                   (args.resume, checkpoint['epoch'] + 1))
         else:
@@ -138,7 +138,6 @@ def train(model, train_loader, test_loader):
 
     if use_cuda:
         with torch.cuda.device(device(args.device)):
-            optimizer.cuda()
             model.cuda()
 
     for epoch in range(start_epoch, num_epochs):
@@ -198,12 +197,17 @@ def train(model, train_loader, test_loader):
                 # remember best prec@1 and save checkpoint
                 is_best = best_loss > test_loss
                 best_loss = min(best_loss, test_loss)
+
+                model.cpu()
                 save_checkpoint({
                     'epoch': epoch,
-                    'state_dict': model.cpu().state_dict(),
+                    'state_dict': model.state_dict(),
                     'best_loss': best_loss,
-                    'optimizer': optimizer.cpu().state_dict()
+                    'optimizer': optimizer.state_dict()
                 }, is_best)
+                if use_cuda:
+                    with torch.cuda.device(device(args.device)):
+                        model.cuda()
 
 
 def save_checkpoint(state, is_best):
