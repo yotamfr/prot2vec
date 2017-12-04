@@ -198,16 +198,12 @@ def train(model, train_loader, test_loader):
                 is_best = best_loss > test_loss
                 best_loss = min(best_loss, test_loss)
 
-                model.cpu()
                 save_checkpoint({
                     'epoch': epoch,
-                    'state_dict': model.state_dict(),
+                    'state_dict': model.cpu().state_dict(),
                     'best_loss': best_loss,
                     'optimizer': optimizer.state_dict()
                 }, is_best)
-                if use_cuda:
-                    with torch.cuda.device(device(args.device)):
-                        model.cuda()
 
 
 def save_checkpoint(state, is_best):

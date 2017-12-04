@@ -8,6 +8,7 @@ from shutil import copyfile
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from torch.nn.modules.loss import _Loss
 
 from itertools import combinations
 
@@ -165,16 +166,34 @@ def save_checkpoint(state, is_best):
         copyfile(filename_late, filename_best)
 
 
-def train_w2v(model, train_loader, test_loader):
+def get_loss2(word, context, model, criterion):
+    c = Variable(torch.from_numpy(context).long())
+    w = Variable(torch.from_numpy(word).long())
+    p = model((w, c))
+    _ = Variable(torch.from_numpy(np.ones(word.shape[0])))
+    return criterion(p, _)
+
+
+def get_loss1(word, context, model, criterion):
+    word_tag = get_negative_samples(word)
+    c = Variable(torch.from_numpy(context).long())
+    w = Variable(torch.from_numpy(word).long())
+    w_tag = Variable(torch.from_numpy(word_tag).long())
+    l_pos = Variable(torch.from_numpy(np.ones((word.shape[0], 1))).float())
+    l_neg = Variable(torch.from_numpy(np.zeros((word.shape[0], 1))).float())
+    p_pos = model((w, c))
+    p_neg = 1 - model((w_tag, c))
+    return criterion(p_pos, l_pos) + criterion(p_neg, l_neg)
+
+
+def train_w2v(model, train_loader, test_loader, criterion=nn.MSELoss(), get_loss=get_loss1):
     # Hyper Parameters
 
     num_epochs = args.num_epochs
-    learning_rate = 0.003
 
     # Loss and Optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
 
-    criterion = nn.MSELoss()
     train_loss = 0
     best_loss = np.inf
     start_epoch = 0
@@ -226,20 +245,8 @@ def train_w2v(model, train_loader, test_loader):
                 }, is_best)
 
 
-def get_loss(word, context, model, criterion):
-    word_tag = get_negative_samples(word)
-    c = Variable(torch.from_numpy(context).long())
-    w = Variable(torch.from_numpy(word).long())
-    w_tag = Variable(torch.from_numpy(word_tag).long())
-    l_pos = Variable(torch.from_numpy(np.ones((word.shape[0], 1))).float())
-    l_neg = Variable(torch.from_numpy(np.zeros((word.shape[0], 1))).float())
-    p_pos = model((w, c))
-    p_neg = 1 - model((w_tag, c))
-    return criterion(p_pos, l_pos) + criterion(p_neg, l_neg)
-
-
 def embeddings(w2v):
-    return w2v.emb_w.weight.data.numpy()
+    return w2v.emb_c.weight.data.numpy()
 
 
 class Word2VecAPI(object):
@@ -272,16 +279,43 @@ class Word2VecImpl(nn.Module):
         super(Word2VecImpl, self).__init__()
         self.emb_w = nn.Embedding(vocabulary_size, emb_size)
         self.emb_c = nn.Embedding(vocabulary_size, emb_size)
-        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         return x
+
+
+class LogLoss(_Loss):
+
+    def forward(self, input, target):
+        out = -input.log().mean()
+        return out
+
+
+class SoftMax(Word2VecImpl):
+    def __init__(self, emb_size):
+        super(SoftMax, self).__init__(emb_size)
+
+    def forward(self, x):
+        word, context = x
+        batch_size = word.data.shape[0]
+        vocab = np.array([list(range(vocabulary_size))
+                          for _ in range(batch_size)])
+        vocab = Variable(torch.from_numpy(vocab).long())
+        v_emb = self.emb_c(vocab)
+        w_emb = self.emb_w(word).transpose(1, 2)
+        c_emb = self.emb_c(context)
+        nom = torch.exp(torch.bmm(c_emb, w_emb))
+        dnom = torch.exp(torch.bmm(v_emb, w_emb))
+        dnom = dnom.sum(1).pow(-1).unsqueeze(1)
+        out = nom.bmm(dnom).view(-1)
+        return out
 
 
 class CBOW(Word2VecImpl):
 
     def __init__(self, emb_size):
         super(CBOW, self).__init__(emb_size)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         word, context = x
@@ -296,6 +330,7 @@ class CBOW(Word2VecImpl):
 class SkipGram(Word2VecImpl):
     def __init__(self, emb_size):
         super(SkipGram, self).__init__(emb_size)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         word, context = x
@@ -383,7 +418,7 @@ def add_arguments(parser):
                         help="Give the number of epochs to use when training.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
-    parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'sg'],
+    parser.add_argument("-a", "--arch", type=str, choices=['cbow', 'sg', 'sf'],
                         default="cbow", help="Choose what type of model to use.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
@@ -427,9 +462,15 @@ if __name__ == "__main__":
 
     elif arch == 'sg':
         w2v = SkipGram(args.emb_dim)
-        train_loader = WindowBatchLoader(args.win_size, args.batch_size // 2)
+        train_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2)
         test_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2, False)
         train_w2v(w2v, train_loader, test_loader)
+
+    elif arch == 'sf':
+        w2v = SoftMax(args.emb_dim)
+        train_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2)
+        test_loader = SkipGramBatchLoader(args.win_size, args.batch_size // 2, False)
+        train_w2v(w2v, train_loader, test_loader, LogLoss(), get_loss=get_loss2)
 
     else:
         print("Unknown model")

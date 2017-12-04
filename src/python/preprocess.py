@@ -3,6 +3,7 @@ import sys
 import wget
 import datetime
 import numpy as np
+import networkx as nx
 
 from numpy import unique
 from Bio.SeqIO import parse as parse_fasta
@@ -224,7 +225,13 @@ class Dataset(object):
             if uid2lbl:
                 record.lbl = uid2lbl[uid]
             records.append(record)
-            
+
+    def augment(self, go_graph):
+        for record in self.records:
+            for go_id in record.lbl:
+                anc = nx.ancestors(go_graph, go_id)
+                record.lbl |= anc
+
     @staticmethod
     def to_dictionaries(records):
         uid2seq = {record.uid: record.seq for record in records}
@@ -325,8 +332,8 @@ class DataLoader(object):
             yield batch_seq[:B, :, :, :T], batch_lbl[:B, :]
 
 
-def load_training_data_from_collections(annot_collection, seq_collection,
-                                        from_date, to_date, aspect, exp=True, names=None):
+def load_training_data_from_collections(annot_collection, seq_collection, aspect,
+                                        from_date=None, to_date=None, exp=True, names=None):
     query = {"DB": "UniProtKB"}
     if from_date and to_date:
         query["Date"] = {"$gte": from_date, "$lte": to_date}
@@ -468,8 +475,8 @@ def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, tr
     test_set = Dataset(trg_id2seq, seq2vec, trg_id2go_id, transform=trans)
 
     seq_id2seq, seq_id2go_id, go_id2seq_id = \
-        load_training_data_from_collections(db.goa_uniprot, db.uniprot,
-                                            cafa3_cutoff, today_cutoff, asp)
+        load_training_data_from_collections(db.goa_uniprot, db.uniprot, asp,
+                                            cafa3_cutoff, today_cutoff)
     if seqs_filter:
         filter_sequences_by(seqs_filter, seq_id2seq, seq_id2go_id)
     if lbls_filter:
