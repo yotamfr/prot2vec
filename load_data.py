@@ -109,18 +109,18 @@ def load_gaf(filename, collection, start=0):
 
 def add_single_sequence(fasta, collection):
 
-    header, sequence = fasta.id, str(fasta.seq)
-    db_id, unique_identifier, entry_name = \
-        header.split(' ')[0].split('|')
+    qpid, sequence, header = fasta.id, fasta.seq, fasta.description
+    db_id, unique_identifier, entry_name = qpid.split(' ')[0].split('|')
 
     prot = {
         "primary_accession": unique_identifier,
         "db": db_id,
         "entry_name": entry_name,
-        "sequence": sequence,
+        "sequence": str(sequence),
         "length": len(sequence),
         "created_at": datetime.datetime.utcnow(),
-        "header": header
+        "header": header,
+        "qpid": qpid
     }
 
     collection.update_one({
