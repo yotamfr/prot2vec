@@ -13,7 +13,7 @@ parser.add_argument("-d", "--data_dir", type=str, default="./data/raw",
 parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                     help="Supply the URL of MongoDB")
 parser.add_argument("-c", "--collection", type=str, required=True,
-                    choices=['uniprot', 'sprot', 'goa_uniprot', 'goa_pdb'],
+                    choices=['trembl', 'sprot', 'goa_uniprot', 'goa_pdb'],
                     help="The name of the collection that you want load.")
 parser.add_argument('--exp', action='store_true', default=False,
                     help="Load only experimentally validated annotations.")
@@ -174,33 +174,33 @@ if __name__ == "__main__":
 
     prefix, fname = None, None
 
-    if args.collection == "uniprot":
+    if args.collection == "trembl":
 
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_trembl.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        load_fasta("%s/%s" % (data_dir, fname), db[args.collection])
+        load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
     elif args.collection == "sprot":
 
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_sprot.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        load_fasta("%s/%s" % (data_dir, fname), db[args.collection])
+        load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
     elif args.collection == "goa_uniprot":
 
         prefix = "http://geneontology.org/gene-associations/"
         fname = "goa_uniprot_all.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        load_gaf("%s/%s" % (data_dir, fname), db[args.collection])
+        load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot)
 
     elif args.collection == "goa_pdb":
 
         prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/PDB"
         fname = "goa_pdb.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        load_gaf("%s/%s" % (data_dir, fname), db[args.collection])
+        load_gaf("%s/%s" % (data_dir, fname), db.goa_pdb)
 
     else:
         print("Unrecognised data source: %s" % args.src)
