@@ -5,16 +5,20 @@ from Bio.SeqIO import parse as parse_fasta
 from pymongo import MongoClient
 from tqdm import tqdm
 
+from tempfile import gettempdir
+
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "--data_dir", type=str, default="./data/raw",
+parser.add_argument("-d", "--data_dir", type=str, default=gettempdir(),
                     help="Supply working directory for the data")
 parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                     help="Supply the URL of MongoDB")
 parser.add_argument("-c", "--collection", type=str, required=True,
-                    choices=['trembl', 'sprot', 'goa_uniprot', 'goa_pdb'],
+                    choices=['trembl', 'sprot', 'goa_uniprot', 'goa_uniprot_noiea', 'goa_pdb'],
                     help="The name of the collection that you want load.")
+parser.add_argument('--noiea', action='store_true', default=True,
+                    help="Load only experimentally validated annotations.")
 parser.add_argument('--exp', action='store_true', default=False,
                     help="Load only experimentally validated annotations.")
 args = parser.parse_args()
@@ -69,7 +73,9 @@ def load_gaf(filename, collection, start=0):
 
         for i, data in enumerate(goa_iterator):
 
-            if i < start or (args.exp and data['Evidence'] not in exp_codes):
+            if i < start \
+                    or (args.noiea and data['Evidence'] == 'IEA') \
+                    or (args.exp and data['Evidence'] not in exp_codes):
                 pbar.update(1)
                 continue
 
@@ -190,10 +196,17 @@ if __name__ == "__main__":
 
     elif args.collection == "goa_uniprot":
 
-        prefix = "http://geneontology.org/gene-associations/"
+        prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
         fname = "goa_uniprot_all.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
         load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot)
+
+    elif args.collection == "goa_uniprot_noiea":
+
+        prefix = "http://geneontology.org/gene-associations"
+        fname = "goa_uniprot_all_noiea.gaf"
+        maybe_download_and_unzip(prefix, data_dir, fname)
+        load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot_noiea)
 
     elif args.collection == "goa_pdb":
 

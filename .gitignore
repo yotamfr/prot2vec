@@ -11,6 +11,9 @@ Data/*.obo
 models
 figures
 
+gensim
+node2vec
+
 virtualenv
 recurrentshop
 

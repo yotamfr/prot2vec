@@ -58,7 +58,7 @@ pip install pandas
 
 pip install biopython
 
-pip install gensim
+pip install git+https://github.com/RaRe-Technologies/gensim.git # gensim with poincare emb
 
 pip install pymongo
 
@@ -74,6 +74,11 @@ python -m ipykernel install --user --name virtualenv
 
 #git clone https://www.github.com/datalogai/recurrentshop.git
 #python recurrentshop/setup.py install
+
+#git clone https://github.com/aditya-grover/node2vec.git
+
+
+
 
 
 
