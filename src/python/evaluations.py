@@ -31,15 +31,11 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import precision_recall_curve
 from sklearn.metrics import average_precision_score
 
-import utils
-logger = utils.get_logger("evaluations")
 
+from src.python.prot2vec import Node2Vec, Clstr2Vec, BagOfNGrams
 
-
-from prot2vec import Node2Vec, Clstr2Vec, BagOfNGrams
-
-from models import PdbChain
-from models import Uniprot
+from src.python.models import PdbChain
+from src.python.models import Uniprot
 
 client = MongoClient('mongodb://localhost:27017/')
 db = client['prot2vec']
@@ -106,7 +102,7 @@ BINARY = {
 
 def load_validation_set(annots_tsv, seqs_fasta, aspect):
 
-    logger.info("Loading validation set of %s aspect." % aspect)
+    print("Loading validation set of %s aspect." % aspect)
 
     validation_set, validation_seqs, validation_terms = dict(), dict(), dict()
 
@@ -131,14 +127,14 @@ def load_validation_set(annots_tsv, seqs_fasta, aspect):
             except TypeError:
                 pass
 
-    logger.info("Loaded %s annots." % sum(validation_terms.values()))
+    print("Loaded %s annots." % sum(validation_terms.values()))
 
     return validation_set, validation_seqs, validation_terms
 
 
 def load_training_set(go_terms, collection, Model, exp, date_cutoff=CAFA3_cutoff):
 
-    logger.info("Loading training set earlier than %s." % date_cutoff)
+    print("Loading training set earlier than %s." % date_cutoff)
 
     query = {"DB": "UniProtKB",
              "GO_ID": {"$in": list(go_terms)},
@@ -169,7 +165,7 @@ def load_training_set(go_terms, collection, Model, exp, date_cutoff=CAFA3_cutoff
         else:
             training_set[seq_id] = {go_id}
 
-    logger.info("Loaded %s annots." % np.sum(training_terms.values()))
+    print("Loaded %s annots." % np.sum(training_terms.values()))
 
     return training_set, training_seqs, training_terms
 
@@ -223,7 +219,7 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         valid_y = mlb.fit_transform(valid_labels)
         classes = mlb.classes_
 
-    logger.info("valid_X.shape=%s valid_y.shape=%s\n"
+    print("valid_X.shape=%s valid_y.shape=%s\n"
                 % (valid_X[models[0].name].shape, valid_y.shape))
 
     if plot_hist:
@@ -271,7 +267,7 @@ def load_multiple_data2(annots_tsv, seqs_fasta, collection, Model, models,
         mlb.fit(valid_labels)
         train_y = mlb.transform(train_labels)
 
-    logger.info("train_X.shape=%s train_y.shape=%s\n"
+    print("train_X.shape=%s train_y.shape=%s\n"
                 % (train_X[models[0].name].shape, train_y.shape))
 
     return train_X, valid_X, train_y, valid_y, classes
@@ -302,7 +298,7 @@ def load_data(sample_size, collection, Model, aspect=None):
     mlb = MultiLabelBinarizer(classes=list(terms), sparse_output=False)
     y = mlb.fit_transform(annots)
 
-    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+    print("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
 
     return X, y, mlb.classes_
 
@@ -333,13 +329,13 @@ def load_multiple_data(sample_size, collection, Model, dictionaries=[WORD2VEC], 
     mlb = MultiLabelBinarizer(classes=list(terms), sparse_output=False)
     y = mlb.fit_transform(annots)
 
-    logger.info("X.shape=%s y.shape=%s\n" % (wordvecs[dictionaries[0].name].shape, y.shape))
+    print("X.shape=%s y.shape=%s\n" % (wordvecs[dictionaries[0].name].shape, y.shape))
 
     return wordvecs, y, mlb.classes_
 
 
 def train_oneclass_classifiers(X_train, y_train, calssifier="OneClassSVM"):
-    logger.info("Training Oneclass Classifiers ...\n")
+    print("Training Oneclass Classifiers ...\n")
     bar = tqdm(range(y_train.shape[1]), desc="classes trained")
     for j in bar:
         clf = ONECLASS[calssifier]
@@ -352,14 +348,14 @@ def train_oneclass_classifiers(X_train, y_train, calssifier="OneClassSVM"):
 
 
 def train_multilablel_classifiers(X, y):
-    logger.info("Training multi-lablel MLP ...\n")
+    print("Training multi-lablel MLP ...\n")
     clf = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(15,), random_state=1)
     clf.fit(X, y)
     joblib.dump(clf, '%s/MLPClassifier.pkl' % (ONECLASSDIR,))
 
 
 def measure_oneclass_accuracy(X_test, y_truth, calssifier="OneClassSVM"):
-    logger.info("Measuring accuracy of %s Classifiers ...\n" % calssifier)
+    print("Measuring accuracy of %s Classifiers ...\n" % calssifier)
     y_preds = np.zeros(y_truth.shape)               # all zeros matrix
     score = (0., 0., 0., 0, 0)
     optf1 = 0.0
@@ -376,7 +372,7 @@ def measure_oneclass_accuracy(X_test, y_truth, calssifier="OneClassSVM"):
             bar.set_description(tmpl % (score[0], score[1], score[2], np.sum(y_truth[:, j]), np.sum(y_preds[:, j])))
             optf1 = score[2]
     score = precision_recall_fscore_support(y_truth, y_preds, beta=1.0, average="micro")
-    logger.info(tmpl % (score[0], score[1], score[2], np.sum(y_truth), np.sum(y_preds)))
+    print(tmpl % (score[0], score[1], score[2], np.sum(y_truth), np.sum(y_preds)))
     return score
 
 
@@ -387,7 +383,7 @@ def measure_oneclass_accuracy(X_test, y_truth, calssifier="OneClassSVM"):
 
 # def get_mock_predictions(datafile=TRAININGDATA, date=now):
 #
-#     logger.info("Predicting labels for %s based on GOA.\n" % datafile)
+#     print("Predicting labels for %s based on GOA.\n" % datafile)
 #
 #     numseqs, intuitive_prediction = 0, {}
 #     fasta_sequences = SeqIO.parse(open(datafile, 'rU'), 'fasta')
@@ -422,20 +418,20 @@ def compute_precision_recall_fscore_support(intuitive_truths, intuitive_predicti
     y_true = mlb.fit_transform(truths)
     y_pred = mlb.fit_transform(preds)
 
-    logger.info("Found %s different GeneOntology Terms" % y_true.shape[1])
+    print("Found %s different GeneOntology Terms" % y_true.shape[1])
 
     return precision_recall_fscore_support(y_true, y_pred, beta=1.0, average="micro")
 
 
 def rank_predictions(intuitive_truths, intuitive_predictions, mode=2):
 
-    logger.info("Computing Precision-Recall-Fscore-Support.\n")
+    print("Computing Precision-Recall-Fscore-Support.\n")
 
     if mode == 1:
 
         score = compute_precision_recall_fscore_support(intuitive_truths, intuitive_predictions)
 
-        logger.info("precision=%s, recall=%s, f1_score=%s, support=%s" % score)
+        print("precision=%s, recall=%s, f1_score=%s, support=%s" % score)
 
     elif mode == 2:
 
@@ -443,10 +439,10 @@ def rank_predictions(intuitive_truths, intuitive_predictions, mode=2):
 
         score = compute_precision_recall_fscore_support(truths, predictions)
 
-        logger.info("precision=%s, recall=%s, f1_score=%s, support=%s" % score)
+        print("precision=%s, recall=%s, f1_score=%s, support=%s" % score)
 
     else:
-        logger.error("Unknownwn assessment mode")
+        print("Unknownwn assessment mode")
 
 
 def remove_null_preds(intuitive_truths, intuitive_predictions):
@@ -458,7 +454,7 @@ def remove_null_preds(intuitive_truths, intuitive_predictions):
             del intuitive_predictions[key]
             del intuitive_truths[key]
         except KeyError as err:
-            logger.error(err)
+            print(err)
 
     return intuitive_truths, intuitive_predictions
 
@@ -479,7 +475,7 @@ def main1(models, collection, Model, sample_size):
     data, labels, classes = load_data(sample_size, collection, Model)
     macro, micro, support, num_classes = 0.0, 0.0, 0, 0
 
-    logger.info("Training Classifiers ...\n")
+    print("Training Classifiers ...\n")
 
     for j in range(labels.shape[1]):
 
@@ -520,12 +516,12 @@ def main1(models, collection, Model, sample_size):
             macro += f1
             micro += f1*sum(y)
 
-            logger.info(tmpl.format(classes[j], pr, rc, f1, sum(y)))
+            print(tmpl.format(classes[j], pr, rc, f1, sum(y)))
 
         except ValueError as err:
-            logger.error(err)
+            print(err)
 
-    logger.info("f1_macro: %s, f1_micro: %s, total_support: %s" %
+    print("f1_macro: %s, f1_micro: %s, total_support: %s" %
                 (macro/num_classes, micro/support, support))
 
 
@@ -538,7 +534,7 @@ def main2(models, collection, Model, sample_size):
 
     X, y = data, labels
 
-    logger.info("filtering...")
+    print("filtering...")
 
     ix1 = np.sum(y, axis=0) > 9
     y = y[:, ix1]
@@ -547,9 +543,9 @@ def main2(models, collection, Model, sample_size):
     y = y[ix0, :]
     X = X[ix0, :]
 
-    logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+    print("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
 
-    logger.info("training...")
+    print("training...")
 
     n_classes = y.shape[1]
 
@@ -598,7 +594,7 @@ def main2(models, collection, Model, sample_size):
         plot_roc_auc(fpr, tpr, roc_auc, classes, title)
 
     except ValueError as err:
-        logger.error(err)
+        print(err)
 
 
 def plot_roc_auc(fpr, tpr, roc_auc, classes, title):
@@ -665,7 +661,7 @@ def main5(models, collection, Model, annotations_fname, sequences_fname,
 
     for model in models:
 
-        logger.info("training %s ..." % model.name)
+        print("training %s ..." % model.name)
 
         X_train, X_valid = training_set[model.name], validation_set[model.name]
 
@@ -680,7 +676,7 @@ def main5(models, collection, Model, annotations_fname, sequences_fname,
         classifier = OneVsRestClassifier(BINARY["SVM"], n_jobs=4)
         y_pred = classifier.fit(X_train, y_train).decision_function(X_valid)
 
-        logger.info("Measuring %s Performance on %s" % (model.name, aspect))
+        print("Measuring %s Performance on %s" % (model.name, aspect))
 
         # Compute ROC curve and ROC area for each class
         precision = dict()
@@ -712,11 +708,11 @@ def main3(dictionaries, collection, Model, sample_size):
 
     for model in dictionaries:
 
-        logger.info("Measuring %s Performance" % model.name)
+        print("Measuring %s Performance" % model.name)
 
         X = wordsvecs[model.name]
 
-        logger.info("filtering...")
+        print("filtering...")
 
         ix1 = np.sum(labels, axis=0) > 9       # only cls when num samples > 9
         y = labels[:, ix1]
@@ -728,9 +724,9 @@ def main3(dictionaries, collection, Model, sample_size):
         assert np.all(np.sum(y, axis=0) > 9)
         assert np.all(np.sum(y, axis=1) > 0)
 
-        logger.info("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
+        print("X.shape=%s y.shape=%s\n" % (X.shape, y.shape))
 
-        logger.info("training...")
+        print("training...")
 
         n_classes = y.shape[1]
 
@@ -765,7 +761,7 @@ def main3(dictionaries, collection, Model, sample_size):
             plot_precision_recall(recall, precision, average_precision, cls, title)
 
         except ValueError as err:
-            logger.error(err)
+            print(err)
 
 
 def plot_precision_recall(recall, precision, average_precision, classes, title):
@@ -802,7 +798,7 @@ def main4(models, aspect, sample_size):
 
     X, y = data, labels
 
-    logger.info("filtering...")
+    print("filtering...")
 
     ix1 = np.sum(y, axis=0) > 9
     y = y[:, ix1]
@@ -811,9 +807,9 @@ def main4(models, aspect, sample_size):
     y = y[ix0, :]
     X = X[ix0, :]
 
-    logger.info("X.shape=%s y.shape=%s (%s)\n" % (X.shape, y.shape, aspect))
+    print("X.shape=%s y.shape=%s (%s)\n" % (X.shape, y.shape, aspect))
 
-    logger.info("training...")
+    print("training...")
 
     n_classes = y.shape[1]
 
@@ -849,7 +845,7 @@ def main4(models, aspect, sample_size):
         plot_precision_recall(recall, precision, average_precision, classes, title)
 
     except ValueError as err:
-        logger.error(err)
+        print(err)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,10 @@ from gensim.models.word2vec import Word2Vec
 
 from pymongo import MongoClient
 
+from tempfile import gettempdir
+
+from obonet import read_obo
+
 from src.python.preprocess import *
 
 import argparse
@@ -121,60 +125,56 @@ def eval(model, criterion, dataset):
 
 def main():
 
-    client = MongoClient(args.mongo_url)
-    db = client['prot2vec']
-
-    input_dir = args.input_dir
-    if not os.path.exists(input_dir):
-        os.mkdir(input_dir)
-
-    output_dir = args.output_dir
+    output_dir = args.out_dir
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
-    if args.source == 'CAFA3':
+    client = MongoClient("mongodb://127.0.0.1:27017")
+    db = client['prot2vec']
 
-        train_set, valid_set, test_set, mlb = \
-            load_cafa3(db, input_dir, 'F', Word2Vec.load(args.model),
-                       lambda seq: len(seq) < 32, lambda seqs: len(seqs) < 5,
-                       trans=ToAC(32))
+    exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
+    queries = [{'Evidence': {'$in': exp_codes}, 'Aspect': asp, 'DB': 'UniProtKB'} for asp in ['F', 'C', 'P']]
 
-        print("Splitting Dataset into Train and Test.")
+    num_mfo, num_cco, num_bpo = [db.goa_uniprot.count(q) for q in queries]
+    src_mfo, src_cco, src_bpo = [db.goa_uniprot.find(q).limit(10000) for q in queries]
+    # src_mfo, src_cco, src_bpo = [db.goa_uniprot.find(q) for q in queries]
 
-        data_set = train_set.update(valid_set).update(test_set)
+    print("#ANNO MF=%s CC=%s BP=%s" % (num_mfo, num_cco, num_bpo))
+    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(src_mfo, 10000, 'F').load()
+    # seqid2goid, goid2seqid = GoAnnotationCollectionLoader(src_mfo, num_mfo, 'F').load()
 
-        train_set, valid_set = data_set.split()
+    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    num_seq = db.uniprot.count(query)
+    src_seq = db.uniprot.find(query)
+    print("#SEQ=%s" % num_seq)
+    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
 
-        cnn = CNN_AC(len(mlb.classes_))
-        train(cnn, train_set, valid_set, output_dir)
+    dataset = Dataset(seqid2seq, seqid2goid)
+    print(dataset)
+    p99 = np.percentile(list(map(lambda r: len(r.seq), dataset.records)), 99)
+    print("99 percentile:\t%d" % p99)
 
-    elif args.source == 'CAFA2':
+    print("Reading GeneOntology")
+    GO = read_obo("http://purl.obolibrary.org/obo/go/go-basic.obo")
 
-        train_set, valid_set, test_set, mlb = \
-            load_cafa2(db, input_dir, Word2Vec.load(args.model),
-                       lambda seq: len(seq) < 32, lambda seqs: len(seqs) < 5,
-                       trans=ToAC(32))
+    dataset.augment(GO)
+    print(dataset)
 
-    else:
-        print('Unrecognized source')
-        exit(0)
+    train_set, test_set = dataset.split(0.2)
+
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-i", "--input_dir", type=str, required=True,
-                        help="Supply input directory for the raw data")
-    parser.add_argument("-o", "--output_dir", type=str, required=True,
-                        help="Supply output directory for the processed data")
+    parser.add_argument("-o", "--out_dir", type=str, required=False,
+                        default=gettempdir(), help="Specify the output directory.")
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
-    parser.add_argument("-s", "--source", type=str, required=True,
-                        choices=['CAFA3', 'CAFA2'],
-                        help="Specify the source of the data that you wish to load.")
-    parser.add_argument("-m", "--model", type=str, required=True,
-                        help="Specify the path to the embedding model.")
+    parser.add_argument("--device", type=str, default='cpu',
+                        help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
+
     args = parser.parse_args()
 
     main()

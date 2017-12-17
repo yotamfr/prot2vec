@@ -4,9 +4,9 @@ CONDA_URL="https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
 GPU_FLAG=""
 
 
-wget $CONDA_URL
-chmod 777 Miniconda3-latest-Linux-x86_64.sh
-./Miniconda3-latest-Linux-x86_64.sh
+#wget $CONDA_URL
+#chmod 777 Miniconda3-latest-Linux-x86_64.sh
+#./Miniconda3-latest-Linux-x86_64.sh
 
 
 while getopts ":g:" opt; do
