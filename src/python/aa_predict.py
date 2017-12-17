@@ -1,5 +1,7 @@
 import os
+import sys
 import numpy as np
+import pandas as pd
 
 from shutil import copyfile
 
@@ -7,17 +9,145 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+from pymongo.errors import CursorNotFound
 from pymongo import MongoClient
-
-import word2vec as W2V
-vocabulary_size = W2V.vocabulary_size
-WindowBatchLoader = W2V.WindowBatchLoader
 
 from sklearn.metrics import f1_score
 
 from tempfile import gettempdir
 
 import argparse
+
+aa_sim = pd.read_csv('Data/aa_sim.csv')
+aa_unlike = [np.where(aa_sim.loc[[w], :] == 0)[1] for w in range(0, 25)]
+AA = aa_sim.columns
+dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), AA))
+vocabulary_size = len(AA)
+n_clstr = 8
+
+import json
+print(json.dumps(dictionary, indent=1))
+
+assert vocabulary_size == 25
+
+verbose = False
+
+
+class BatchLoader(object):
+    def __init__(self, win_size, batch_size, train):
+        self.win_size = win_size
+        self.batch_size = batch_size
+        self.train = train
+        self.batch_buffer = np.ndarray([])
+        self.labels_buffer = np.ndarray([])
+        self.test_set = list(collection_test.aggregate([{"$sample": {"size": size_test}}]))
+
+    def __iter__(self):
+
+        if self.train:
+            self.stream = collection_train.aggregate([{"$sample": {"size": size_train}}])
+        else:
+            self.stream = (seq for seq in self.test_set)
+
+        i, n = 1, size_test
+        seq = self._get_sequence()
+        seq_pos = 0
+
+        batch_buffer, labels_buffer = self.batch_buffer, self.labels_buffer
+
+        while True:
+
+            batch_buffer, labels_buffer, seq_pos, batch_pos = \
+                self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=0, seq_pos=seq_pos)
+
+            if seq_pos == 0:  # seq finished
+                try:
+                    if verbose:
+                        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
+                    seq = self._get_sequence()
+                    i += 1
+                except (CursorNotFound, StopIteration) as e:
+                    print(e)
+                    break
+
+                batch_buffer, labels_buffer, seq_pos, batch_pos = \
+                    self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=batch_pos, seq_pos=0)
+
+            else:
+                yield np.random.permutation(batch_buffer), np.random.permutation(labels_buffer)
+
+    def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
+        return batch, labels, seq_pos, batch_pos
+
+    def _get_sequence(self):
+        return ''
+
+
+class WindowBatchLoader(BatchLoader):
+    def __init__(self, win_size, batch_size, train=True):
+        super(WindowBatchLoader, self).__init__(win_size, batch_size, train)
+        self.mask = np.array(range(2 * win_size + 1)) != win_size
+        self.batch_buffer = np.ndarray(shape=(batch_size, win_size * 2), dtype=np.int32)
+        self.labels_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+
+    def _get_sequence(self):
+        return np.array(list(map(lambda aa: dictionary[aa], next(self.stream)['sequence'])))
+
+    def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
+        win = self.win_size
+        mask = self.mask
+        if seq_pos == 0:
+            seq_pos = win
+        batch_size = self.batch_size
+        while batch_pos < batch_size:
+            if seq_pos + win >= len(seq):  # seq finished before batch
+                return batch, labels, 0, batch_pos
+            if batch_pos == batch_size:  # batch finished before seq
+                break
+            start = seq_pos - win
+            end = seq_pos + win + 1
+            context = seq[start:end]
+            batch[batch_pos, :] = context[mask]
+            labels[batch_pos] = [context[win]]
+            batch_pos += 1
+            seq_pos += 1
+
+        return batch, labels, seq_pos, batch_pos
+
+
+class SkipGramBatchLoader(BatchLoader):
+    def __init__(self, win_size, batch_size, train=True):
+        super(SkipGramBatchLoader, self).__init__(win_size, batch_size, train)
+        self.batch_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+        self.labels_buffer = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+
+    def _get_sequence(self):
+        return next(self.stream)['sequence']
+
+    def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
+        batch_size = self.batch_size
+        while batch_pos < batch_size:
+            win = np.random.choice(self.win_size) + 1
+            for offset in range(-win, win + 1):
+                label_pos = seq_pos + offset
+                if offset == 0 or label_pos < 0:
+                    continue
+                if label_pos >= len(seq):
+                    continue
+                if batch_pos == batch_size:  # batch finished before seq
+                    break
+                if seq_pos == len(seq):  # seq finished before batch
+                    return batch, labels, 0, batch_pos
+                labels[batch_pos][0] = dictionary[seq[label_pos]]
+                batch[batch_pos][0] = dictionary[seq[seq_pos]]
+                batch_pos += 1
+            seq_pos += 1
+
+        return batch, labels, seq_pos, batch_pos
+
+
+def get_negative_samples(words):
+    return np.array([np.random.choice(aa_unlike[w[0]], 1) for w in words])
 
 
 class CNN(nn.Module):
@@ -264,13 +394,18 @@ if __name__ == "__main__":
 
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']
+
     collection_train = db['uniprot']
     collection_test = db['sprot']
-    W2V.collection_train = collection_train
-    W2V.collection_test = collection_test
 
-    W2V.size_train = args.size_train
-    W2V.size_test = args.size_test
+    arch = args.arch
+
+    ckptpath = args.out_dir
+    if not os.path.exists(ckptpath):
+        os.makedirs(ckptpath)
+
+    size_train = args.size_train
+    size_test = args.size_test
 
     arch = args.arch
 
