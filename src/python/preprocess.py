@@ -1,18 +1,18 @@
-import os
 import sys
 import wget
 import datetime
-import numpy as np
-import networkx as nx
 
 from numpy import unique
+
+from functools import reduce
+
 from Bio.SeqIO import parse as parse_fasta
 
-from sklearn.preprocessing import MultiLabelBinarizer
+from src.python.geneontology import *
 
+import src.python.word2vec as W2V
 
-exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
-
+exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
 
 cafa2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
 cafa3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
@@ -22,6 +22,8 @@ cafa3_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_targets
 cafa3_train_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_training_data.tgz'
 cafa2_data_url = 'https://ndownloader.figshare.com/files/3658395'
 cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-targets.tgz'
+
+verbose = True
 
 
 def blocks(files, size=8192*1024):
@@ -37,43 +39,22 @@ def count_lines(fpath, sep=bytes('\n', 'utf8')):
         return sum(bl.count(sep) for bl in blocks(f))
 
 
-class GoAspect(object):
-    def __init__(self, aspect=None):
-        self._aspect = aspect
-
-    @property
-    def aspect(self):
-        return self._aspect if self._aspect else 'unspecified'
-
-    def __eq__(self, other):
-        return (str(self) == str(other)) or (self.aspect == other)
-
-    def __str__(self):
-        aspect = self._aspect
-        return "BPO" if aspect == 'P' \
-            else "MFO" if aspect == 'F' \
-            else "CCO" if aspect == 'C' \
-            else "unspecified" if not aspect \
-            else "unknown"
-
-
 class SequenceLoader(object):
-    def __init__(self, src_sequence, num_sequences, source_name):
+    def __init__(self, src_sequence, num_sequences):
         self.sequence_source = src_sequence
         self.num_sequences = num_sequences
-        self.source_name = source_name if source_name else '<?>'
 
     def load(self):
-        n = self.num_sequences if self.num_sequences else '<?>'
-        print("Loading: \"%s\"" % self.source_name)
-
+        n = self.num_sequences
         seq_id2seq = dict()
         for i, seq in enumerate(self.sequence_source):
-            sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
+            if verbose:
+                sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
             seq_id, seq_seq = self.parse_sequence(seq)
             seq_id2seq[seq_id] = seq_seq
 
-        print("\nFinished loading %s sequences!" % len(seq_id2seq))
+        if verbose:
+            print("\nFinished loading %s sequences!" % len(seq_id2seq))
 
         return seq_id2seq
 
@@ -82,36 +63,32 @@ class SequenceLoader(object):
 
 
 class FastaFileLoader(SequenceLoader):
-    def __init__(self, src_fasta, num_seqs, filename):
-        super(FastaFileLoader, self).__init__(src_fasta, num_seqs, filename)
+    def __init__(self, src_fasta, num_seqs):
+        super(FastaFileLoader, self).__init__(src_fasta, num_seqs)
 
     def parse_sequence(self, seq):
         return seq.id, seq.seq
 
 
 class UniprotCollectionLoader(SequenceLoader):
-    def __init__(self, src_sequence, num_sequences, src_name):
-        super(UniprotCollectionLoader, self)\
-            .__init__(src_sequence, num_sequences, src_name)
+    def __init__(self, src_sequence, num_sequences):
+        super(UniprotCollectionLoader, self).__init__(src_sequence, num_sequences)
 
     def parse_sequence(self, doc):
         return doc["_id"], doc["sequence"]
 
 
 class MappingLoader(object):
-    def __init__(self, src_mapping, num_mapping, source_name='<?>'):
+    def __init__(self, src_mapping, num_mapping):
         self.mapping_source = src_mapping
         self.mapping_count = num_mapping
-        self.source_name = source_name
 
     def load(self):
-
-        n = self.mapping_count if self.mapping_count else '<?>'
-        print("Loading: \"%s\"" % self.source_name)
-
+        n = self.mapping_count
         direct_map, reverse_map = dict(), dict()
         for i, item in enumerate(self.mapping_source):
-            sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
+            if verbose:
+                sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
             id1, id2 = self.parse_mapping(item)
             if (not id1) and (not id2):
                 continue
@@ -127,8 +104,9 @@ class MappingLoader(object):
             except TypeError:
                 pass
 
-        m = sum(map(len, direct_map.values()))
-        print("\nFinished loading %s mappings!" % m)
+        if verbose:
+            m = sum(map(len, direct_map.values()))
+            print("\nFinished loading %s mappings!" % m)
 
         return direct_map, reverse_map
 
@@ -137,8 +115,8 @@ class MappingLoader(object):
 
 
 class MappingFileLoader(MappingLoader):
-    def __init__(self, file_src, line_num, filename):
-        super(MappingFileLoader, self).__init__(file_src, line_num, filename)
+    def __init__(self, file_src, line_num):
+        super(MappingFileLoader, self).__init__(file_src, line_num)
 
     def parse_mapping(self, line):
         s_line = line.strip().split()
@@ -149,9 +127,9 @@ class MappingFileLoader(MappingLoader):
 
 
 class GoAnnotationLoader(MappingLoader):
-    def __init__(self, src_annotations, num_annotations, src_name, aspect=GoAspect()):
+    def __init__(self, src_annotations, num_annotations, aspect=GoAspect()):
         super(GoAnnotationLoader, self)\
-            .__init__(src_annotations, num_annotations, src_name)
+            .__init__(src_annotations, num_annotations)
         self.aspect = aspect
 
     def parse_mapping(self, entry):
@@ -159,9 +137,8 @@ class GoAnnotationLoader(MappingLoader):
 
 
 class GoAnnotationFileLoader(GoAnnotationLoader):
-    def __init__(self, annotation_file_io, num_lines, src_name, aspect):
-        super(GoAnnotationFileLoader, self)\
-            .__init__(annotation_file_io, num_lines, src_name, aspect)
+    def __init__(self, annotation_file_io, num_lines, aspect):
+        super(GoAnnotationFileLoader, self).__init__(annotation_file_io, num_lines, aspect)
 
     def parse_mapping(self, line):
         seq_id, go_id, go_asp = line.strip().split('\t')
@@ -172,9 +149,8 @@ class GoAnnotationFileLoader(GoAnnotationLoader):
 
 
 class GoAnnotationCollectionLoader(GoAnnotationLoader):
-    def __init__(self, annotation_cursor, annotation_count, src_name, aspect):
-        super(GoAnnotationCollectionLoader, self) \
-            .__init__(annotation_cursor, annotation_count, src_name, aspect)
+    def __init__(self, annotation_cursor, annotation_count, aspect):
+        super(GoAnnotationCollectionLoader, self) .__init__(annotation_cursor, annotation_count, aspect)
 
     def parse_mapping(self, doc):
         seq_id, go_id, go_asp = doc["DB_Object_ID"], doc["GO_ID"], doc["Aspect"]
@@ -205,32 +181,49 @@ class Identity(object):
 
 class Dataset(object):
 
-    def __init__(self, uid2seq, emb, uid2lbl=None, mlb=None, transform=Identity()):
+    def __init__(self, uid2seq, uid2lbl, ontology,
+                 embedder=Seq2Vec(W2V.dictionary),
+                 transform=Identity()):
 
-        self._mlb = mlb
-        self._emb = emb
+        self._emb = embedder
+        self.onto = ontology
         self.transform = transform
         self.records = []
         self.do_init(uid2seq, uid2lbl)
 
     def do_init(self, uid2seq, uid2lbl):
         records = self.records = []
-        keys = uid2seq.keys() \
-            if not uid2lbl \
-            else uid2lbl.keys()
+        keys = uid2lbl.keys()
         for uid in keys:
             record = Record()
+            if uid not in uid2seq:
+                continue
             record.uid = uid
+            record.lbl = uid2lbl[uid]
             record.seq = uid2seq[uid]
-            if uid2lbl:
-                record.lbl = uid2lbl[uid]
             records.append(record)
 
-    def augment(self, go_graph):
-        for record in self.records:
-            for go_id in record.lbl:
-                anc = nx.ancestors(go_graph, go_id)
-                record.lbl |= anc
+    def augment(self, max_length=None):
+        n, m = len(self), 0
+        G = self.onto._graph
+        for i, record in enumerate(self.records):
+            if verbose:
+                sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
+            lbl = set(filter(lambda x: G.has_node(x), record.lbl))
+
+            if max_length:
+                anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
+                record.lbl = set([k for d in anc for k, v in d.items() if v <= max_length])
+            else:
+                anc = map(lambda go: nx.descendants(G, go), lbl)
+                record.lbl = reduce(lambda x, y: x | y, anc, lbl)
+
+    def __str__(self):
+        num_anno = sum(map(lambda record: len(record.lbl), self.records))
+        num_go = len(reduce(lambda x, y: x | y, map(lambda r: r.lbl, self.records), set()))
+        num_seq = len(self)
+        s = '\n#Annotaions\t%d\n#GO-Terms\t%d\n#Sequences\t%d' % (num_anno, num_go, num_seq)
+        return s
 
     @staticmethod
     def to_dictionaries(records):
@@ -251,42 +244,27 @@ class Dataset(object):
 
     def split(self, ratio=0.2):     # split and make sure distrib. of length is the same
         data = np.array(sorted(self.records, key=lambda r: len(r.seq)))
-        n, mlb = len(data), self.mlb
+        n, onto = len(data), self.onto
         train_indx = np.array([bool(i % round(1/ratio)) for i in range(n)])
         test_indx = np.invert(train_indx)
         train_records, test_records = data[train_indx], data[test_indx]
         train_uid2sec, train_uid2lbl = Dataset.to_dictionaries(train_records)
         test_uid2sec, test_uid2lbl = Dataset.to_dictionaries(test_records)
-        return Dataset(train_uid2sec, self._emb, train_uid2lbl, mlb,
+        return Dataset(train_uid2sec, train_uid2lbl, onto, self._emb,
                        transform=self.transform),\
-               Dataset(test_uid2sec, self._emb, test_uid2lbl, mlb,
+               Dataset(test_uid2sec, test_uid2lbl, onto, self._emb,
                        transform=self.transform)
-
-    @property
-    def mlb(self):
-        return self._mlb if self._mlb \
-            else MultiLabelBinarizer(sparse_output=True).fit(self.labels)
-
-    @mlb.setter
-    def mlb(self, mlb):
-        self._mlb = mlb
 
     @property
     def labels(self):
         return list(record.lbl for record in self.records)
 
-    @property
-    def classes(self):
-        return self._mlb.classes_ if self._mlb else None
-
     def __len__(self):
         return len(self.records)
 
     def __getitem__(self, i):
-        emb, mlb, fn = self._emb, self._mlb, self.transform
-        record = self.records[i]
-        return fn(emb[record.seq]), mlb.transform([record.lbl]) \
-            if mlb else fn(emb[record.seq])
+        emb, onto, fn, r = self._emb, self.onto, self.transform, self.records[i]
+        return fn(emb[r.seq]), np.array([onto[go] for go in r.lbl])
 
     def __iter__(self):
         for i in range(len(self)):
@@ -302,30 +280,31 @@ class DataLoader(object):
     def __iter__(self):
 
         dataset = self.dataset
-        classes = dataset.mlb.classes_
         batch_size = self.batch_size
 
         dataset.records.sort(key=lambda r: -len(r.seq))
 
-        n = len(dataset)
+        M = len(dataset)
 
         seq, lbl = dataset[0]
-        B = min(n, batch_size)
+        N = lbl.shape[1]
+
+        B = min(M, batch_size)
         T, D = seq.shape
 
-        batch_lbl = np.zeros((B, len(classes)))
+        batch_lbl = np.zeros((B, N))
         batch_seq = np.zeros((B, 1, D, T))
 
         i = 0
-        while i < n:
+        while i < M:
 
             j = 0
             while j < B:
                 seq, lbl = dataset[i + j]
-                B = min(n - i, batch_size)
+                B = min(M - i, batch_size)
                 L, D = seq.shape
                 batch_seq[j, :, :, :L] = seq.reshape((D, L))
-                batch_lbl[j, :] = lbl.reshape((len(classes),))
+                batch_lbl[j, :] = lbl.reshape((N,))
                 j += 1
 
             i += j
@@ -349,14 +328,12 @@ def load_training_data_from_collections(annot_collection, seq_collection, aspect
     annot_src = annot_collection.find(query)
     annot_num = annot_collection.count(query)
     seq_id2go_id, go_id2seq_id = \
-        GoAnnotationCollectionLoader(annot_src, annot_num,
-                                     annot_collection, aspect).load()
+        GoAnnotationCollectionLoader(annot_src, annot_num, aspect).load()
 
     query = {"_id": {"$in": unique(list(seq_id2go_id.keys())).tolist()}}
     sequence_src = seq_collection.find(query)
     sequence_num = seq_collection.count(query)
-    seq_id2seq = UniprotCollectionLoader(sequence_src, sequence_num,
-                                         seq_collection).load()
+    seq_id2seq = UniprotCollectionLoader(sequence_src, sequence_num).load()
 
     return seq_id2seq, seq_id2go_id, go_id2seq_id
 
@@ -390,11 +367,11 @@ def load_training_data_from_files(annots_tsv, fasta_fname, aspect):
     annot_src = open(annots_tsv, 'r')
     num_annot = count_lines(annots_tsv, sep=bytes('\n', 'utf8'))
     seq_id2go_id, go_id2seq_id = \
-        GoAnnotationFileLoader(annot_src, num_annot, annots_tsv, aspect).load()
+        GoAnnotationFileLoader(annot_src, num_annot, aspect).load()
 
     num_seq = count_lines(fasta_fname, sep=bytes('>', 'utf8'))
     fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
-    seq_id2seq = FastaFileLoader(fasta_src, num_seq, fasta_fname).load()
+    seq_id2seq = FastaFileLoader(fasta_src, num_seq).load()
 
     return seq_id2seq, seq_id2go_id, go_id2seq_id
 
@@ -404,16 +381,18 @@ def load_cafa3_targets(targets_dir, mapping_dir):
     trg_id2seq, trg_id2seq_id, seq_id2trg_id = dict(), dict(), dict()
 
     for fname in os.listdir(targets_dir):
+        print("\nLoading: %s" % fname)
         fpath = "%s/%s" % (targets_dir, fname)
         num_seq = count_lines(fpath, sep=bytes('>', 'utf8'))
         fasta_src = parse_fasta(open(fpath, 'r'), 'fasta')
-        trg_id2seq.update(FastaFileLoader(fasta_src, num_seq, fname).load())
+        trg_id2seq.update(FastaFileLoader(fasta_src, num_seq).load())
 
     for fname in os.listdir(mapping_dir):
+        print("\nLoading: %s" % fname)
         fpath = "%s/%s" % (mapping_dir, fname)
         num_mapping = count_lines(fpath, sep=bytes('\n', 'utf8'))
         src_mapping = open(fpath, 'r')
-        d1, d2 = MappingFileLoader(src_mapping, num_mapping, fname).load()
+        d1, d2 = MappingFileLoader(src_mapping, num_mapping).load()
         trg_id2seq_id.update(d1)
         seq_id2trg_id.update(d2)
 
@@ -439,7 +418,26 @@ def wget_and_unzip(sub_dir, rel_dir, url):
     os.remove(fname)
 
 
-def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, trans=None):
+def load_db(db, asp='F', codes=exp_codes, limit=None):
+
+    q = {'Evidence': {'$in': codes}, 'DB': 'UniProtKB'}
+    c = limit if limit else db.goa_uniprot.count(q)
+    s = db.goa_uniprot.find(q)
+    if limit: s = s.limit(limit)
+
+    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, asp).load()
+
+    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    num_seq = db.uniprot.count(query)
+    src_seq = db.uniprot.find(query)
+
+    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
+    onto = get_ontology(asp)
+
+    return Dataset(seqid2seq, seqid2goid, onto), goid2seqid
+
+
+def load_cafa3(db, data_dir, asp, aa_emb=W2V.dictionary, seqs_filter=None, lbls_filter=None, trans=None):
 
     aspect = GoAspect(asp)
     seq2vec = Seq2Vec(aa_emb)
@@ -447,15 +445,15 @@ def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, tr
     if not os.path.exists(cafa3_train_dir):
         wget_and_unzip('CAFA3_training_data', data_dir, cafa3_train_url)
 
-    cafa3_go_tsv = '%s/%s/uniprot_sprot_exp.txt' % (data_dir, cafa3_train_dir)
-    cafa3_train_fasta = '%s/%s/uniprot_sprot_exp.fasta' % (data_dir, cafa3_train_dir)
+    cafa3_go_tsv = '%s/uniprot_sprot_exp.txt' % cafa3_train_dir
+    cafa3_train_fasta = '%s/uniprot_sprot_exp.fasta' % cafa3_train_dir
     seq_id2seq, seq_id2go_id, go_id2seq_id = \
         load_training_data_from_files(cafa3_go_tsv, cafa3_train_fasta, asp)
     if seqs_filter:
         filter_sequences_by(seqs_filter, seq_id2seq, seq_id2go_id)
     if lbls_filter:
         filter_labels_by(lbls_filter, seq_id2go_id, go_id2seq_id)
-    train_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=trans)
+    train_set = Dataset(seq_id2seq, seq_id2go_id, seq2vec, transform=trans)
 
     cafa3_targets_dir = '%s/Target files' % data_dir
     cafa3_mapping_dir = '%s/Mapping files' % data_dir
@@ -467,12 +465,12 @@ def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, tr
     trg_id2seq, _, _ = load_cafa3_targets(cafa3_targets_dir, cafa3_mapping_dir)
     num_mapping = count_lines(annots_fpath, sep=bytes('\n', 'utf8'))
     src_mapping = open(annots_fpath, 'r')
-    trg_id2go_id, go_id2trg_id = MappingFileLoader(src_mapping, num_mapping, annots_fname).load()
+    trg_id2go_id, go_id2trg_id = MappingFileLoader(src_mapping, num_mapping).load()
     if seqs_filter:
         filter_sequences_by(seqs_filter, trg_id2seq, trg_id2go_id)
     if lbls_filter:
         filter_labels_by(lbls_filter, trg_id2go_id, go_id2trg_id)
-    test_set = Dataset(trg_id2seq, seq2vec, trg_id2go_id, transform=trans)
+    test_set = Dataset(trg_id2seq, trg_id2go_id, seq2vec, transform=trans)
 
     seq_id2seq, seq_id2go_id, go_id2seq_id = \
         load_training_data_from_collections(db.goa_uniprot, db.uniprot, asp,
@@ -481,13 +479,9 @@ def load_cafa3(db, data_dir, asp, aa_emb, seqs_filter=None, lbls_filter=None, tr
         filter_sequences_by(seqs_filter, seq_id2seq, seq_id2go_id)
     if lbls_filter:
         filter_labels_by(lbls_filter, seq_id2go_id, go_id2seq_id)
-    valid_set = Dataset(seq_id2seq, seq2vec, seq_id2go_id, transform=trans)
+    valid_set = Dataset(seq_id2seq, seq_id2go_id, seq2vec, transform=trans)
 
-    all_labels = np.concatenate([train_set.labels, valid_set.labels, test_set.labels])
-    mlb = MultiLabelBinarizer(sparse_output=False).fit(all_labels)
-    train_set.mlb, valid_set.mlb, test_set.mlb = mlb, mlb, mlb
-
-    return train_set, valid_set, test_set, mlb
+    return train_set, valid_set, test_set
 
 
 def load_cafa2(db, data_dir, aa_emb, seqs_filter=None, lbls_filter=None, transform=None):

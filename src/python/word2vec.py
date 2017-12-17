@@ -1,4 +1,5 @@
 import os
+import sys
 import operator
 import numpy as np
 import pandas as pd
@@ -29,7 +30,6 @@ except ImportError as err:
 
 from tempfile import gettempdir
 
-import json
 
 import argparse
 
@@ -40,9 +40,12 @@ dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), A
 vocabulary_size = len(AA)
 n_clstr = 8
 
+import json
 print(json.dumps(dictionary, indent=1))
 
 assert vocabulary_size == 25
+
+verbose = False
 
 
 class BatchLoader(object):
@@ -61,6 +64,7 @@ class BatchLoader(object):
         else:
             self.stream = (seq for seq in self.test_set)
 
+        i, n = 1, size_test
         seq = self._get_sequence()
         seq_pos = 0
 
@@ -73,7 +77,10 @@ class BatchLoader(object):
 
             if seq_pos == 0:  # seq finished
                 try:
+                    if verbose:
+                        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
                     seq = self._get_sequence()
+                    i += 1
                 except (CursorNotFound, StopIteration) as e:
                     print(e)
                     break
@@ -82,7 +89,7 @@ class BatchLoader(object):
                     self._get_batch(seq, batch_buffer, labels_buffer, batch_pos=batch_pos, seq_pos=0)
 
             else:
-                yield np.copy(batch_buffer), np.copy(labels_buffer)
+                yield np.random.permutation(batch_buffer), np.random.permutation(labels_buffer)
 
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         return batch, labels, seq_pos, batch_pos
@@ -246,7 +253,7 @@ def train_w2v(model, train_loader, test_loader, criterion=nn.MSELoss(), get_loss
 
 
 def embeddings(w2v):
-    return w2v.emb_c.weight.data.numpy()
+    return w2v.emb.weight.data.numpy()
 
 
 class Word2VecAPI(object):
@@ -279,6 +286,10 @@ class Word2VecImpl(nn.Module):
         super(Word2VecImpl, self).__init__()
         self.emb_w = nn.Embedding(vocabulary_size, emb_size)
         self.emb_c = nn.Embedding(vocabulary_size, emb_size)
+
+    @property
+    def emb(self):
+        return self.emb_w
 
     def forward(self, x):
         return x
@@ -362,8 +373,7 @@ def plot(low_dim_embs, fname=None):
                      xy=(x, y),
                      xytext=(5, 2),
                      textcoords='offset points',
-                     ha='right',
-                     va='bottom')
+                     ha='right', va='bottom')
     if fname:
         fpath = os.path.join(ckptpath, fname)
         print("Saving to %s" % fpath)

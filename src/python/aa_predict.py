@@ -109,13 +109,11 @@ def device(device_str):
     return int(device_str[-1])
 
 
-def evaluate(model, loader):
-    model.eval()
-    test_loss = 0
-    f1 = 0
-    acc = 0
+def predict(model, loader):
+    # model.eval()
 
-    criterion = nn.CrossEntropyLoss()
+    pred, truth = [], []
+    criterion, test_loss = nn.CrossEntropyLoss(), 0
 
     for i, (batch_inputs, batch_labels) in enumerate(loader):
         inp = torch.from_numpy(batch_inputs).long()
@@ -124,15 +122,12 @@ def evaluate(model, loader):
         x = Variable(inp)
         y = Variable(lbl)
         y_hat = model(x)
-
-        pred = y_hat.data.cpu().numpy().argmax(axis=1)
-        truth = y.data.cpu().numpy()
-        acc += np.sum(pred == truth) / len(truth)
-        f1 += f1_score(truth, pred, average='micro')
         loss = criterion(y_hat, y)
         test_loss += loss.data[0]
+        pred.extend(y_hat.data.cpu().numpy().argmax(axis=1))
+        truth.extend(y.data.cpu().numpy())
 
-    return test_loss / i, f1 / i, acc / i
+    return np.array(truth), np.array(pred), test_loss/i
 
 
 def train(model, train_loader, test_loader):
@@ -195,7 +190,12 @@ def train(model, train_loader, test_loader):
 
             if (step + 1) % args.steps_per_stats == 0:
 
-                test_loss, f1, acc = evaluate(model, test_loader)
+                truth, pred, test_loss = predict(model, test_loader)
+
+                acc = np.sum(pred == truth) / truth.shape[0]
+
+                f1 = f1_score(truth, pred, average='micro')
+
                 print('Epoch [%d/%d], Train Loss: %.5f, Test Loss: %.5f, Test F1: %.2f, Test ACC: %.2f'
                       % (epoch + 1, num_epochs, train_loss / args.steps_per_stats, test_loss, f1, acc))
                 train_loss = 0
