@@ -9,7 +9,7 @@ from torch.autograd import Variable
 
 from pymongo import MongoClient
 
-import src.python.word2vec as W2V
+import word2vec as W2V
 vocabulary_size = W2V.vocabulary_size
 WindowBatchLoader = W2V.WindowBatchLoader
 
