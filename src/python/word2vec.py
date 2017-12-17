@@ -47,6 +47,8 @@ assert vocabulary_size == 25
 
 verbose = False
 
+print("WARNING! Deprecated. Please use aa_predict.py")
+
 
 class BatchLoader(object):
     def __init__(self, win_size, batch_size, train):

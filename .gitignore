@@ -7,6 +7,7 @@ prot2vec.Rproj
 
 data
 Data/*.obo
+Data/*.emb*
 
 models
 figures
