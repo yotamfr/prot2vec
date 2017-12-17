@@ -47,7 +47,7 @@ assert vocabulary_size == 25
 
 verbose = False
 
-print("WARNING! Deprecated. Please use aa_predict.py")
+print("WARNING! Deprecated!")
 
 
 class BatchLoader(object):
