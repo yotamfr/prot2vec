@@ -110,7 +110,7 @@ def device(device_str):
 
 
 def predict(model, loader):
-    # model.eval()
+    model.eval()
     if use_cuda:
         with torch.cuda.device(device(args.device)):
             model.cuda()
