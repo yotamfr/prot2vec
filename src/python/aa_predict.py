@@ -110,12 +110,12 @@ def device(device_str):
 
 
 def predict(model, loader):
-    model.eval()
+    # model.eval()
     if use_cuda:
         with torch.cuda.device(device(args.device)):
             model.cuda()
 
-    pred, truth = [], []
+    pred, truth, loss = [], [], []
     criterion, test_loss = nn.CrossEntropyLoss(), 0
 
     for i, (batch_inputs, batch_labels) in enumerate(loader):
@@ -130,12 +130,11 @@ def predict(model, loader):
         x = Variable(inp)
         y = Variable(lbl)
         y_hat = model(x)
-        loss = criterion(y_hat, y)
-        test_loss += loss.data[0]
+        loss.append(criterion(y_hat, y).data[0])
         pred.extend(y_hat.data.cpu().numpy().argmax(axis=1))
         truth.extend(y.data.cpu().numpy())
 
-    return np.array(truth), np.array(pred), test_loss/i
+    return np.array(truth), np.array(pred), np.mean(loss)
 
 
 def train(model, train_loader, test_loader):
