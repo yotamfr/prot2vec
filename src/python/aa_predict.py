@@ -197,21 +197,23 @@ class CNN(Model):
             nn.Conv2d(10, 10, kernel_size=(2, 1)),
             nn.Conv2d(10, 10, kernel_size=(2, 1)),
             nn.MaxPool2d((2, 1)))
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
-            nn.BatchNorm1d(hidden_size // 2),
-            nn.ReLU(inplace=True),
-            nn.Linear(hidden_size // 2, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(inplace=True))
-        self.fc = nn.Linear(hidden_size, vocabulary_size)
+        # self.classifier = nn.Sequential(
+        #     nn.Linear(hidden_size, hidden_size // 2),
+        #     nn.BatchNorm1d(hidden_size // 2),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_size // 2, hidden_size),
+        #     nn.BatchNorm1d(hidden_size),
+        #     nn.ReLU(inplace=True))
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, vocabulary_size),
+            nn.Dropout(0.9))
         self.sf = nn.Softmax()
 
     def forward(self, x):
         emb = self.emb(x)
         out = self.features(emb)
         out = out.view(out.size(0), -1)
-        out = self.classifier(out)
+        # out = self.classifier(out)
         out = self.fc(out)
         out = self.sf(out)
         return out
