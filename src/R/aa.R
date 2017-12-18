@@ -46,7 +46,7 @@ aa_feat[24,] <- NA
 aa_feat[25,] <- NA
 
 aa_feat[23,1] <- 'X'
-aa_feat[23,-1] <- apply(aa_feat[-(23:25), -1], 2, mean)
+aa_feat[23,-1] <- apply(aa_feat[-(23:25), -1], 2, median)
 aa_feat[24,1] <- 'B'
 aa_feat[24,-1] <- apply(aa_feat[3:4, -1], 2, mean)
 aa_feat[25,1] <- 'Z'
@@ -117,5 +117,5 @@ aa_sim[small, small] <- 1
 aa_sim[tiny, tiny] <- 1
 
 ### write the data
-write.csv(aa_feat, 'Data/aa_feat.csv')
+write.csv(aa_feat, 'Data/aa_feat.csv', row.names = F)
 write.csv(aa_sim, 'Data/aa_sim.csv', row.names = F)

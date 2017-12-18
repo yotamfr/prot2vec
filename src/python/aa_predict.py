@@ -13,6 +13,7 @@ from pymongo.errors import CursorNotFound
 from pymongo import MongoClient
 
 from sklearn.metrics import f1_score
+from sklearn import preprocessing
 
 from tempfile import gettempdir
 
@@ -23,7 +24,12 @@ aa_unlike = [np.where(aa_sim.loc[[w], :] == 0)[1] for w in range(0, 25)]
 AA = aa_sim.columns
 dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), AA))
 vocabulary_size = len(AA)
-n_clstr = 8
+
+aa_feat = pd.read_csv('Data/aa_feat.csv')
+min_max_scaler = preprocessing.MinMaxScaler()
+aa_feats = aa_feat.loc[:, aa_feat.columns != 'Short'].as_matrix()
+aa_feats = min_max_scaler.fit_transform(aa_feats)
+num_feats = aa_feats.shape[1]
 
 import json
 print(json.dumps(dictionary, indent=1))
@@ -75,6 +81,7 @@ class BatchLoader(object):
 
             else:
                 yield np.random.permutation(batch_buffer), np.random.permutation(labels_buffer)
+                # yield np.copy(batch_buffer), np.copy(labels_buffer)
 
     def _get_batch(self, seq, batch, labels, batch_pos=0, seq_pos=0):
         return batch, labels, seq_pos, batch_pos
@@ -150,46 +157,66 @@ def get_negative_samples(words):
     return np.array([np.random.choice(aa_unlike[w[0]], 1) for w in words])
 
 
-class CNN(nn.Module):
+class Model(nn.Module):
+
     def __init__(self, emb_size, win_size):
-        super(CNN, self).__init__()
-        hidden_size = 1024
+        super(Model, self).__init__()
+
+        self.emb1 = nn.Embedding(vocabulary_size, num_feats)
+        self.emb1.weight = nn.Parameter(torch.from_numpy(aa_feats).float())
+        self.emb1.requires_grad = False
+
         self.win_size = win_size
-        self.emb_size = emb_size
-        self.emb = nn.Embedding(vocabulary_size, emb_size)
+        self.inp_size = emb_size + num_feats
+        self.emb2 = nn.Embedding(vocabulary_size, emb_size)
+
+    def emb(self, x):
+        emb1 = self.emb1(x)
+        emb2 = self.emb2(x)
+        emb = torch.cat((emb1, emb2), 2)
+        return emb.unsqueeze(1)
+
+
+class CNN(Model):
+    def __init__(self, emb_size, win_size):
+        super(CNN, self).__init__(emb_size, win_size)
+
+        hidden_size = 1024
+        inp_size = self.inp_size
+
         self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=(emb_size, 3), padding=2),
+            nn.Conv2d(1, 64, kernel_size=(inp_size, 3), padding=2),
             nn.BatchNorm2d(64),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.conv2 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=(emb_size, 3), padding=2),
+            nn.Conv2d(64, 128, kernel_size=(inp_size, 3), padding=2),
             nn.BatchNorm2d(128),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.conv3 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=(emb_size, 3), padding=2),
+            nn.Conv2d(128, 256, kernel_size=(inp_size, 3), padding=2),
             nn.BatchNorm2d(256),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.lin1 = nn.Sequential(
             nn.Linear(1024, hidden_size),
             nn.BatchNorm1d(hidden_size),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.lin2 = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.BatchNorm1d(hidden_size // 2),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.lin3 = nn.Sequential(
             nn.Linear(hidden_size // 2, hidden_size),
             nn.BatchNorm1d(hidden_size),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.fc = nn.Linear(hidden_size, vocabulary_size)
         self.sf = nn.Softmax()
 
     def forward(self, x):
-        out = self.emb(x).unsqueeze(1)
-        out = self.conv1(out)
+        emb = self.emb(x)
+        out = self.conv1(emb)
         out = self.conv2(out)
         out = self.conv3(out)
         out = out.view(out.size(0), -1)
@@ -201,32 +228,32 @@ class CNN(nn.Module):
         return out
 
 
-class MLP(nn.Module):
+class MLP(Model):
 
     def __init__(self, emb_size, win_size):
-        super(MLP, self).__init__()
+        super(MLP, self).__init__(emb_size, win_size)
+
         hidden_size = 512
-        self.win_size = win_size
-        self.emb_size = emb_size
-        self.emb = nn.Embedding(vocabulary_size, emb_size)
+        inp_size = self.inp_size
+
         self.layer1 = nn.Sequential(
-            nn.Linear(2 * win_size * emb_size, hidden_size),
+            nn.Linear(2 * win_size * inp_size, hidden_size),
             nn.BatchNorm1d(hidden_size),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.layer2 = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.BatchNorm1d(hidden_size // 2),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.layer3 = nn.Sequential(
             nn.Linear(hidden_size // 2, hidden_size),
             nn.BatchNorm1d(hidden_size),
-            nn.Sigmoid())
+            nn.ReLU(inplace=True))
         self.fc = nn.Linear(hidden_size, vocabulary_size)
         self.sf = nn.Softmax()
 
     def forward(self, x):
-        out = self.emb(x)
-        out = out.view(out.size(0), -1)
+        emb = self.emb(x)
+        out = emb.view(emb.size(0), -1)
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
