@@ -205,7 +205,6 @@ class CNN(Model):
 
     def forward(self, x):
         emb = self.emb(x)
-        print(emb.size())
         out = self.features(emb)
         out = out.view(out.size(0), -1)
         out = self.classifier(out)

@@ -45,23 +45,6 @@ class CNN_AC(nn.Module):
         return out
 
 
-class ToAC(object):
-
-    def __init__(self, lag):
-        self.lag = lag
-
-    def __call__(self, seq):
-        n, J = seq.shape
-        Lag = self.lag
-        X = seq-np.sum(seq, axis=0)
-        X_t = X.transpose()
-        AC = np.zeros((J, Lag))
-        for lag in range(1, Lag):
-            tmp = np.divide(np.dot(X_t[:, :(n - lag)], X[lag:, :]), n-lag)
-            AC[:, lag] = np.diagonal(tmp)
-        return AC
-
-
 def train(model, train_dataset, test_dataset, output_dir):
 
     print("Training Model: #TRN=%d , #VLD=%d, #CLS=%d" %
