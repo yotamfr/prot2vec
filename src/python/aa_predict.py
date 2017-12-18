@@ -182,17 +182,21 @@ class CNN(Model):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__(emb_size, win_size)
 
-        hidden_size = 600
+        hidden_size = 100
         inp_size = self.inp_size
 
         self.features = nn.Sequential(
-            nn.Conv2d(1, 10, kernel_size=(2, inp_size)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
-            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
-            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
-            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
-            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
-            nn.MaxPool2d(2))
+            nn.Conv2d(1, 10, kernel_size=(2, inp_size - 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.MaxPool2d((2, 1)))
         self.classifier = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.BatchNorm1d(hidden_size // 2),
