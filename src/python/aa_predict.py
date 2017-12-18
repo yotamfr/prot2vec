@@ -24,15 +24,16 @@ aa_unlike = [np.where(aa_sim.loc[[w], :] == 0)[1] for w in range(0, 25)]
 AA = aa_sim.columns
 dictionary, reverse_dictionary = dict(zip(AA, range(25))), dict(zip(range(25), AA))
 vocabulary_size = len(AA)
+import json
+print(json.dumps(dictionary, indent=1))
 
 aa_feat = pd.read_csv('Data/aa_feat.csv')
 min_max_scaler = preprocessing.MinMaxScaler()
 aa_feats = aa_feat.loc[:, aa_feat.columns != 'Short'].as_matrix()
 aa_feats = min_max_scaler.fit_transform(aa_feats)
 num_feats = aa_feats.shape[1]
+print(num_feats)
 
-import json
-print(json.dumps(dictionary, indent=1))
 
 assert vocabulary_size == 25
 
@@ -181,26 +182,26 @@ class CNN(Model):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__(emb_size, win_size)
 
-        hidden_size = 1024
+        hidden_size = 5120
         inp_size = self.inp_size
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=(inp_size, 3), padding=2),
+            nn.Conv2d(1, 64, kernel_size=(inp_size, 3), padding=3),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.conv2 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=(inp_size, 3), padding=2),
+            nn.Conv2d(64, 128, kernel_size=(inp_size, 3), padding=12),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.conv3 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=(inp_size, 3), padding=2),
+            nn.Conv2d(128, 256, kernel_size=(inp_size, 3), padding=12),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2))
         self.lin1 = nn.Sequential(
-            nn.Linear(1024, hidden_size),
+            nn.Linear(5120, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(inplace=True))
         self.lin2 = nn.Sequential(
