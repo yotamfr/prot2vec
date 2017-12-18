@@ -182,33 +182,21 @@ class CNN(Model):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__(emb_size, win_size)
 
-        hidden_size = 5120
+        hidden_size = 600
         inp_size = self.inp_size
 
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=(inp_size, 3), padding=3),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 10, kernel_size=(2, inp_size)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
+            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
+            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
+            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
+            nn.Conv2d(10, 10, kernel_size=(2, 1), padding=1),
             nn.MaxPool2d(2))
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=(inp_size, 3), padding=12),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2))
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=(inp_size, 3), padding=12),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2))
-        self.lin1 = nn.Sequential(
-            nn.Linear(5120, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(inplace=True))
-        self.lin2 = nn.Sequential(
+        self.classifier = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.BatchNorm1d(hidden_size // 2),
-            nn.ReLU(inplace=True))
-        self.lin3 = nn.Sequential(
+            nn.ReLU(inplace=True),
             nn.Linear(hidden_size // 2, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(inplace=True))
@@ -217,13 +205,10 @@ class CNN(Model):
 
     def forward(self, x):
         emb = self.emb(x)
-        out = self.conv1(emb)
-        out = self.conv2(out)
-        out = self.conv3(out)
+        print(emb.size())
+        out = self.features(emb)
         out = out.view(out.size(0), -1)
-        out = self.lin1(out)
-        out = self.lin2(out)
-        out = self.lin3(out)
+        out = self.classifier(out)
         out = self.fc(out)
         out = self.sf(out)
         return out
