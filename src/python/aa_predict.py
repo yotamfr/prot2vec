@@ -206,7 +206,7 @@ class CNN(Model):
             nn.ReLU(inplace=True))
         self.fc = nn.Sequential(
             nn.Linear(hidden_size, vocabulary_size),
-            nn.Dropout(0.9))
+            nn.Dropout(0.1))
         self.sf = nn.Softmax()
 
     def forward(self, x):
