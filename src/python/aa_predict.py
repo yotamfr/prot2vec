@@ -182,28 +182,28 @@ class CNN(Model):
     def __init__(self, emb_size, win_size):
         super(CNN, self).__init__(emb_size, win_size)
 
-        hidden_size = 100
+        hidden_size = 1000
         inp_size = self.inp_size
 
         self.features = nn.Sequential(
             nn.Conv2d(1, 10, kernel_size=(2, inp_size - 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
+            nn.Conv2d(100, 100, kernel_size=(2, 1)),
             nn.MaxPool2d((2, 1)))
-        # self.classifier = nn.Sequential(
-        #     nn.Linear(hidden_size, hidden_size // 2),
-        #     nn.BatchNorm1d(hidden_size // 2),
-        #     nn.ReLU(inplace=True),
-        #     nn.Linear(hidden_size // 2, hidden_size),
-        #     nn.BatchNorm1d(hidden_size),
-        #     nn.ReLU(inplace=True))
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_size // 2, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(inplace=True))
         self.fc = nn.Sequential(
             nn.Linear(hidden_size, vocabulary_size),
             nn.Dropout(0.9))
@@ -213,7 +213,7 @@ class CNN(Model):
         emb = self.emb(x)
         out = self.features(emb)
         out = out.view(out.size(0), -1)
-        # out = self.classifier(out)
+        out = self.classifier(out)
         out = self.fc(out)
         out = self.sf(out)
         return out
