@@ -467,7 +467,7 @@ if __name__ == "__main__":
     M.USE_CUDA = 'gpu' in args.device
 
     if USE_CUDA:
-        os.environ['CUDA_VISIBLE_DEVICES'] = int(args.device[-1])
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.device[-1]
 
     verbose = not args.quiet
 
