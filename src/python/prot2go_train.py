@@ -1,8 +1,6 @@
 import os
 import sys
 
-sys.path.append('./../..')
-
 import random
 import time
 import datetime
@@ -20,16 +18,16 @@ from PIL import Image
 import visdom
 vis = visdom.Visdom()
 
-from src.python import prot2go_model as M
+import prot2go_model as M
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from src.python.preprocess import *
+from preprocess import *
 
-from src.python.prot2go_model import *
+from prot2go_model import *
 
-from src.python.geneontology import *
+from geneontology import *
 
 from pymongo import MongoClient
 
