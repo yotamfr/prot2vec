@@ -16,8 +16,8 @@ mfo, cco, bpo = None, None, None
 dim = 200
 num_epochs = 3
 
-# obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
-obo_src = "Data/go-basic.obo"
+obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
+# obo_src = "Data/go-basic.obo"
 
 verbose = True
 

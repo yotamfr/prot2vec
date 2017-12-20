@@ -15,7 +15,7 @@ from PIL import Image
 import visdom
 vis = visdom.Visdom()
 
-import src.python.prot2go_model as M
+from src.python import prot2go_model as M
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
