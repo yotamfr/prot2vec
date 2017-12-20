@@ -7,6 +7,10 @@ import torch.nn.functional as F
 USE_CUDA = False
 
 
+def set_cuda(val):
+    USE_CUDA = val
+
+
 def sequence_mask(sequence_length, max_len=None):
     if max_len is None:
         max_len = sequence_length.data.max()

@@ -4,6 +4,7 @@ import sys
 import random
 import time
 import datetime
+
 import math
 import numpy as np
 
@@ -11,6 +12,7 @@ import socket
 hostname = socket.gethostname()
 
 import io
+import torch
 import torchvision
 from torch import optim
 
@@ -18,16 +20,14 @@ from PIL import Image
 import visdom
 vis = visdom.Visdom()
 
-import prot2go_model as M
-
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-from preprocess import *
+from src.python.geneontology import *
 
-from prot2go_model import *
+from src.python.preprocess import *
 
-from geneontology import *
+from src.python.seq2go_model import *
 
 from pymongo import MongoClient
 
@@ -464,7 +464,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     USE_CUDA = 'gpu' in args.device
-    M.USE_CUDA = 'gpu' in args.device
+    set_cuda(USE_CUDA)
 
     if USE_CUDA:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.device[-1]

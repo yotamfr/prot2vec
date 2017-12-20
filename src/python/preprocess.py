@@ -1,12 +1,15 @@
+import os
 import sys
 import wget
 import datetime
+
+import numpy as np
 
 from numpy import unique
 
 from Bio.SeqIO import parse as parse_fasta
 
-from geneontology import *
+from .geneontology import *
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
 
@@ -443,7 +446,7 @@ def wget_and_unzip(sub_dir, rel_dir, url):
     os.remove(fname)
 
 
-def load_db(db, asp='F', codes=exp_codes, limit=None):
+def load_data(db, asp='F', codes=exp_codes, limit=None):
 
     q = {'Evidence': {'$in': codes}, 'DB': 'UniProtKB'}
     c = limit if limit else db.goa_uniprot.count(q)

@@ -6,8 +6,8 @@ prot2vec.Rproj
 .idea/
 
 data
-Data/*.obo
-Data/*.emb*
+src/python/Data/*.obo
+src/python/Data/*.emb*
 
 models
 figures
@@ -25,6 +25,8 @@ build
 dist
 
 *.ipynb*
-prot2vec.ipynb
 .ipynb_checkpoints
 .Rproj.user
+
+src/__pycache__/
+src/python/__pycache__/
