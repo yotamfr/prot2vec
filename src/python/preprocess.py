@@ -1,16 +1,11 @@
-import sys
 import wget
 import datetime
 
 from numpy import unique
 
-from functools import reduce
-
 from Bio.SeqIO import parse as parse_fasta
 
 from src.python.geneontology import *
-
-import src.python.aa_predict as AA
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
 
@@ -24,6 +19,42 @@ cafa2_data_url = 'https://ndownloader.figshare.com/files/3658395'
 cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-targets.tgz'
 
 verbose = True
+
+
+class AminoAcids(object):
+
+    def __init__(self):
+        self.dictionary =\
+            {
+             "A": 0,
+             "R": 1,
+             "N": 2,
+             "D": 3,
+             "C": 4,
+             "E": 5,
+             "Q": 6,
+             "G": 7,
+             "H": 8,
+             "I": 9,
+             "L": 10,
+             "K": 11,
+             "M": 12,
+             "F": 13,
+             "P": 14,
+             "O": 15,
+             "U": 16,
+             "S": 17,
+             "T": 18,
+             "W": 19,
+             "Y": 20,
+             "V": 21,
+             "X": 22,
+             "B": 23,
+             "Z": 24
+            }
+
+
+AA = AminoAcids()
 
 
 def blocks(files, size=8192*1024):
