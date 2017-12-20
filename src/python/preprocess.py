@@ -1,3 +1,4 @@
+import sys
 import wget
 import datetime
 
@@ -5,7 +6,7 @@ from numpy import unique
 
 from Bio.SeqIO import parse as parse_fasta
 
-from src.python.geneontology import *
+from geneontology import *
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
 
