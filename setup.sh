@@ -65,7 +65,7 @@ pip install pandas
 
 pip install biopython
 
-pip install git+https://github.com/RaRe-Technologies/gensim.git # gensim with poincare emb
+pip install git+https://github.com/RaRe-Technologies/gensim.git     # gensim with poincare emb
 
 pip install pymongo
 
@@ -74,6 +74,8 @@ pip install tqdm
 pip install networkx
 
 pip install obonet
+
+pip install sconce      # Sconce is a dashboard for monitoring and comparing data in real time.
 
 ### install virtualenv as kernel to ipython notebook
 pip install ipykernel

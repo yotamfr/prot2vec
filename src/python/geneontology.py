@@ -1,7 +1,10 @@
 import os
+import sys
 import obonet
 import numpy as np
 import networkx as nx
+
+from functools import reduce
 
 from sklearn.preprocessing import MultiLabelBinarizer
 
@@ -10,11 +13,13 @@ from gensim.models.poincare import PoincareModel, PoincareKeyedVectors
 go_graph = None
 mfo, cco, bpo = None, None, None
 
-dim = 300
-num_epochs = 5
+dim = 200
+num_epochs = 3
 
 # obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
 obo_src = "Data/go-basic.obo"
+
+verbose = True
 
 
 def initialize_go():
@@ -42,9 +47,12 @@ def get_ontology(aspect):
         print('Unknown ontology')
 
 
-def embedding(onto_graph, emb_fname):
-    is_a = onto_graph.edges()
-    model = PoincareModel(train_data=is_a, size=dim)
+def embedding(namespace, emb_fname):
+    graph = go_graph.copy()
+    for n, attr in go_graph._node.items():
+        if attr['namespace'] != namespace:
+            graph.remove_node(n)
+    model = PoincareModel(train_data=graph.edges(), size=dim)
     model.train(epochs=num_epochs, print_every=500)
     model.kv.save(emb_fname)
     return model.kv
@@ -55,6 +63,11 @@ def get_ontology_graph(namespace):
     for n, attr in go_graph._node.items():
         if attr['namespace'] != namespace:
             onto_graph.remove_node(n)
+    for (u, v) in go_graph.edges():
+        d = onto_graph.get_edge_data(u, v)
+        if not d or 'is_a' not in d:
+            if onto_graph.has_edge(u, v):
+                onto_graph.remove_edge(u, v)
     return onto_graph
 
 
@@ -85,13 +98,14 @@ class Ontology(object):
         :param ns: ['molecular_function', 'biological_process', 'cellular_component']
 
         """
+
         self._aspect = aspect = GoAspect(ns)
         self._graph = G = get_ontology_graph(ns)
-        classes = list(nx.topological_sort(G))
+        classes = list(reversed(list(nx.topological_sort(G))))
 
         self._mlb = MultiLabelBinarizer().fit([classes])
 
-        key_val = zip(self.classes, list(range(len(G))))
+        key_val = [(go, i) for i, go in enumerate(classes)]
         self._direct_dict = {k: v for k, v in key_val}
         self._reverse_dict = {v: k for k, v in key_val}
 
@@ -101,11 +115,25 @@ class Ontology(object):
         if os.path.exists(emb_fname):
             self._kv = PoincareKeyedVectors.load(emb_fname)
         else:
-            self._kv = embedding(G, emb_fname)
+            self._kv = embedding(ns, emb_fname)
 
     @property
     def classes(self):
         return self._mlb.classes_
+
+    def sort(self, go_terms):
+        return sorted(go_terms, key=lambda go: self[go])
+
+    def augment(self, go_terms, max_length=None):
+        G = self._graph
+        lbl = set(filter(lambda x: G.has_node(x), go_terms))
+        if max_length:
+            anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
+            aug = set([k for d in anc for k, v in d.items() if v <= max_length])
+        else:
+            anc = map(lambda go: nx.descendants(G, go), lbl)
+            aug = reduce(lambda x, y: x | y, anc, lbl)
+        return aug
 
     def binarize(self, labels):
         return self._mlb.transform(labels)
@@ -123,3 +151,12 @@ class Ontology(object):
 
     def __len__(self):
         return len(self.classes)
+
+
+if __name__=="__main__":
+    onto = get_ontology('P')
+    print(onto.sort(["GO:0065007",
+                     "GO:0008150",
+                     "GO:0008152",
+                     "GO:0009987",
+                     "GO:0006807"]))

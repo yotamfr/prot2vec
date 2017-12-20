@@ -10,7 +10,7 @@ from Bio.SeqIO import parse as parse_fasta
 
 from src.python.geneontology import *
 
-import src.python.word2vec as W2V
+import src.python.aa_predict as AA
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
 
@@ -182,7 +182,7 @@ class Identity(object):
 class Dataset(object):
 
     def __init__(self, uid2seq, uid2lbl, ontology,
-                 embedder=Seq2Vec(W2V.dictionary),
+                 embedder=Seq2Vec(AA.dictionary),
                  transform=Identity()):
 
         self._emb = embedder
@@ -205,18 +205,11 @@ class Dataset(object):
 
     def augment(self, max_length=None):
         n, m = len(self), 0
-        G = self.onto._graph
+        onto = self.onto
         for i, record in enumerate(self.records):
             if verbose:
                 sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
-            lbl = set(filter(lambda x: G.has_node(x), record.lbl))
-
-            if max_length:
-                anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
-                record.lbl = set([k for d in anc for k, v in d.items() if v <= max_length])
-            else:
-                anc = map(lambda go: nx.descendants(G, go), lbl)
-                record.lbl = reduce(lambda x, y: x | y, anc, lbl)
+            record.lbl = onto.augment(record.lbl, max_length)
 
     def __str__(self):
         num_anno = sum(map(lambda record: len(record.lbl), self.records))
@@ -437,7 +430,7 @@ def load_db(db, asp='F', codes=exp_codes, limit=None):
     return Dataset(seqid2seq, seqid2goid, onto), goid2seqid
 
 
-def load_cafa3(db, data_dir, asp, aa_emb=W2V.dictionary, seqs_filter=None, lbls_filter=None, trans=None):
+def load_cafa3(db, data_dir, asp, aa_emb=AA.dictionary, seqs_filter=None, lbls_filter=None, trans=None):
 
     aspect = GoAspect(asp)
     seq2vec = Seq2Vec(aa_emb)
