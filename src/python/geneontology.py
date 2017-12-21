@@ -101,7 +101,7 @@ class Ontology(object):
 
         self._aspect = aspect = GoAspect(ns)
         self._graph = G = get_ontology_graph(ns)
-        classes = list(reversed(list(nx.topological_sort(G))))
+        classes = list(nx.topological_sort(G))
 
         self._mlb = MultiLabelBinarizer().fit([classes])
 
