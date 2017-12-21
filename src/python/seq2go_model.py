@@ -8,6 +8,7 @@ USE_CUDA = False
 
 
 def set_cuda(val):
+    global USE_CUDA
     USE_CUDA = val
 
 
