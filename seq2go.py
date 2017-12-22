@@ -50,8 +50,8 @@ EOS_token = 2
 MIN_LENGTH = 1
 MAX_LENGTH = 500
 
-# MIN_COUNT = 5
-MIN_COUNT = 2
+MIN_COUNT = 5
+# MIN_COUNT = 2
 
 
 class Lang(object):
@@ -475,8 +475,10 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-m", "--max_length", type=int, default=500,
+    parser.add_argument("-t", "--max_length", type=int, default=500,
                         help="Max sequence length (both input and output).")
+    parser.add_argument("-c", "--min_count", type=int, default=5,
+                        help="Minimal word count (both input and output).")
 
 
 if __name__ == "__main__":
@@ -490,6 +492,7 @@ if __name__ == "__main__":
     set_cuda(USE_CUDA)
 
     MAX_LENGTH = args.max_length
+    MIN_COUNT = args.min_count
 
     if USE_CUDA:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.device[-1]
