@@ -39,6 +39,8 @@ verbose = True
 
 USE_CUDA = False
 
+KMER = 3
+
 PAD_token = 0
 SOS_token = 1
 EOS_token = 2
@@ -126,9 +128,28 @@ def filter_pairs(pairs_gen):
     return original_pairs, filtered_pairs
 
 
-def prepare_data():
-    pairs_gen = ((seqid2seq[seqid], onto.sort(onto.augment(annots)))
-                 for (seqid, annots) in seqid2goid.items())
+def get_kmer_sentences(seq, k, offset=0):
+    return list(filter(
+        lambda kmer: len(kmer) == k, [seq[i:min(i + k, len(seq))]
+                                      for i in range(offset, len(seq), k)]))
+
+
+class PairsGen(object):
+
+    def __init__(self, kmer):
+        self.k = kmer
+
+    def __iter__(self):
+
+        for (seqid, annots) in seqid2goid.items():
+            seq = seqid2seq[seqid]
+            go_sent = onto.sort(onto.augment(annots))
+            for offset in range(self.k):
+                kmer_sent = get_kmer_sentences(seq, self.k, offset)
+                yield (kmer_sent, go_sent)
+
+
+def prepare_data(pairs_gen):
 
     pairs1, pairs2 = filter_pairs(pairs_gen)
     print("Filtered %d to %d pairs" % (len(pairs1), len(pairs2)))
@@ -454,6 +475,8 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
+    parser.add_argument("-m", "--max_length", type=int, default=500,
+                        help="Max sequence length (both input and output).")
 
 
 if __name__ == "__main__":
@@ -465,6 +488,8 @@ if __name__ == "__main__":
 
     USE_CUDA = 'gpu' in args.device
     set_cuda(USE_CUDA)
+
+    MAX_LENGTH = args.max_length
 
     if USE_CUDA:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.device[-1]
@@ -480,7 +505,8 @@ if __name__ == "__main__":
 
     input_lang = Lang("AA")
     output_lang = Lang("GO")
-    pairs = prepare_data()
+    gen = PairsGen(KMER)
+    pairs = prepare_data(gen)
 
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
