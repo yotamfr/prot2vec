@@ -475,7 +475,7 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-t", "--max_length", type=int, default=500,
+    parser.add_argument("-l", "--max_length", type=int, default=500,
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=5,
                         help="Minimal word count (both input and output).")
