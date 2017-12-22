@@ -143,10 +143,10 @@ class PairsGen(object):
 
         for (seqid, annots) in seqid2goid.items():
             seq = seqid2seq[seqid]
-            go_sent = onto.sort(onto.augment(annots))
+            sent_go = onto.sort(onto.augment(annots))
             for offset in range(self.k):
-                kmer_sent = get_kmer_sentences(seq, self.k, offset)
-                yield (kmer_sent, go_sent)
+                sent_kmer = get_kmer_sentences(seq, self.k, offset)
+                yield (sent_kmer, sent_go)
 
 
 def prepare_data(pairs_gen):
@@ -495,6 +495,7 @@ if __name__ == "__main__":
     MIN_COUNT = args.min_count
 
     if USE_CUDA:
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ['CUDA_VISIBLE_DEVICES'] = args.device[-1]
 
     verbose = not args.quiet
