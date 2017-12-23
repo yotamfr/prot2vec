@@ -6,6 +6,8 @@ import networkx as nx
 
 from functools import reduce
 
+from tempfile import gettempdir
+
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from gensim.models.poincare import PoincareModel, PoincareKeyedVectors
@@ -15,6 +17,8 @@ mfo, cco, bpo = None, None, None
 
 dim = 200
 num_epochs = 3
+
+DATA_ROOT = gettempdir()
 
 obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
 # obo_src = "Data/go-basic.obo"
@@ -109,8 +113,9 @@ class Ontology(object):
         self._direct_dict = {k: v for k, v in key_val}
         self._reverse_dict = {v: k for k, v in key_val}
 
-        emb_fname = 'Data/%s-poincare-dim%d-epochs%d.emb' \
-                    % (aspect, dim, num_epochs)
+        emb_fname = os.path.join('%s/%s-poincare-dim%d-epochs%d.emb'
+                                 % (DATA_ROOT, aspect, dim, num_epochs)) \
+
 
         if os.path.exists(emb_fname):
             self._kv = PoincareKeyedVectors.load(emb_fname)

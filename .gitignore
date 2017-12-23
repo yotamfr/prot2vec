@@ -6,8 +6,7 @@ prot2vec.Rproj
 .idea/
 
 data
-src/python/Data/*.obo
-src/python/Data/*.emb*
+Data/*.obo
 
 models
 figures
