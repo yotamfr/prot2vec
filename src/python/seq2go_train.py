@@ -488,7 +488,7 @@ def add_arguments(parser):
     parser.add_argument("-p", "--print_every", type=int, default=1,
                         help="How often should main_loop print training stats.")
     parser.add_argument("-e", "--eval_every", type=int, default=100,
-                        help="How often should main_loop evaluate the models.")
+                        help="How often should main_loop evaluate the model.")
     parser.add_argument("-l", "--max_length", type=int, default=500,
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=5,
@@ -652,4 +652,4 @@ if __name__ == "__main__":
 
     test_models()
 
-    main_loop(print_every=args.print_every)
+    main_loop(print_every=args.print_every, evaluate_every=args.eval_every)
