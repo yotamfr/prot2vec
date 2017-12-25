@@ -5,6 +5,7 @@ import random
 import time
 
 import math
+import numpy as np
 
 from shutil import copyfile
 
@@ -680,7 +681,7 @@ if __name__ == "__main__":
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
 
-    pairs = trim_pairs(pairs)
+    pairs = np.random.permutation(trim_pairs(pairs))
 
     test_models()
 
