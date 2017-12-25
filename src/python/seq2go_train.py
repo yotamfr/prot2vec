@@ -489,8 +489,6 @@ def add_arguments(parser):
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=5,
                         help="Minimal word count (both input and output).")
-    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
 
 
 def save_checkpoint(state, is_best=False):
