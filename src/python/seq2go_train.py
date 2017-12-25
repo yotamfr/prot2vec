@@ -29,7 +29,7 @@ from .preprocess import *
 
 from .seq2go_model import *
 
-from .kmer2vec import Kmer2Vec, get_kmer_sentences
+from .embedding2 import *
 
 from pymongo import MongoClient
 
@@ -518,7 +518,10 @@ def main_loop(
     print_every=20,
     evaluate_every=1000
 ):
-    kmer_w2v = Kmer2Vec(db, 3)
+
+    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
+    kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
+
     input_embedding = np.array([kmer_w2v[kmer] for kmer
                                 in sorted(input_lang.word2index.keys(),
                                           key=lambda k: input_lang.word2index[k])])

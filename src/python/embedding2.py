@@ -34,30 +34,30 @@ class KmerSentencesLoader(object):
         pbar.close()
 
 
-class Kmer2Vec(object):
+class Word2VecWrapper(object):
 
-    def __init__(self, db, kmer_size, win_size=25, vec_size=100, min_count=2,
-                 src='sp', arch='sg', n_threads=3, b_train=False):
+    def __init__(self, name, loader, win_size=25, vec_size=100, min_count=2,
+                 arch='sg', n_threads=4, b_train=False):
 
         t = n_threads
-        k, c, d, mc = kmer_size, win_size, vec_size, min_count
+        c, d, mc = win_size, vec_size, min_count
 
-        unique_str = "gensim-%s-%s-%smer-dim%s-win%s" % (arch, src, k, d, c)
+        unique_str = "%s-%s-dim%d-win%d" % (name, arch, d, c)
         model_filename = "%s/%s.emb" % (DATA_ROOT, unique_str)
         if not b_train and os.path.exists(model_filename):
             self._model = Word2Vec.load(model_filename)
         else:
-            print("Training %s on %s (size=%s, window=%s, min_count=%s, workers=%s)"
-                  % (arch, src, d, c, mc, t))
 
-            stream = map(lambda p: p['sequence'], db.uniprot.find({'db': src}))
+            sg = int(arch == 'sg')
+            print("Training %s with gensim (sg=%d, size=%d, window=%d, min_count=%d, workers=%d)"
+                  % (name, sg, d, c, mc, t))
 
-            self._model = Word2Vec(KmerSentencesLoader(k, list(stream)),
+            self._model = Word2Vec(loader,
                                    size=d,
                                    window=c,
                                    min_count=mc,
                                    workers=t,
-                                   sg=(arch == 'sg'))
+                                   sg=sg)
             self._model.save(model_filename)
 
     def similarity(self, w1, w2):
