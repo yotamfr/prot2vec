@@ -80,7 +80,7 @@ class EncoderRNN(nn.Module):
             embedding_size = embedding.shape[1]
             self.embedding = nn.Embedding(input_size, embedding_size)
             self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())
-            self.embedding.requires_grad = True
+            self.embedding.requires_grad = False
         else:
             self.embedding_size = embedding_size = hidden_size
             self.embedding = nn.Embedding(input_size, embedding_size)
@@ -206,7 +206,7 @@ class LuongAttnDecoderRNN(nn.Module):
             self.embedding_size = embedding_size = embedding.shape[1]
             self.embedding = nn.Embedding(output_size, embedding_size)
             self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())
-            self.embedding.requires_grad = True
+            self.embedding.requires_grad = False
         else:
             self.embedding_size = embedding_size = hidden_size
             self.embedding = nn.Embedding(output_size, embedding_size)
