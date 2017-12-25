@@ -525,9 +525,16 @@ def main_loop(
     input_embedding = np.array([kmer_w2v[kmer] for kmer
                                 in sorted(input_lang.word2index.keys(),
                                           key=lambda k: input_lang.word2index[k])])
+
+    dummy_embedding = np.random.rand(3, input_embedding.shape[1])
+    input_embedding = np.concatenate((dummy_embedding, input_embedding))
+
     output_embedding = np.array([onto.todense(go) for go
                                  in sorted(output_lang.word2index.keys(),
                                            key=lambda k: output_lang.word2index[k])])
+
+    dummy_embedding = np.random.rand(3, output_embedding.shape[1])
+    output_embedding = np.concatenate((dummy_embedding, output_embedding))
 
     # Initialize models
     encoder = EncoderRNN(input_lang.n_words, encoder_hidden_size, n_layers,
