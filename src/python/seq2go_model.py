@@ -227,7 +227,7 @@ class LuongAttnDecoderRNN(nn.Module):
         batch_size = input_seq.size(0)
         embedded = self.embedding(input_seq)
         embedded = self.embedding_dropout(embedded)
-        embedded = embedded.view(1, batch_size, self.embedding_size)  # S=1 x B x N
+        embedded = embedded.view(1, batch_size, -1)  # S=1 x B x N
 
         # Get current hidden state from input word and last hidden state
         rnn_output, hidden = self.gru(embedded, last_hidden)
