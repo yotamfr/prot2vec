@@ -134,7 +134,7 @@ def filter_pairs(pairs_gen):
     return original_pairs, filtered_pairs
 
 
-class PairsGen(object):
+class KmerGoPairsGen(object):
 
     def __init__(self, kmer):
         self.k = kmer
@@ -146,6 +146,8 @@ class PairsGen(object):
             sent_go = onto.sort(onto.augment(annots))
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
+                if not np.all([w in kmer_w2v for w in sent_kmer]):
+                    continue
                 yield (sent_kmer, sent_go)
 
 
@@ -294,7 +296,6 @@ def train(input_batches, input_lengths, target_batches, target_lengths, encoder,
     # Zero gradients of both optimizers
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
-    loss = 0  # Added onto for each word
 
     # Run words through encoder
     encoder_outputs, encoder_hidden = encoder(input_batches, input_lengths, None)
@@ -519,9 +520,6 @@ def main_loop(
     evaluate_every=1000
 ):
 
-    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
-    kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
-
     input_embedding = np.array([kmer_w2v[kmer] for kmer
                                 in sorted(input_lang.word2index.keys(),
                                           key=lambda k: input_lang.word2index[k])])
@@ -646,12 +644,15 @@ if __name__ == "__main__":
     db = client['prot2vec']
 
     onto = get_ontology('F')
+    
+    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
+    kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
 
     seqid2seq, goid2seqid, seqid2goid = load_data(db, 'F', limit=None)
 
-    input_lang = Lang("kMER")
+    input_lang = Lang("KMER")
     output_lang = Lang("GO")
-    gen = PairsGen(KMER)
+    gen = KmerGoPairsGen(KMER)
     pairs = prepare_data(gen)
 
     input_lang.trim(MIN_COUNT)
