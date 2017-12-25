@@ -503,7 +503,7 @@ def main_loop(
     # Configure models
     attn_model='general',
     decoder_hidden_size=500,
-    encoder_hidden_size=1000,
+    encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
     batch_size=50,
@@ -519,6 +519,7 @@ def main_loop(
     print_every=20,
     evaluate_every=1000
 ):
+    assert encoder_hidden_size == decoder_hidden_size
 
     input_embedding = np.array([kmer_w2v[kmer] for kmer
                                 in sorted(input_lang.word2index.keys(),
