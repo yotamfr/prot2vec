@@ -44,10 +44,11 @@ class Word2VecWrapper(object):
 
         unique_str = "%s-%s-dim%d-win%d" % (name, arch, d, c)
         model_filename = "%s/%s.emb" % (DATA_ROOT, unique_str)
+
         if not b_train and os.path.exists(model_filename):
+            print("Loading %s" % model_filename)
             self._model = Word2Vec.load(model_filename)
         else:
-
             sg = int(arch == 'sg')
             print("Training %s with gensim (sg=%d, size=%d, window=%d, min_count=%d, workers=%d)"
                   % (name, sg, d, c, mc, t))

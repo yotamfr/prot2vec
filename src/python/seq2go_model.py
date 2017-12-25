@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -74,7 +76,7 @@ class EncoderRNN(nn.Module):
         self.dropout = dropout
 
         # Define layers
-        if embedding:
+        if np.any(embedding):
             embedding_size = embedding.shape[1]
             self.embedding = nn.Embedding(input_size, embedding_size)
             self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())
@@ -200,7 +202,7 @@ class LuongAttnDecoderRNN(nn.Module):
         self.dropout = dropout
 
         # Define layers
-        if embedding:
+        if np.any(embedding):
             embedding_size = embedding.shape[1]
             self.embedding = nn.Embedding(output_size, embedding_size)
             self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())

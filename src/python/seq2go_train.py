@@ -146,7 +146,7 @@ class KmerGoPairsGen(object):
             sent_go = onto.sort(onto.augment(annots))
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
-                if not np.all([w in kmer_w2v for w in sent_kmer]):
+                if not np.all([(w in kmer_w2v) for w in sent_kmer]):
                     continue
                 yield (sent_kmer, sent_go)
 
