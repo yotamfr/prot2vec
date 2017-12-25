@@ -489,20 +489,22 @@ def add_arguments(parser):
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=5,
                         help="Minimal word count (both input and output).")
+    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
 
 
-def save_checkpoint(state, is_best):
+def save_checkpoint(state, is_best=False):
     filename_late = "%s/seq2go_latest.tar" % ckptpath
-    filename_best = "%s/seq2go_best.tar" % ckptpath
     torch.save(state, filename_late)
     if is_best:
+        filename_best = "%s/seq2go_best.tar" % ckptpath
         copyfile(filename_late, filename_best)
 
 
 def main_loop(
     # Configure models
     attn_model='general',
-    decoder_hidden_size=1000,
+    decoder_hidden_size=500,
     encoder_hidden_size=1000,
     n_layers=2,
     dropout=0.1,
@@ -536,6 +538,19 @@ def main_loop(
     # Initialize optimizers and criterion
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+
+    # optionally resume from a checkpoint
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '%s'" % args.resume)
+            checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage)
+            epoch = checkpoint['epoch']
+            encoder.load_state_dict(checkpoint['encoder'])
+            decoder.load_state_dict(checkpoint['decoder'])
+            encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer'])
+            decoder_optimizer.load_state_dict(checkpoint['decoder_optimizer'])
+        else:
+            print("=> no checkpoint found at '%s'" % args.resume)
 
     # Move models to GPU
     if USE_CUDA:
@@ -599,6 +614,14 @@ def main_loop(
 
         if epoch % evaluate_every == 0:
             evaluate_randomly(encoder, decoder)
+
+        save_checkpoint({
+            'epoch': epoch,
+            'encoder': encoder.state_dict(),
+            'decoder': decoder.state_dict(),
+            'encoder_optimizer': encoder_optimizer.state_dict(),
+            'decoder_optimizer': decoder_optimizer.state_dict()
+            })
 
         if not SHOW_PLOT:
             continue
