@@ -8,17 +8,16 @@ import math
 
 from shutil import copyfile
 
+import torchvision
 from torch import optim
 
 import io
-import sconce
-
-import torch
-import torchvision
 
 from PIL import Image
 import visdom
 vis = visdom.Visdom()
+
+import sconce
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -29,6 +28,8 @@ hostname = socket.gethostname()
 from .preprocess import *
 
 from .seq2go_model import *
+
+from .kmer2vec import Kmer2Vec, get_kmer_sentences
 
 from pymongo import MongoClient
 
@@ -131,12 +132,6 @@ def filter_pairs(pairs_gen):
         if MIN_LENGTH <= len(pair[0]) <= MAX_LENGTH and MIN_LENGTH <= len(pair[1]) <= MAX_LENGTH:
             filtered_pairs.append(pair)
     return original_pairs, filtered_pairs
-
-
-def get_kmer_sentences(seq, k, offset=0):
-    return list(filter(
-        lambda kmer: len(kmer) == k, [seq[i:min(i + k, len(seq))]
-                                      for i in range(offset, len(seq), k)]))
 
 
 class PairsGen(object):
@@ -487,7 +482,7 @@ def add_arguments(parser):
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
     parser.add_argument("-p", "--print_every", type=int, default=1,
                         help="How often should main_loop print training stats.")
-    parser.add_argument("-e", "--eval_every", type=int, default=100,
+    parser.add_argument("-e", "--eval_every", type=int, default=10,
                         help="How often should main_loop evaluate the model.")
     parser.add_argument("-l", "--max_length", type=int, default=500,
                         help="Max sequence length (both input and output).")
@@ -505,8 +500,9 @@ def save_checkpoint(state, is_best):
 
 def main_loop(
     # Configure models
-    attn_model='dot',
-    hidden_size=500,
+    attn_model='general',
+    decoder_hidden_size=500,
+    encoder_hidden_size=2000,
     n_layers=2,
     dropout=0.1,
     batch_size=50,
@@ -522,10 +518,19 @@ def main_loop(
     print_every=20,
     evaluate_every=1000
 ):
+    kmer_w2v = Kmer2Vec(db, 3)
+    input_embedding = np.array([kmer_w2v[kmer] for kmer
+                                in sorted(input_lang.word2index.keys(),
+                                          key=lambda k: input_lang.word2index[k])])
+    output_embedding = np.array([onto.todense(go) for go
+                                 in sorted(output_lang.word2index.keys(),
+                                           key=lambda k: output_lang.word2index[k])])
 
     # Initialize models
-    encoder = EncoderRNN(input_lang.n_words, hidden_size, n_layers, dropout=dropout)
-    decoder = LuongAttnDecoderRNN(attn_model, hidden_size, output_lang.n_words, n_layers, dropout=dropout)
+    encoder = EncoderRNN(input_lang.n_words, encoder_hidden_size, n_layers,
+                         dropout=dropout, embedding=input_embedding)
+    decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
+                                  dropout=dropout, embedding=output_embedding)
 
     # Initialize optimizers and criterion
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
@@ -540,7 +545,8 @@ def main_loop(
         'attn_model': attn_model,
         'n_layers': n_layers,
         'dropout': dropout,
-        'hidden_size': hidden_size,
+        'decoder_hidden_size': decoder_hidden_size,
+        'encoder_hidden_size': encoder_hidden_size,
         'learning_rate': learning_rate,
         'clip': clip,
         'teacher_forcing_ratio': teacher_forcing_ratio,
@@ -640,7 +646,7 @@ if __name__ == "__main__":
 
     seqid2seq, goid2seqid, seqid2goid = load_data(db, 'F', limit=None)
 
-    input_lang = Lang("AA")
+    input_lang = Lang("kMER")
     output_lang = Lang("GO")
     gen = PairsGen(KMER)
     pairs = prepare_data(gen)

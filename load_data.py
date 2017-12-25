@@ -24,8 +24,7 @@ parser.add_argument('--exp', action='store_true', default=False,
 args = parser.parse_args()
 
 client = MongoClient(args.mongo_url)
-db_name = 'prot2vec'
-db = client[db_name]
+db = client['prot2vec']
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
 
@@ -116,11 +115,11 @@ def load_gaf(filename, collection, start=0):
 def add_single_sequence(fasta, collection):
 
     qpid, sequence, header = fasta.id, fasta.seq, fasta.description
-    db_id, unique_identifier, entry_name = qpid.split(' ')[0].split('|')
+    db_name, unique_identifier, entry_name = qpid.split(' ')[0].split('|')
 
     prot = {
         "primary_accession": unique_identifier,
-        "db": db_id,
+        "db": db_name,
         "entry_name": entry_name,
         "sequence": str(sequence),
         "length": len(sequence),
@@ -185,6 +184,8 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_trembl.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
+        db.uniprot.remove({'db': 'tr'})  # prevent duplications
+
         load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
     elif args.collection == "sprot":
@@ -192,6 +193,8 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_sprot.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
+        db.uniprot.remove({'db': 'sp'})  # prevent duplications
+
         load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
     elif args.collection == "goa_uniprot":
@@ -199,6 +202,8 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
         fname = "goa_uniprot_all.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
+        db.goa_uniprot.drop()  # prevent duplications
+
         load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot)
 
     elif args.collection == "goa_uniprot_noiea":
@@ -206,6 +211,8 @@ if __name__ == "__main__":
         prefix = "http://geneontology.org/gene-associations"
         fname = "goa_uniprot_all_noiea.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
+        db.goa_uniprot_noiea.drop()  # prevent duplications
+
         load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot_noiea)
 
     elif args.collection == "goa_pdb":
@@ -213,6 +220,8 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/PDB"
         fname = "goa_pdb.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
+        db.goa_pdb.drop()  # prevent duplications
+
         load_gaf("%s/%s" % (data_dir, fname), db.goa_pdb)
 
     else:

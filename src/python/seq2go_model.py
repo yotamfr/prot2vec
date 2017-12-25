@@ -65,7 +65,7 @@ def masked_cross_entropy(logits, target, length):
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1):
+    def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1, embedding=None):
         super(EncoderRNN, self).__init__()
 
         self.input_size = input_size
@@ -73,8 +73,17 @@ class EncoderRNN(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
 
-        self.embedding = nn.Embedding(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
+        # Define layers
+        if embedding:
+            embedding_size = embedding.shape[1]
+            self.embedding = nn.Embedding(input_size, embedding_size)
+            self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())
+            self.embedding.requires_grad = True
+        else:
+            embedding_size = hidden_size
+            self.embedding = nn.Embedding(input_size, embedding_size)
+
+        self.gru = nn.GRU(embedding_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         # Note: we run this all at once (over multiple batches of multiple sequences)
@@ -180,7 +189,7 @@ class BahdanauAttnDecoderRNN(nn.Module):
 
 
 class LuongAttnDecoderRNN(nn.Module):
-    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, dropout=0.1):
+    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, dropout=0.1, embedding=None):
         super(LuongAttnDecoderRNN, self).__init__()
 
         # Keep for reference
@@ -191,9 +200,17 @@ class LuongAttnDecoderRNN(nn.Module):
         self.dropout = dropout
 
         # Define layers
-        self.embedding = nn.Embedding(output_size, hidden_size)
+        if embedding:
+            embedding_size = embedding.shape[1]
+            self.embedding = nn.Embedding(output_size, embedding_size)
+            self.embedding.weight = nn.Parameter(torch.from_numpy(embedding).float())
+            self.embedding.requires_grad = True
+        else:
+            embedding_size = hidden_size
+            self.embedding = nn.Embedding(output_size, embedding_size)
+
         self.embedding_dropout = nn.Dropout(dropout)
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout)
+        self.gru = nn.GRU(embedding_size, hidden_size, n_layers, dropout=dropout)
         self.concat = nn.Linear(hidden_size * 2, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
 
@@ -230,3 +247,37 @@ class LuongAttnDecoderRNN(nn.Module):
 
         # Return final output, hidden state, and attention weights (for visualization)
         return output, hidden, attn_weights
+
+
+# https://github.com/DingKe/pytorch_workplace/blob/master/focalloss/loss.py
+def one_hot(index, classes):
+    size = index.size() + (classes,)
+    view = index.size() + (1,)
+
+    mask = torch.Tensor(*size).fill_(0)
+    index = index.view(*view)
+    ones = 1.
+
+    if isinstance(index, Variable):
+        ones = Variable(torch.Tensor(index.size()).fill_(1))
+        mask = Variable(mask, volatile=index.volatile)
+
+    return mask.scatter_(1, index, ones)
+
+
+class FocalLoss(nn.Module):
+
+    def __init__(self, gamma=0, eps=1e-7):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.eps = eps
+
+    def forward(self, input, target):
+        y = one_hot(target, input.size(-1))
+        logit = F.softmax(input)
+        logit = logit.clamp(self.eps, 1. - self.eps)
+
+        loss = -1 * y * torch.log(logit) # cross entropy
+        loss = loss * (1 - logit) ** self.gamma # focal loss
+
+        return loss.sum()
