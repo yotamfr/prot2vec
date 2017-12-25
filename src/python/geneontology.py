@@ -140,11 +140,11 @@ class Ontology(object):
             aug = reduce(lambda x, y: x | y, anc, lbl)
         return aug
 
-    def binarize(self, labels):
-        return self._mlb.transform(labels)
+    def binarize(self, go_labels):
+        return self._mlb.transform(go_labels)
 
-    def todense(self, go_terms):
-        return np.array([self._kv[go] for go in go_terms])
+    def todense(self, go):
+        return self._kv[go]
 
     def __getitem__(self, go):
         return self._direct_dict[go]
