@@ -503,8 +503,8 @@ def save_checkpoint(state, is_best=False):
 def main_loop(
     # Configure models
     attn_model='general',
-    decoder_hidden_size=1000,
-    encoder_hidden_size=1000,
+    decoder_hidden_size=500,
+    encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
     batch_size=50,

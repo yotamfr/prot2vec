@@ -184,7 +184,7 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_trembl.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        db.uniprot.remove({'db': 'tr'})  # prevent duplications
+        db.uniprot.delete_many({'db': 'tr'})  # prevent duplications
 
         load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
@@ -193,7 +193,7 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete"
         fname = "uniprot_sprot.fasta"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        db.uniprot.remove({'db': 'sp'})  # prevent duplications
+        db.uniprot.delete_many({'db': 'sp'})  # prevent duplications
 
         load_fasta("%s/%s" % (data_dir, fname), db.uniprot)
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT"
         fname = "goa_uniprot_all.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        db.goa_uniprot.drop()  # prevent duplications
+        db.goa_uniprot.delete_many({})  # prevent duplications
 
         load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot)
 
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         prefix = "http://geneontology.org/gene-associations"
         fname = "goa_uniprot_all_noiea.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        db.goa_uniprot_noiea.drop()  # prevent duplications
+        db.goa_uniprot_noiea.delete_many({})  # prevent duplications
 
         load_gaf("%s/%s" % (data_dir, fname), db.goa_uniprot_noiea)
 
@@ -220,7 +220,7 @@ if __name__ == "__main__":
         prefix = "ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/PDB"
         fname = "goa_pdb.gaf"
         maybe_download_and_unzip(prefix, data_dir, fname)
-        db.goa_pdb.drop()  # prevent duplications
+        db.goa_pdb.delete_many({})  # prevent duplications
 
         load_gaf("%s/%s" % (data_dir, fname), db.goa_pdb)
 
