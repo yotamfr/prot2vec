@@ -55,9 +55,9 @@ def masked_cross_entropy(logits, target, length, gamma=0, eps=1e-7):
     target_flat = target.view(-1, 1)
     # probs_flat: (batch * max_len, 1)
     probs_flat = torch.gather(F.softmax(logits_flat), dim=1, index=target_flat)
-    probs_flat = probs_flat.clamp(eps, 1. - eps)
+    probs_flat = probs_flat.clamp(eps, 1. - eps)   # prob: [0, 1] -> [eps, 1 - eps]
     # losses_flat: (batch * max_len, 1)
-    losses_flat = -F.log(probs_flat) * (1 - probs_flat) ** gamma  # focal loss
+    losses_flat = -torch.log(probs_flat) * (1 - probs_flat) ** gamma  # focal loss
     # losses: (batch, max_len)
     losses = losses_flat.view(*target.size())
     # mask: (batch, max_len)
@@ -65,8 +65,6 @@ def masked_cross_entropy(logits, target, length, gamma=0, eps=1e-7):
     losses = losses * mask.float()
     loss = losses.sum() / length.float().sum()
     return loss
-
-
 
 
 class EncoderRNN(nn.Module):
