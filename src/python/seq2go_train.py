@@ -293,7 +293,7 @@ def test_models():
 
 
 def train(input_batches, input_lengths, target_batches, target_lengths, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, batch_size, grad_clip):
+          decoder_optimizer, batch_size, grad_clip, gamma):
     # Zero gradients of both optimizers
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
@@ -326,7 +326,7 @@ def train(input_batches, input_lengths, target_batches, target_lengths, encoder,
     loss = masked_cross_entropy(
         all_decoder_outputs.transpose(0, 1).contiguous(),  # -> batch x seq
         target_batches.transpose(0, 1).contiguous(),  # -> batch x seq
-        target_lengths, gamma=1.0
+        target_lengths, gamma=gamma
     )
     loss.backward()
 
@@ -519,6 +519,7 @@ def main_loop(
 
     # Configure training/optimization
     clip=50.0,
+    gamma=1.0,
     teacher_forcing_ratio=0.5,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
@@ -612,7 +613,7 @@ def main_loop(
             input_batches, input_lengths, target_batches, target_lengths,
             encoder, decoder,
             encoder_optimizer, decoder_optimizer,
-            batch_size, clip
+            batch_size, clip, gamma
         )
 
         # Keep track of loss
