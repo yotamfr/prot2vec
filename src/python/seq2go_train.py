@@ -326,7 +326,7 @@ def train(input_batches, input_lengths, target_batches, target_lengths, encoder,
     loss = masked_cross_entropy(
         all_decoder_outputs.transpose(0, 1).contiguous(),  # -> batch x seq
         target_batches.transpose(0, 1).contiguous(),  # -> batch x seq
-        target_lengths
+        target_lengths, gamma=1.0
     )
     loss.backward()
 
