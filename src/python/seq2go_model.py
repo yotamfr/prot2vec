@@ -29,7 +29,7 @@ def sequence_mask(sequence_length, max_len=None):
     return seq_range_expand < seq_length_expand
 
 
-def masked_cross_entropy(logits, target, length):
+def masked_cross_entropy(logits, target, length, gamma=1.0):
     length = Variable(torch.LongTensor(length))
     if USE_CUDA:
         length = length.cuda()
@@ -57,6 +57,7 @@ def masked_cross_entropy(logits, target, length):
     target_flat = target.view(-1, 1)
     # losses_flat: (batch * max_len, 1)
     losses_flat = -torch.gather(log_probs_flat, dim=1, index=target_flat)
+    losses_flat = losses_flat * (1 - log_probs_flat) ** gamma  # focal loss
     # losses: (batch, max_len)
     losses = losses_flat.view(*target.size())
     # mask: (batch, max_len)
@@ -64,6 +65,8 @@ def masked_cross_entropy(logits, target, length):
     losses = losses * mask.float()
     loss = losses.sum() / length.float().sum()
     return loss
+
+
 
 
 class EncoderRNN(nn.Module):

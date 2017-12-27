@@ -500,6 +500,7 @@ def save_checkpoint(state, is_best=False):
         copyfile(filename_late, filename_best)
 
 
+# https://github.com/pytorch/pytorch/issues/2830
 def optimizer_cuda(optimizer):
     for state in optimizer.state.values():
         for k, v in state.items():
