@@ -500,6 +500,13 @@ def save_checkpoint(state, is_best=False):
         copyfile(filename_late, filename_best)
 
 
+def optimizer_cuda(optimizer):
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.cuda()
+
+
 def main_loop(
     # Configure models
     attn_model='general',
@@ -563,6 +570,9 @@ def main_loop(
     if USE_CUDA:
         encoder.cuda()
         decoder.cuda()
+    if USE_CUDA and args.resume:
+        optimizer_cuda(encoder_optimizer)
+        optimizer_cuda(decoder_optimizer)
 
     job = sconce.Job('seq2go-nmt', {
         'attn_model': attn_model,
@@ -688,7 +698,8 @@ if __name__ == "__main__":
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
 
-    pairs = np.random.permutation(trim_pairs(pairs))
+    # pairs = np.random.permutation(trim_pairs(pairs))
+    pairs = trim_pairs(pairs)
 
     test_models()
 
