@@ -503,7 +503,7 @@ def save_checkpoint(state, is_best=False):
 def optimizer_cuda(optimizer):
     for state in optimizer.state.values():
         for k, v in state.items():
-            if isinstance(v, torch.Tensor):
+            if torch.is_tensor(v):
                 state[k] = v.cuda()
 
 
