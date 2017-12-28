@@ -480,7 +480,7 @@ def add_arguments(parser):
                         default="seq2go", help="Specify the model name.")
     parser.add_argument("-q", '--quiet', action='store_true', default=False,
                         help="Run in quiet mode.")
-    parser.add_argument("-p", '--pretrained', action='store_true', default=False,
+    parser.add_argument('--pretrained', action='store_true', default=False,
                         help="Specify whether to use pretrained embeddings.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
