@@ -476,8 +476,12 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
+    parser.add_argument("-m", "--model_name", type=str, required=False,
+                        default="seq2go", help="Specify the model name.")
     parser.add_argument("-q", '--quiet', action='store_true', default=False,
                         help="Run in quiet mode.")
+    parser.add_argument("-p", '--pretrained', action='store_true', default=False,
+                        help="Specify whether to use pretrained embeddings.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
@@ -493,10 +497,10 @@ def add_arguments(parser):
 
 
 def save_checkpoint(state, is_best=False):
-    filename_late = "%s/seq2go_latest.tar" % ckptpath
+    filename_late = os.path.join(ckptpath, "%s_latest.tar" % args.model_name)
     torch.save(state, filename_late)
     if is_best:
-        filename_best = "%s/seq2go_best.tar" % ckptpath
+        filename_best = os.path.join(ckptpath, "%s_best.tar" % args.model_name)
         copyfile(filename_late, filename_best)
 
 
@@ -531,20 +535,6 @@ def main_loop(
     evaluate_every=1000
 ):
     assert encoder_hidden_size == decoder_hidden_size
-
-    input_embedding = np.array([kmer_w2v[kmer] for kmer
-                                in sorted(input_lang.word2index.keys(),
-                                          key=lambda k: input_lang.word2index[k])])
-
-    dummy_embedding = np.random.rand(3, input_embedding.shape[1])
-    input_embedding = np.concatenate((dummy_embedding, input_embedding))
-
-    output_embedding = np.array([onto.todense(go) for go
-                                 in sorted(output_lang.word2index.keys(),
-                                           key=lambda k: output_lang.word2index[k])])
-
-    dummy_embedding = np.random.rand(3, output_embedding.shape[1])
-    output_embedding = np.concatenate((dummy_embedding, output_embedding))
 
     # Initialize models
     encoder = EncoderRNN(input_lang.n_words, encoder_hidden_size, n_layers,
@@ -706,4 +696,23 @@ if __name__ == "__main__":
 
     test_models()
 
-    main_loop(print_every=args.print_every, evaluate_every=args.eval_every)
+    if args.pretrained:
+        input_embedding = np.array([kmer_w2v[kmer] for kmer
+                                    in sorted(input_lang.word2index.keys(),
+                                              key=lambda k: input_lang.word2index[k])])
+        dummy_embedding = np.random.rand(3, input_embedding.shape[1])
+        input_embedding = np.concatenate((dummy_embedding, input_embedding))
+
+        output_embedding = np.array([onto.todense(go) for go
+                                     in sorted(output_lang.word2index.keys(),
+                                               key=lambda k: output_lang.word2index[k])])
+        dummy_embedding = np.random.rand(3, output_embedding.shape[1])
+        output_embedding = np.concatenate((dummy_embedding, output_embedding))
+    else:
+        input_embedding = None
+        output_embedding = None
+
+    main_loop(
+        print_every=args.print_every,
+        evaluate_every=args.eval_every
+    )
