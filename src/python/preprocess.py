@@ -11,7 +11,7 @@ from Bio.SeqIO import parse as parse_fasta
 
 from .geneontology import *
 
-exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS"]
+exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"]
 
 cafa2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
 cafa3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
