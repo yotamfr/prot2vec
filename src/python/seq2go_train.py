@@ -474,6 +474,8 @@ def show_plot(points):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
+    parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
+                        default="F", help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
     parser.add_argument("-m", "--model_name", type=str, required=False,
@@ -497,10 +499,12 @@ def add_arguments(parser):
 
 
 def save_checkpoint(state, is_best=False):
-    filename_late = os.path.join(ckptpath, "%s_latest.tar" % args.model_name)
+    filename_late = os.path.join(ckptpath, "%s_%s_latest.tar"
+                                 % (args.aspect, args.model_name))
     torch.save(state, filename_late)
     if is_best:
-        filename_best = os.path.join(ckptpath, "%s_best.tar" % args.model_name)
+        filename_best = os.path.join(ckptpath, "%s_%s_best.tar"
+                                     % (args.aspect, args.model_name))
         copyfile(filename_late, filename_best)
 
 
@@ -676,7 +680,7 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']
 
-    onto = get_ontology('F')
+    onto = get_ontology(args.aspect)
     
     stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
     kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))

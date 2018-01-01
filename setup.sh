@@ -28,6 +28,7 @@ done
 
 #sudo apt-get install blast2
 #sudo apt-get install ncbi-blast+
+#sudo apt-get install hhsuite
 
 #wget http://raptorx.uchicago.edu/download/eHVlZmVuZy5jdWlAa2F1c3QuZWR1LnNh/25/ #nr90.tar.gz
 
@@ -76,6 +77,8 @@ pip install networkx
 pip install obonet
 
 pip install sconce      # Sconce is a dashboard for monitoring and comparing data in real time.
+
+pip install A3MIO
 
 ### install virtualenv as kernel to ipython notebook
 pip install ipykernel
