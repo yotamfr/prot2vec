@@ -1,5 +1,6 @@
 import os
 import sys
+
 import subprocess
 
 from tqdm import tqdm
@@ -370,7 +371,7 @@ def plot_precision_recall(perf):
     plt.show()
 
 
-def evaluate(methods, asp):
+def evaluate(db, methods, asp):
     init_GO(asp)
     lim = None
     seqs_train, annots_train, seqs_valid, annots_valid = \
@@ -397,4 +398,3 @@ if __name__ == "__main__":
     seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, lim)
     y_blast = predict(seqs_train, annots_train, seqs_valid, "blast")
     performance(y_blast, annots_valid)
-
