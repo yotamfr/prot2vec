@@ -5,6 +5,7 @@ prot2vec.Rproj
 
 .idea/
 
+dbs
 data
 Data/*.obo
 

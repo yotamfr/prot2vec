@@ -197,7 +197,7 @@ def _prepare_blast(sequences):
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
 
 
-def _blast(target, reference, topn=None, choose_max_prob=False):
+def _blast(target, reference, topn=None, choose_max_prob=True):
 
     query_pth = os.path.join(tmp_dir, 'query-%s.fasta' % GoAspect(ASPECT))
     output_pth = os.path.join(tmp_dir, "blastp-%s.out" % GoAspect(ASPECT))
@@ -317,9 +317,9 @@ def F_max(P, T, thresholds=THRESHOLDS):
     return np.max([F_beta(precision(th, P, T), recall(th, P, T)) for th in thresholds])
 
 
-def predict(reference_seqs, reference_annots, target_seqs, method):
+def predict(reference_seqs, reference_annots, target_seqs, method, load_file=True):
     pred_path = os.path.join(tmp_dir, 'pred-%s-%s.npy' % (method, GoAspect(ASPECT)))
-    if os.path.exists(pred_path):
+    if load_file and os.path.exists(pred_path):
         return np.load(pred_path).item()
     if method == "blast":
         _prepare_blast(reference_seqs)
@@ -343,13 +343,13 @@ def performance(predictions, ground_truth, thresholds=THRESHOLDS):
     return prs, rcs, f1s
 
 
-def plot_precision_recall(performance):
+def plot_precision_recall(perf):
     # Plot Precision-Recall curve
-    lw, n = 2, len(performance)
-    methods = list(performance.keys())
-    prs = [v[0] for v in performance.values()]
-    rcs = [v[1] for v in performance.values()]
-    f1s = [v[2] for v in performance.values()]
+    lw, n = 2, len(perf)
+    methods = list(perf.keys())
+    prs = [v[0] for v in perf.values()]
+    rcs = [v[1] for v in perf.values()]
+    f1s = [v[2] for v in perf.values()]
 
     colors = cycle(['red', 'blue', 'navy', 'turquoise', 'darkorange', 'cornflowerblue', 'teal'])
 
@@ -365,9 +365,21 @@ def plot_precision_recall(performance):
     plt.ylim([0.0, 1.05])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title("Precision - Recall")
+    plt.title(GoAspect(ASPECT))
     plt.legend(loc="lower right")
     plt.show()
+
+
+def evaluate(methods, asp):
+    init_GO(asp)
+    lim = None
+    seqs_train, annots_train, seqs_valid, annots_valid = \
+        load_training_and_validation(db, lim)
+    perf = {}
+    for meth in methods:
+        pred = predict(seqs_train, annots_train, seqs_valid, meth)
+        perf[meth] = performance(pred, annots_valid)
+    plot_precision_recall(perf)
 
 
 if __name__ == "__main__":
