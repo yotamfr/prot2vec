@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 from tqdm import tqdm
 
 # import A3MIO
@@ -15,6 +16,9 @@ from pymongo import MongoClient
 from tempfile import gettempdir
 tmp_dir = gettempdir()
 
+import argparse
+
+
 out_dir = "./hhblits"
 if not os.path.exists(out_dir): os.mkdir(out_dir)
 
@@ -24,8 +28,8 @@ uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuit
 uniprot20name = "uniprot20_2016_02"
 
 ASPECT = 'F'
-batch_size = 16
-num_cpu = 8
+batch_size = 8
+num_cpu = 2
 GAP = '-'
 
 
@@ -115,11 +119,25 @@ def _run_parallel_hhblits_msa(sequences):
         SeqIO.write(batch, open(os.path.join(out_dir, sequences_fasta), 'w+'), "fasta")
         pwd = os.getcwd()
         os.chdir(out_dir)
-        os.system("%s/splitfasta.pl %s > /dev/null" % (prefix_hhsuite, sequences_fasta))
-        os.system("%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d 1>out.log 2>err.log\' > /dev/null"
-                  % (prefix_hhsuite, uniprot20name, uniprot20name, num_cpu))
-        # os.system("%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 1>out.log 2>err.log\'"
-        #           % (prefix_hhsuite, uniprot20name, uniprot20name))
+        cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, sequences_fasta)
+        child = subprocess.Popen(cline,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True,
+                                 shell=(sys.platform != "win32"))
+        handle, _ = child.communicate()
+        assert child.returncode == 0
+
+        cline = "%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d\'"\
+                % (prefix_hhsuite, uniprot20name, uniprot20name, num_cpu)
+        child = subprocess.Popen(cline,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True,
+                                 shell=(sys.platform != "win32"))
+
+        handle, _ = child.communicate()
+        assert child.returncode == 0
         os.chdir(pwd)
         pbar.update(j - i)
         i = j
@@ -127,8 +145,48 @@ def _run_parallel_hhblits_msa(sequences):
     pbar.close()
 
 
+def _run_hhblits_msa(sequences):
+    seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
+                   if not os.path.exists("%s/%s.out" % (out_dir, id))]
+
+    fasta = 'SEQ-%s.fasta' % GoAspect(ASPECT)
+    SeqIO.write(seq_records, open(os.path.join(out_dir, fasta), 'w+'), "fasta")
+    pwd = os.getcwd()
+
+    os.chdir(out_dir)
+    cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, fasta)
+    child = subprocess.Popen(cline,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True,
+                             shell=(sys.platform != "win32"))
+
+    handle, _ = child.communicate()
+    assert child.returncode == 0
+    os.chdir(pwd)
+
+    pbar = tqdm(range(len(seq_records)), desc="sequences processed")
+    for seq in seq_records:
+        os.chdir(out_dir)
+        cline = "hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
+                % (seq.id, uniprot20name, uniprot20name, seq.id)
+        child = subprocess.Popen(cline,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True,
+                                 shell=(sys.platform != "win32"))
+
+        handle, _ = child.communicate()
+        assert child.returncode == 0
+        os.chdir(pwd)
+
+        pbar.update(1)
+
+    pbar.close()
+
+
 # MUST BE RUN AFTER BLITS FINISHED
-def _load_pos_specific_score_matrices(sequences):
+def _load_pssms(sequences):
     msa_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     pbar = tqdm(range(len(msa_records)), desc="sequences processed")
 
@@ -151,13 +209,36 @@ def _load_pos_specific_score_matrices(sequences):
     pbar.close()
 
 
+def add_arguments(parser):
+    parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                        help="Supply the URL of MongoDB")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="How many sequences for PSSM computation.")
+    parser.add_argument('--parallel', action='store_true', default=False,
+                        help="Work in parallel mode.")
+    parser.add_argument("--num_cpu", type=int, default=2,
+                        help="How many cpus for computing PSSM (when running in parallel mode).")
+    parser.add_argument("--batch_size", type=int, default=8,
+                        help="How many sequences in batch (when running in parallel mode).")
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args()
+
+    num_cpu = args.num_cpu
+    batch_size = args.batch_size
+
     prepare_uniprot20()
 
-    client = MongoClient("mongodb://127.0.0.1:27017")
+    client = MongoClient(args.mongo_url)
     db = client['prot2vec']
-    lim = 100
+    lim = args.limit
 
     seqs, _, _ = _get_annotated_uniprot(db, lim)
-    _run_parallel_hhblits_msa(seqs)
-    _load_pos_specific_score_matrices(seqs)
+    if args.parallel:
+        _run_parallel_hhblits_msa(seqs)
+    else:
+        _run_hhblits_msa(seqs)
+    _load_pssms(seqs)
