@@ -167,7 +167,7 @@ def _get_labeled_data(db, query, limit, propagate=True):
     if propagate:
         for k, v in seqid2goid.items():
             annots = ONTO.sort(ONTO.augment(v))
-            annots.pop()  # pop the root
+            if len(annots) > 0: annots.pop()  # pop the root
             seqid2goid[k] = set(annots)
 
     return seqid2seq, seqid2goid, goid2seqid
