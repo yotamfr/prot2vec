@@ -147,7 +147,7 @@ class KmerGoPairsGen(object):
             sent_go = onto.sort(onto.augment(annots))
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
-                if not np.all([(w in kmer_w2v) for w in sent_kmer]):
+                if args.pretrained and not np.all([(w in kmer_w2v) for w in sent_kmer]):
                     continue
                 yield (sent_kmer, sent_go)
 
@@ -685,7 +685,7 @@ if __name__ == "__main__":
     stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
     kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
 
-    seqid2seq, goid2seqid, seqid2goid = load_data(db, 'F', limit=None)
+    seqid2seq, goid2seqid, seqid2goid = load_data(db, args.aspect, limit=None)
 
     input_lang = Lang("KMER")
     output_lang = Lang("GO")
