@@ -499,12 +499,12 @@ def add_arguments(parser):
 
 
 def save_checkpoint(state, is_best=False):
-    filename_late = os.path.join(ckptpath, "%s_%s_latest.tar"
-                                 % (args.aspect, args.model_name))
+    filename_late = os.path.join(ckptpath, "%s-%s-latest.tar"
+                                 % (args.model_name, GoAspect(args.aspect)))
     torch.save(state, filename_late)
     if is_best:
-        filename_best = os.path.join(ckptpath, "%s_%s_best.tar"
-                                     % (args.aspect, args.model_name))
+        filename_best = os.path.join(ckptpath, "%s-%s-best.tar"
+                                     % (args.model_name, GoAspect(args.aspect)))
         copyfile(filename_late, filename_best)
 
 
