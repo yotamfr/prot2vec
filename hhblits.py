@@ -24,7 +24,8 @@ uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuit
 uniprot20name = "uniprot20_2016_02"
 
 ASPECT = 'F'
-batch_size = 4
+batch_size = 16
+num_cpu = 8
 GAP = '-'
 
 
@@ -115,8 +116,8 @@ def _run_parallel_hhblits_msa(sequences):
         pwd = os.getcwd()
         os.chdir(out_dir)
         os.system("%s/splitfasta.pl %s > /dev/null" % (prefix_hhsuite, sequences_fasta))
-        os.system("%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 1>out.log 2>err.log\' > /dev/null"
-                  % (prefix_hhsuite, uniprot20name, uniprot20name))
+        os.system("%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d 1>out.log 2>err.log\' > /dev/null"
+                  % (prefix_hhsuite, uniprot20name, uniprot20name, num_cpu))
         # os.system("%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 1>out.log 2>err.log\'"
         #           % (prefix_hhsuite, uniprot20name, uniprot20name))
         os.chdir(pwd)
@@ -155,7 +156,7 @@ if __name__ == "__main__":
 
     client = MongoClient("mongodb://127.0.0.1:27017")
     db = client['prot2vec']
-    lim = 10
+    lim = 100
 
     seqs, _, _ = _get_annotated_uniprot(db, lim)
     _run_parallel_hhblits_msa(seqs)
