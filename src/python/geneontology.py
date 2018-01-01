@@ -26,6 +26,11 @@ obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
 verbose = True
 
 
+def set_obo_src(src):
+    global obo_src
+    obo_src = src
+
+
 def initialize_go():
     global go_graph
     if not go_graph: go_graph = obonet.read_obo(obo_src)

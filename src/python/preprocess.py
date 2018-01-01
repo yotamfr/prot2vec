@@ -523,3 +523,7 @@ def load_cafa2(db, data_dir, aa_emb, seqs_filter=None, lbls_filter=None, transfo
 
     cafa2_targets_dir = './CAFA2Supplementary_data/data/CAFA2-targets'
     cafa2_benchmark_dir = './CAFA2Supplementary_data/data/benchmark'
+
+
+if __name__ == "__main__":
+    pass
