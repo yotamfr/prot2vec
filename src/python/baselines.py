@@ -60,7 +60,7 @@ def init_GO(asp=ASPECT, src=None):
     if src: set_obo_src(src)
     ASPECT = asp
     ONTO = get_ontology(asp)
-
+    return ONTO
 
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
@@ -371,7 +371,7 @@ def plot_precision_recall(perf):
     plt.show()
 
 
-def evaluate(db, methods, asp):
+def evaluate_performance(db, methods, asp):
     init_GO(asp)
     lim = None
     seqs_train, annots_train, seqs_valid, annots_valid = \

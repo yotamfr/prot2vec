@@ -7,6 +7,8 @@ import time
 import math
 import numpy as np
 
+import pickle
+
 from shutil import copyfile
 
 import torchvision
@@ -31,6 +33,8 @@ from .preprocess import *
 from .seq2go_model import *
 
 from .embedding2 import *
+
+from .baselines import *
 
 from pymongo import MongoClient
 
@@ -137,17 +141,23 @@ def filter_pairs(pairs_gen):
 
 class KmerGoPairsGen(object):
 
-    def __init__(self, kmer):
+    def __init__(self, kmer, seqid2seq, seqid2goid, emb=None):
+
         self.k = kmer
+        self.emb = emb
+        self.seqid2seq = seqid2seq
+        self.seqid2goid = seqid2goid
 
     def __iter__(self):
-
+        emb = self.emb
+        seqid2seq = self.seqid2seq
+        seqid2goid = self.seqid2goid
         for (seqid, annots) in seqid2goid.items():
             seq = seqid2seq[seqid]
             sent_go = onto.sort(onto.augment(annots))
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
-                if args.pretrained and not np.all([(w in kmer_w2v) for w in sent_kmer]):
+                if emb and not np.all([(w in emb) for w in sent_kmer]):
                     continue
                 yield (sent_kmer, sent_go)
 
@@ -656,6 +666,37 @@ def main_loop(
             dca = 0
 
 
+def set_input_lang(lang):
+    global input_lang
+    input_lang = lang
+
+
+def set_output_lang(lang):
+    global output_lang
+    output_lang = lang
+
+
+def set_ontology(ontology):
+    global onto
+    onto = ontology
+
+
+def set_show_attn(val):
+    global SHOW_PLOT
+    SHOW_PLOT = val
+
+
+def set_use_cuda(val):
+    global USE_CUDA
+    USE_CUDA = val
+    set_cuda(val)
+
+
+def save_object(obj, filename):
+    with open(filename, 'wb') as output:
+        pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
+
+
 if __name__ == "__main__":
 
     # Load and Prepare the data
@@ -663,8 +704,7 @@ if __name__ == "__main__":
     add_arguments(parser)
     args = parser.parse_args()
 
-    USE_CUDA = 'gpu' in args.device
-    set_cuda(USE_CUDA)
+    set_use_cuda('gpu' in args.device)
 
     MAX_LENGTH = args.max_length
     MIN_COUNT = args.min_count
@@ -681,19 +721,25 @@ if __name__ == "__main__":
     db = client['prot2vec']
 
     onto = get_ontology(args.aspect)
-    
-    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
-    kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
 
-    seqid2seq, goid2seqid, seqid2goid = load_data(db, args.aspect, limit=None)
+    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
+    if args.pretrained:
+        kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
+    else:
+        kmer_w2v = None
+
+    seqid2seq, _, seqid2goid = load_data(db, args.aspect, limit=None)
 
     input_lang = Lang("KMER")
     output_lang = Lang("GO")
-    gen = KmerGoPairsGen(KMER)
+    gen = KmerGoPairsGen(KMER, seqid2seq, seqid2goid, emb=kmer_w2v)
     pairs = prepare_data(gen)
 
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
+
+    save_object(input_lang, os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(args.aspect)))
+    save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
 
     # pairs = np.random.permutation(trim_pairs(pairs))
     pairs = trim_pairs(pairs)
