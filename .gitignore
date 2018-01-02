@@ -7,6 +7,7 @@ prot2vec.Rproj
 
 dbs
 data
+hmmer
 hhblits
 Data/*.obo
 
