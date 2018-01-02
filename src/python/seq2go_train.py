@@ -34,8 +34,6 @@ from .seq2go_model import *
 
 from .embedding2 import *
 
-from .baselines import *
-
 from pymongo import MongoClient
 
 from tempfile import gettempdir
