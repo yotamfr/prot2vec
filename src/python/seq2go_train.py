@@ -152,7 +152,7 @@ class KmerGoPairsGen(object):
         seqid2goid = self.seqid2goid
         for (seqid, annots) in seqid2goid.items():
             seq = seqid2seq[seqid]
-            sent_go = onto.sort(onto.augment(annots))
+            sent_go = onto.sort(onto.augment(annots))[1:]
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
                 if emb and not np.all([(w in emb) for w in sent_kmer]):
@@ -261,7 +261,7 @@ def test_models():
     small_n_layers = 2
 
     encoder_test = EncoderRNN(input_lang.n_words, small_hidden_size, small_n_layers)
-    decoder_test = LuongAttnDecoderRNN('concat', small_hidden_size, output_lang.n_words, small_n_layers)
+    decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
 
     if USE_CUDA:
         encoder_test.cuda()
@@ -526,7 +526,7 @@ def optimizer_cuda(optimizer):
 
 def main_loop(
     # Configure models
-    attn_model='concat',
+    attn_model='general',
     decoder_hidden_size=500,
     encoder_hidden_size=500,
     n_layers=2,
