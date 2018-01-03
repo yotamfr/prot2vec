@@ -152,7 +152,7 @@ class KmerGoPairsGen(object):
         seqid2goid = self.seqid2goid
         for (seqid, annots) in seqid2goid.items():
             seq = seqid2seq[seqid]
-            sent_go = onto.sort(onto.augment(annots))
+            sent_go = onto.sort(onto.augment(annots))[1:]
             for offset in range(self.k):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
                 if emb and not np.all([(w in emb) for w in sent_kmer]):
