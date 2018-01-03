@@ -261,7 +261,7 @@ def test_models():
     small_n_layers = 2
 
     encoder_test = EncoderRNN(input_lang.n_words, small_hidden_size, small_n_layers)
-    decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
+    decoder_test = LuongAttnDecoderRNN('concat', small_hidden_size, output_lang.n_words, small_n_layers)
 
     if USE_CUDA:
         encoder_test.cuda()
@@ -526,7 +526,7 @@ def optimizer_cuda(optimizer):
 
 def main_loop(
     # Configure models
-    attn_model='general',
+    attn_model='concat',
     decoder_hidden_size=500,
     encoder_hidden_size=500,
     n_layers=2,
