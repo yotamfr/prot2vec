@@ -150,6 +150,7 @@ if __name__ == "__main__":
     predictions = {}
     n = len(valid_sequences)
     for i, (seqid, inp, out) in enumerate(gen):
+        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
         blen = (MIN_LENGTH <= len(inp) <= MAX_LENGTH) and (MIN_LENGTH <= len(out) <= MAX_LENGTH)
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
@@ -157,7 +158,6 @@ if __name__ == "__main__":
             predictions[seqid] = {}
             continue
         predictions[seqid] = predict(encoder, decoder, inp)
-        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
     np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
 
