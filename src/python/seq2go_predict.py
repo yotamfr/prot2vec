@@ -1,10 +1,10 @@
 import sys
 
+from pymongo import MongoClient
+
 from .seq2go_train import *
 from .baselines import *
 import numpy as np
-
-MIN_COUNT = 5
 
 
 def init_encoder_decoder(input_vocab_size,
@@ -120,6 +120,9 @@ if __name__ == "__main__":
     add_arguments(parser)
     args = parser.parse_args()
 
+    client = MongoClient(args.mongo_url)
+    db = client['prot2vec']
+
     asp = args.aspect
     onto = init_GO(asp)
     set_ontology(onto)  # set for seq2go
@@ -137,9 +140,11 @@ if __name__ == "__main__":
         output_lang = pickle.load(f)
         set_output_lang(output_lang)
 
+    print(input_lang.n_words)
+    print(output_lang.n_words)
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
 
-    encoder, decoder, _ = load_encoder_decoder_weights(encoder, decoder, args.resume)
+    load_encoder_decoder_weights(encoder, decoder, args.resume)
 
     _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)

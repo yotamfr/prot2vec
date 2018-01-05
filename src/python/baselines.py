@@ -13,7 +13,6 @@ from Bio.Blast.Applications import NcbiblastpCommandline
 
 from .preprocess import *
 
-
 from itertools import cycle
 import matplotlib.pyplot as plt
 
