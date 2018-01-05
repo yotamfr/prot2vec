@@ -27,10 +27,9 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
     if os.path.isfile(resume_path):
         print("=> loading checkpoint '%s'" % resume_path)
         checkpoint = torch.load(resume_path, map_location=lambda storage, loc: storage)
-        epoch = checkpoint['epoch']
+        # epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['encoder'])
         decoder.load_state_dict(checkpoint['decoder'])
-        return encoder, decoder, epoch
     else:
         print("=> no checkpoint found at '%s'" % args.resume)
 
