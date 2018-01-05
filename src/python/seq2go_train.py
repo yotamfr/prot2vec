@@ -733,11 +733,11 @@ if __name__ == "__main__":
     gen = KmerGoPairsGen(KMER, seqid2seq, seqid2goid, emb=kmer_w2v)
     pairs = prepare_data(gen)
 
-    input_lang.trim(MIN_COUNT)
-    output_lang.trim(MIN_COUNT)
-
     save_object(input_lang, os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(args.aspect)))
     save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
+
+    input_lang.trim(MIN_COUNT)
+    output_lang.trim(MIN_COUNT)
 
     # pairs = np.random.permutation(trim_pairs(pairs))
     pairs = trim_pairs(pairs)
