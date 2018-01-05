@@ -130,10 +130,10 @@ def load_data(db, asp, codes=exp_codes, limit=None):
 def filter_pairs(pairs_gen):
     filtered_pairs = []
     original_pairs = []
-    for pair in pairs_gen:
-        original_pairs.append(pair)
-        if MIN_LENGTH <= len(pair[0]) <= MAX_LENGTH and MIN_LENGTH <= len(pair[1]) <= MAX_LENGTH:
-            filtered_pairs.append(pair)
+    for _, inp, out in pairs_gen:
+        original_pairs.append((inp, out))
+        if MIN_LENGTH <= len(inp) <= MAX_LENGTH and MIN_LENGTH <= len(out) <= MAX_LENGTH:
+            filtered_pairs.append((inp, out))
     return original_pairs, filtered_pairs
 
 
@@ -162,7 +162,7 @@ class KmerGoPairsGen(object):
 
 def prepare_data(pairs_gen):
 
-    _, pairs1, pairs2 = filter_pairs(pairs_gen)
+    pairs1, pairs2 = filter_pairs(pairs_gen)
     print("Filtered %d to %d pairs" % (len(pairs1), len(pairs2)))
 
     print("Indexing words...")
