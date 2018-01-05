@@ -1,4 +1,10 @@
-from src.python.seq2go_train import *
+import sys
+
+from .seq2go_train import *
+from .baselines import *
+import numpy as np
+
+MIN_COUNT = 5
 
 
 def init_encoder_decoder(input_vocab_size,
@@ -29,16 +35,69 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
-# def predict(asp):
-#     init_GO(asp)
-#     lim = None
-#     seqs_train, annots_train, seqs_valid, annots_valid = \
-#         load_training_and_validation(db, lim)
-#     perf = {}
-#     for meth in methods:
-#         pred = predict(seqs_train, annots_train, seqs_valid, meth)
-#         perf[meth] = performance(pred, annots_valid)
-#     plot_precision_recall(perf)
+def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
+    input_lengths = [len(input_seq)]
+    input_seqs = [indexes_from_sequence(input_lang, input_seq)]
+    input_batches = Variable(torch.LongTensor(input_seqs), volatile=True).transpose(0, 1)
+
+    if USE_CUDA:
+        input_batches = input_batches.cuda()
+
+    # Set to not-training mode to disable dropout
+    encoder.train(False)
+    decoder.train(False)
+
+    # Run through encoder
+    encoder_outputs, encoder_hidden = encoder(input_batches, input_lengths, None)
+
+    # Create starting vectors for decoder
+    decoder_input = Variable(torch.LongTensor([SOS_token]), volatile=True)  # SOS
+    decoder_hidden = encoder_hidden[:decoder.n_layers]  # Use last (forward) hidden state from encoder
+
+    if USE_CUDA:
+        decoder_input = decoder_input.cuda()
+
+    # Store output words and attention states
+    decoded_words, annotations = [], {}
+    attentions = torch.zeros(max_length + 1, max_length + 1)
+
+    # Run through decoder
+    for di in range(max_length):
+        decoder_output, decoder_hidden, decoder_attention = decoder(
+            decoder_input, decoder_hidden, encoder_outputs
+        )
+        attentions[di, :decoder_attention.size(2)] += decoder_attention.squeeze(0).squeeze(0).cpu().data
+
+        for ix, prob in enumerate(decoder_output.data):
+            if ix == EOS_token:
+                break
+            go = output_lang.index2word[ix]
+            if go in annotations:
+                annotations[go].append(prob)
+            else:
+                annotations[go] = [prob]
+
+        # Choose top word from output
+        topv, topi = decoder_output.data.topk(1)
+        ni = topi[0][0]
+        if ni == EOS_token:
+            decoded_words.append('<EOS>')
+            break
+        else:
+            decoded_words.append(output_lang.index2word[ni])
+
+        # Next input is chosen word
+        decoder_input = Variable(torch.LongTensor([ni]))
+        if USE_CUDA: decoder_input = decoder_input.cuda()
+
+    # Set back to training mode
+    encoder.train(True)
+    decoder.train(True)
+
+    for go, ps in annotations.items():
+        annotations[go] = 1 - np.prod([(1 - p) for p in ps])
+
+    return decoded_words, attentions[:di + 1, :len(encoder_outputs)], annotations
 
 
 def add_arguments(parser):
@@ -71,18 +130,6 @@ if __name__ == "__main__":
     set_use_cuda('gpu' in args.device)
     set_show_attn(False)
 
-    # input_lang = Lang("KMER")
-    # output_lang = Lang("GO")
-    # set_input_lang(input_lang)
-    # set_output_lang(output_lang)
-
-    # seqid2seq, _, seqid2goid = load_data(db, asp, limit=None)
-    # lang_gen = KmerGoPairsGen(KMER, seqid2seq, seqid2goid, emb=None)
-    # prepare_data(lang_gen)
-    #
-    # input_lang.trim(MIN_COUNT)
-    # output_lang.trim(MIN_COUNT)
-
     with open(os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(asp)), 'rb') as f:
         input_lang = pickle.load(f)
         set_input_lang(input_lang)
@@ -94,3 +141,15 @@ if __name__ == "__main__":
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
 
     encoder, decoder, _ = load_encoder_decoder_weights(encoder, decoder, args.resume)
+
+    _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
+    gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
+
+    prepare_data(gen)
+    input_lang.trim(MIN_COUNT)
+    output_lang.trim(MIN_COUNT)
+
+    for target, _ in enumerate(gen):
+        predictions = predict(encoder, decoder, target)
+        np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
+
