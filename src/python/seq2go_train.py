@@ -7,10 +7,6 @@ import time
 import math
 import numpy as np
 
-import pickle
-
-from shutil import copyfile
-
 import torchvision
 from torch import optim
 
@@ -22,21 +18,24 @@ vis = visdom.Visdom()
 
 import sconce
 
-import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
 import socket
 hostname = socket.gethostname()
 
-from .preprocess import *
-
 from .seq2go_model import *
 
 from .embedding2 import *
 
+from .baselines import *
+
 from pymongo import MongoClient
 
 from tempfile import gettempdir
+
+from shutil import copyfile
+
+import pickle
 
 import argparse
 
@@ -110,21 +109,21 @@ class Lang(object):
             self.index_word(word)
 
 
-def load_data(db, asp, codes=exp_codes, limit=None):
-    q = {'Evidence': {'$in': codes}, 'DB': 'UniProtKB'}
-    c = limit if limit else db.goa_uniprot.count(q)
-    s = db.goa_uniprot.find(q)
-    if limit: s = s.limit(limit)
-
-    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, asp).load()
-
-    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
-    num_seq = db.uniprot.count(query)
-    src_seq = db.uniprot.find(query)
-
-    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
-
-    return seqid2seq, goid2seqid, seqid2goid
+# def load_data(db, asp, codes=exp_codes, limit=None):
+#     q = {'Evidence': {'$in': codes}, 'DB': 'UniProtKB'}
+#     c = limit if limit else db.goa_uniprot.count(q)
+#     s = db.goa_uniprot.find(q)
+#     if limit: s = s.limit(limit)
+#
+#     seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, asp).load()
+#
+#     query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+#     num_seq = db.uniprot.count(query)
+#     src_seq = db.uniprot.find(query)
+#
+#     seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
+#
+#     return seqid2seq, goid2seqid, seqid2goid
 
 
 def filter_pairs(pairs_gen):
@@ -175,7 +174,7 @@ def prepare_data(pairs_gen):
 
 
 def trim_pairs(pairs):
-    keep_pairs = []
+    keep_pairs, trimmed_pairs = [], []
 
     for i, pair in enumerate(pairs):
 
@@ -184,8 +183,7 @@ def trim_pairs(pairs):
         if verbose:
             sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
-        input_seq = pair[0]
-        output_annots = pair[1]
+        input_seq, output_annots = pair
         keep_input = True
         keep_output = True
 
@@ -202,9 +200,11 @@ def trim_pairs(pairs):
         # Remove if pair doesn't match input and output conditions
         if keep_input and keep_output:
             keep_pairs.append(pair)
+        else:
+            trimmed_pairs.append(pair)
 
     print("\nTrimmed from %d pairs to %d, %.4f of total" % (len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
-    return keep_pairs
+    return keep_pairs, trimmed_pairs
 
 
 # Return a list of indexes, one for each word in the sequence, plus EOS
@@ -718,7 +718,7 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']
 
-    onto = get_ontology(args.aspect)
+    onto = init_GO(args.aspect)
 
     stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
     if args.pretrained:
@@ -726,7 +726,7 @@ if __name__ == "__main__":
     else:
         kmer_w2v = None
 
-    seqid2seq, _, seqid2goid = load_data(db, args.aspect, limit=None)
+    seqid2seq, seqid2goid, _, _ = load_training_and_validation(db, limit=None)
 
     input_lang = Lang("KMER")
     output_lang = Lang("GO")
@@ -736,15 +736,10 @@ if __name__ == "__main__":
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
 
-    print(input_lang.n_words)
-    print(output_lang.n_words)
     save_object(input_lang, os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(args.aspect)))
     save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
-    print(input_lang.n_words)
-    print(output_lang.n_words)
 
-    # pairs = np.random.permutation(trim_pairs(pairs))
-    pairs = trim_pairs(pairs)
+    pairs, _ = trim_pairs(pairs)
 
     test_models()
 

@@ -142,21 +142,21 @@ if __name__ == "__main__":
 
     _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
-    pairs = prepare_data(gen)
-    input_lang.trim(MIN_COUNT)
-    output_lang.trim(MIN_COUNT)
-    pairs = trim_pairs(pairs)
 
-    print(input_lang.n_words)
-    print(output_lang.n_words)
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
 
     load_encoder_decoder_weights(encoder, decoder, args.resume)
 
     predictions = {}
     n = len(valid_sequences)
-    for i, (seqid, target, _) in enumerate(gen):
-        predictions[seqid] = predict(encoder, decoder, target)
+    for i, (seqid, inp, out) in enumerate(gen):
+        blen = (MIN_LENGTH <= len(inp) <= MAX_LENGTH) and (MIN_LENGTH <= len(out) <= MAX_LENGTH)
+        binp = np.any([word not in input_lang.word2index for word in inp])
+        bout = np.any([word not in output_lang.word2index for word in out])
+        if binp or bout or not blen:
+            predictions[seqid] = {}
+            continue
+        predictions[seqid] = predict(encoder, decoder, inp)
         sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
     np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
