@@ -103,7 +103,7 @@ def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
-                        default="F", help="Specify the ontology aspect.")
+                        required=True, help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
     parser.add_argument('-r', '--resume', required=True, type=str, metavar='PATH',
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     print(input_lang.n_words)
     print(output_lang.n_words)
-    encoder, decoder = init_encoder_decoder(8080, output_lang.n_words)
+    encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
 
     load_encoder_decoder_weights(encoder, decoder, args.resume)
 
