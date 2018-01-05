@@ -736,8 +736,12 @@ if __name__ == "__main__":
     input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
 
+    print(input_lang.n_words)
+    print(output_lang.n_words)
     save_object(input_lang, os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(args.aspect)))
     save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
+    print(input_lang.n_words)
+    print(output_lang.n_words)
 
     # pairs = np.random.permutation(trim_pairs(pairs))
     pairs = trim_pairs(pairs)
