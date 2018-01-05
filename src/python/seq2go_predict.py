@@ -62,10 +62,10 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
 
     # Run through decoder
     for di in range(max_length):
-        decoder_output, decoder_hidden, decoder_attention = decoder(
+        decoder_output, decoder_hidden, attn = decoder(
             decoder_input, decoder_hidden, encoder_outputs
         )
-        attentions[di, :decoder_attention.size(2)] += decoder_attention.squeeze(0).squeeze(0).cpu().data
+        attentions[di, :attn.size(2)] += attn.squeeze(0).squeeze(0).cpu().data
 
         for ix, prob in enumerate(decoder_output.data):
             if ix == EOS_token:
@@ -140,14 +140,18 @@ if __name__ == "__main__":
         output_lang = pickle.load(f)
         set_output_lang(output_lang)
 
-    print(input_lang.n_words)
-    print(output_lang.n_words)
-    encoder, decoder = init_encoder_decoder(8080, 2387)
-
-    load_encoder_decoder_weights(encoder, decoder, args.resume)
-
     _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
+    pairs = prepare_data(gen)
+    input_lang.trim(MIN_COUNT)
+    output_lang.trim(MIN_COUNT)
+    pairs = trim_pairs(pairs)
+
+    print(input_lang.n_words)
+    print(output_lang.n_words)
+    encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
+
+    load_encoder_decoder_weights(encoder, decoder, args.resume)
 
     predictions = {}
     n = len(valid_sequences)
