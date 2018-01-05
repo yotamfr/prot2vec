@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     print(input_lang.n_words)
     print(output_lang.n_words)
-    encoder, decoder = init_encoder_decoder(8041, output_lang.n_words)
+    encoder, decoder = init_encoder_decoder(8080, output_lang.n_words)
 
     load_encoder_decoder_weights(encoder, decoder, args.resume)
 
