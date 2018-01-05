@@ -145,11 +145,11 @@ if __name__ == "__main__":
     _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
 
-    prepare_data(gen)
-    input_lang.trim(MIN_COUNT)
-    output_lang.trim(MIN_COUNT)
+    predictions = {}
+    n = len(valid_sequences)
+    for i, (seqid, target, _) in enumerate(gen):
+        predictions[seqid] = predict(encoder, decoder, target)
+        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
-    for target, _ in enumerate(gen):
-        predictions = predict(encoder, decoder, target)
-        np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
+    np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
 

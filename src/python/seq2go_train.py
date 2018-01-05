@@ -157,12 +157,12 @@ class KmerGoPairsGen(object):
                 sent_kmer = get_kmer_sentences(seq, self.k, offset)
                 if emb and not np.all([(w in emb) for w in sent_kmer]):
                     continue
-                yield (sent_kmer, sent_go)
+                yield (seqid, sent_kmer, sent_go)
 
 
 def prepare_data(pairs_gen):
 
-    pairs1, pairs2 = filter_pairs(pairs_gen)
+    _, pairs1, pairs2 = filter_pairs(pairs_gen)
     print("Filtered %d to %d pairs" % (len(pairs1), len(pairs2)))
 
     print("Indexing words...")
