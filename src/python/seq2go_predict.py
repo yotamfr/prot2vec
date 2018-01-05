@@ -140,8 +140,6 @@ if __name__ == "__main__":
         output_lang = pickle.load(f)
         set_output_lang(output_lang)
 
-    print(input_lang.n_words)
-    print(output_lang.n_words)
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
 
     load_encoder_decoder_weights(encoder, decoder, args.resume)
