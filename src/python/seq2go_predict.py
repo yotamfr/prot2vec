@@ -132,7 +132,7 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
                 continue
             go = output_lang.index2word[ni]
             if go in probs:
-                probs.append(pr)
+                probs[go].append(pr)
             else:
                 probs[go] = [pr]
 
