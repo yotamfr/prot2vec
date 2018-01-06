@@ -159,7 +159,7 @@ if __name__ == "__main__":
         if binp or bout or not blen:
             predictions[seqid] = {}
             continue
-        preds = predict(encoder, decoder, inp)
+        _, _, preds = predict(encoder, decoder, inp)
         if seqid in predictions:
             for go, ps in preds.items():
                 if go in predictions[seqid]:
