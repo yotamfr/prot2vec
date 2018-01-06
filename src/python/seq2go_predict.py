@@ -1,6 +1,8 @@
 import os
 import sys
 
+from tqdm import tqdm
+
 import numpy as np
 
 from pymongo import MongoClient
@@ -197,10 +199,12 @@ if __name__ == "__main__":
     load_encoder_decoder_weights(encoder, decoder, args.resume)
 
     print("Predicting...")
+    targets = list(gen)
+    pbar = tqdm(range(len(targets)), desc="targets processed")
+
     predictions = {}
-    n = len(valid_sequences)
-    for i, (seqid, inp, out) in enumerate(gen):
-        sys.stdout.write("\r{0:.0f}%".format((100.0 * i) / (3 * n)))
+    for i, (seqid, inp, out) in enumerate(targets):
+        pbar.update(1)
         blen = (MIN_LENGTH <= len(inp) <= MAX_LENGTH) and (MIN_LENGTH <= len(out) <= MAX_LENGTH)
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
@@ -232,7 +236,8 @@ if __name__ == "__main__":
 
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
-    print("\nDone!")
+
+    pbar.close()
 
     pth = os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp))
     np.save(pth, predictions)
