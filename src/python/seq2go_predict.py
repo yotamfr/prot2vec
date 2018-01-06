@@ -144,6 +144,7 @@ if __name__ == "__main__":
             predictions[seqid] = {}
             continue
         terms, _ = predict(encoder, decoder, inp)
+        print(terms)
         if seqid in predictions:
             for go in terms:
                 if go in predictions[seqid]:
