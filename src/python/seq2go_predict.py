@@ -36,9 +36,9 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
-def combine_probabilities(annotations):
-    for go, ps in annotations.items():
-        annotations[go] = 1 - np.prod([(1 - p) for p in ps])
+def combine_probabilities(probabilities):
+    for go, ps in probabilities.items():
+        probabilities[go] = 1 - np.prod([(1 - p) for p in ps])
 
 
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
@@ -69,7 +69,7 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
         attentions[di, :attn.size(2)] += attn.squeeze(0).squeeze(0).cpu().data
 
         # Choose top word from output
-        topv, topi = decoder_output.data.topk(1)
+        _, topi = decoder_output.data.topk(1)
         ni = topi[0][0]
         if ni == EOS_token:
             break
@@ -86,6 +86,67 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
     return decoded_words, attentions[:di + 1, :len(encoder_outputs)]
 
 
+def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
+
+    input_lengths = [len(seq)]
+    seqix = [indexes_from_sequence(input_lang, seq)]
+    batch = Variable(torch.LongTensor(seqix), volatile=True).transpose(0, 1)
+
+    # Set to not-training mode to disable dropout
+    encoder.train(False)
+    decoder.train(False)
+
+    # Run words through encoder
+    encoder_outputs, encoder_hidden = encoder(batch, input_lengths, None)
+
+    # Prepare input and output variables
+    decoder_input = Variable(torch.LongTensor([SOS_token]))
+    decoder_hidden = encoder_hidden[:decoder.n_layers]  # Use last (forward) hidden state from encoder
+
+    all_decoder_outputs = []
+
+    # Run through decoder one time step at a time
+    for t in range(max_length):
+        decoder_output, decoder_hidden, decoder_attn = decoder(
+            decoder_input, decoder_hidden, encoder_outputs
+        )
+        # Choose top word from output
+        _, topi = decoder_output.data.topk(1)
+        ni = topi[0][0]
+
+        if ni == EOS_token:
+            break
+        else:
+            all_decoder_outputs.append(softmax(decoder_output))
+
+        decoder_input = Variable(torch.LongTensor([ni]))    # Next input is chosen word
+
+    # Set back to training mode
+    encoder.train(True)
+    decoder.train(True)
+
+    probs = {}
+    for t in range(len(all_decoder_outputs)):
+        for ni, pr in enumerate(all_decoder_outputs[t]):
+            go = output_lang.index2word[ni]
+            if go in probs:
+                probs.append(prob)
+            else:
+                probs[go] = [prob]
+
+    combine_probabilities(probs)
+    print(probs)
+    return probs
+
+
+def softmax(logits):
+    # logits_flat: (batch * max_len, num_classes)
+    logits_flat = logits.view(-1, logits.size(-1))
+    # probs_flat: (batch * max_len, 1)
+    probs_flat = F.softmax(logits_flat)
+    return probs_flat
+
+
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
@@ -97,6 +158,8 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-l", "--limit", type=int, default=None,
                         help="Limit the size of benchmark.")
+    parser.add_argument('--predict_proba', action='store_true', default=False,
+                        help="Predict probabilities?")
 
 
 if __name__ == "__main__":
@@ -143,17 +206,28 @@ if __name__ == "__main__":
         if binp or bout or not blen:
             predictions[seqid] = {}
             continue
-        terms, _ = predict(encoder, decoder, inp)
-        terms = onto.sort(onto.augment(terms))
-        if len(terms) > 0: terms = terms[1:]  # pop the root
-        if seqid in predictions:
-            for go in terms:
-                if go in predictions[seqid]:
-                    predictions[seqid][go].append(1/KMER)
-                else:
-                    predictions[seqid][go] = [1/KMER]
+        if args.predict_proba:
+            preds = predict_proba(encoder, decoder, inp)
+            if seqid in predictions:
+                for go, prob in preds.items():
+                    if go in predictions[seqid]:
+                        predictions[seqid][go].append(prob)
+                    else:
+                        predictions[seqid][go] = [prob]
+            else:
+                predictions[seqid] = preds
         else:
-            predictions[seqid] = {go: [1/KMER] for go in terms}
+            annots, _ = predict(encoder, decoder, inp)
+            annots = onto.sort(onto.augment(annots))
+            if len(annots) > 0: annots = annots[1:]  # pop the root
+            if seqid in predictions:
+                for go in annots:
+                    if go in predictions[seqid]:
+                        predictions[seqid][go].append(1/KMER)
+                    else:
+                        predictions[seqid][go] = [1/KMER]
+            else:
+                predictions[seqid] = {go: [1/KMER] for go in annots}
 
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
