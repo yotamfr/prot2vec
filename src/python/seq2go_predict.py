@@ -128,6 +128,8 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
     probs = {}
     for t in range(len(all_decoder_outputs)):
         for ni, pr in enumerate(all_decoder_outputs[t]):
+            if ni == EOS_token or ni == SOS_token or ni == PAD_token:
+                continue
             go = output_lang.index2word[ni]
             if go in probs:
                 probs.append(pr)
