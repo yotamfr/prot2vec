@@ -157,6 +157,5 @@ if __name__ == "__main__":
 
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
-    print(predictions)
 
     np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
