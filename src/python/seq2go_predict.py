@@ -34,6 +34,11 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
+def combine_probabilities(annotations):
+    for go, ps in annotations.items():
+        annotations[go] = 1 - np.prod([(1 - p) for p in ps])
+
+
 def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
     input_lengths = [len(input_seq)]
     input_seqs = [indexes_from_sequence(input_lang, input_seq)]
@@ -67,7 +72,7 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
         )
         attentions[di, :attn.size(2)] += attn.squeeze(0).squeeze(0).cpu().data
 
-        for ix, prob in enumerate(decoder_output.data):
+        for ix, prob in enumerate(decoder_output.data.topk(100)):
             if ix == EOS_token:
                 break
             go = output_lang.index2word[ix]
@@ -93,8 +98,7 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
     encoder.train(True)
     decoder.train(True)
 
-    for go, ps in annotations.items():
-        annotations[go] = 1 - np.prod([(1 - p) for p in ps])
+    combine_probabilities(annotations)
 
     return decoded_words, attentions[:di + 1, :len(encoder_outputs)], annotations
 
@@ -110,8 +114,6 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument('-l', "--limit", type=int, default=None,
-                        help="How many sequences for evaluation.")
 
 
 if __name__ == "__main__":
@@ -126,7 +128,6 @@ if __name__ == "__main__":
     asp = args.aspect
     onto = init_GO(asp)
     set_ontology(onto)  # set for seq2go
-    lim = args.limit
     ckptpath = args.out_dir
 
     set_use_cuda('gpu' in args.device)
@@ -150,14 +151,24 @@ if __name__ == "__main__":
     predictions = {}
     n = len(valid_sequences)
     for i, (seqid, inp, out) in enumerate(gen):
-        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
+        sys.stdout.write("\r{0:.0f}%".format((100.0 * i) / (3 * n)))
         blen = (MIN_LENGTH <= len(inp) <= MAX_LENGTH) and (MIN_LENGTH <= len(out) <= MAX_LENGTH)
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
             predictions[seqid] = {}
             continue
-        predictions[seqid] = predict(encoder, decoder, inp)
+        preds = predict(encoder, decoder, inp)
+        if seqid in predictions:
+            for go, ps in preds.items():
+                if go in predictions[seqid]:
+                    predictions[go][seqid].append(preds[go])
+                else:
+                    predictions[seqid] = [preds[go]]
+        else:
+            predictions[seqid] = {go: [prob] for go, prob in preds.items()}
+
+        combine_probabilities(predictions)
 
     np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
 
