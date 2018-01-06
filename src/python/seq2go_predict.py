@@ -117,7 +117,7 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
         if ni == EOS_token:
             break
         else:
-            all_decoder_outputs.append(softmax(decoder_output.data[0]))
+            all_decoder_outputs.append(softmax(decoder_output).data[0])
 
         decoder_input = Variable(torch.LongTensor([ni]))    # Next input is chosen word
 
