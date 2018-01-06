@@ -216,7 +216,7 @@ if __name__ == "__main__":
                     else:
                         predictions[seqid][go] = [prob]
             else:
-                predictions[seqid] = {go: pr for go, pr in preds.items()}
+                predictions[seqid] = {go: [pr] for go, pr in preds.items()}
         else:
             annots, _ = predict(encoder, decoder, inp)
             annots = onto.sort(onto.augment(annots))
