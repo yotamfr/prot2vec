@@ -117,7 +117,7 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
         if ni == EOS_token:
             break
         else:
-            all_decoder_outputs.append(softmax(decoder_output))
+            all_decoder_outputs.append(softmax(decoder_output.data[0]))
 
         decoder_input = Variable(torch.LongTensor([ni]))    # Next input is chosen word
 
@@ -128,7 +128,7 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
     probs = {}
     for t in range(len(all_decoder_outputs)):
         print(all_decoder_outputs[t])
-        for ni, pr in enumerate(all_decoder_outputs[t].data):
+        for ni, pr in enumerate(all_decoder_outputs[t]):
             if pr < eps or ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
             go = output_lang.index2word[ni]
