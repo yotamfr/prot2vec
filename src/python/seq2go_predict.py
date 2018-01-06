@@ -127,19 +127,16 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
 
     probs = {}
     for t in range(len(all_decoder_outputs)):
-        print(all_decoder_outputs[t])
         for ni, pr in enumerate(all_decoder_outputs[t]):
             if pr < eps or ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
             go = output_lang.index2word[ni]
-            print(go)
             if go in probs:
                 probs[go].append(pr)
             else:
                 probs[go] = [pr]
 
     combine_probabilities(probs)
-    print(probs)
     return probs
 
 
@@ -219,7 +216,7 @@ if __name__ == "__main__":
                     else:
                         predictions[seqid][go] = [prob]
             else:
-                predictions[seqid] = preds
+                predictions[seqid] = {go: pr for go, pr in preds.items()}
         else:
             annots, _ = predict(encoder, decoder, inp)
             annots = onto.sort(onto.augment(annots))
@@ -237,4 +234,5 @@ if __name__ == "__main__":
         combine_probabilities(predictions[seqid])
     print("\nDone!")
 
-    np.save(os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp)), predictions)
+    pth = os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp))
+    np.save(pth, predictions)
