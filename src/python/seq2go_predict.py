@@ -72,7 +72,6 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
         topv, topi = decoder_output.data.topk(1)
         ni = topi[0][0]
         if ni == EOS_token:
-            decoded_words.append('<EOS>')
             break
         else:
             decoded_words.append(output_lang.index2word[ni])
