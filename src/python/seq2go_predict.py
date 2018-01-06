@@ -86,7 +86,7 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
     return decoded_words, attentions[:di + 1, :len(encoder_outputs)]
 
 
-def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
+def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
 
     input_lengths = [len(seq)]
     seqix = [indexes_from_sequence(input_lang, seq)]
@@ -128,8 +128,8 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
     probs = {}
     for t in range(len(all_decoder_outputs)):
         print(all_decoder_outputs[t])
-        for ni, pr in enumerate(all_decoder_outputs[t]):
-            if ni == EOS_token or ni == SOS_token or ni == PAD_token:
+        for ni, pr in enumerate(all_decoder_outputs[t].data):
+            if pr < eps or ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
             go = output_lang.index2word[ni]
             print(go)
