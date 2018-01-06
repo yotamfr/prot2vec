@@ -72,11 +72,16 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
         )
         attentions[di, :attn.size(2)] += attn.squeeze(0).squeeze(0).cpu().data
 
-        for ix, prob in enumerate(decoder_output.data.topk(100)):
+        for ix, prob in enumerate(decoder_output.data.topk(10)):
             if ix == EOS_token:
                 break
+            if ix == PAD_token:
+                print(ix)
+                continue
             go = output_lang.index2word[ix]
             if go in annotations:
+                print(go)
+                print(prob)
                 annotations[go].append(prob)
             else:
                 annotations[go] = [prob]
