@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     load_encoder_decoder_weights(encoder, decoder, args.resume)
 
-    print("\nPredicting...")
+    print("Predicting...")
     predictions = {}
     n = len(valid_sequences)
     for i, (seqid, inp, out) in enumerate(gen):
@@ -158,6 +158,6 @@ if __name__ == "__main__":
 
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
-    print("\nDone!...")
+    print("\nDone!")
 
     np.save(os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp)), predictions)
