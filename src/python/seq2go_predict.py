@@ -114,6 +114,8 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
+    parser.add_argument("-l", "--limit", type=int, default=None,
+                        help="Limit the size of benchmark.")
 
 
 if __name__ == "__main__":
@@ -129,6 +131,7 @@ if __name__ == "__main__":
     onto = init_GO(asp)
     set_ontology(onto)  # set for seq2go
     ckptpath = args.out_dir
+    lim = args.limit
 
     set_use_cuda('gpu' in args.device)
     set_show_attn(False)
@@ -141,7 +144,7 @@ if __name__ == "__main__":
         output_lang = pickle.load(f)
         set_output_lang(output_lang)
 
-    _, _, valid_sequences, valid_annotations = load_training_and_validation(db)
+    _, _, valid_sequences, valid_annotations = load_training_and_validation(db, limit=lim)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
 
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
@@ -167,8 +170,8 @@ if __name__ == "__main__":
                     predictions[seqid] = [preds[go]]
         else:
             predictions[seqid] = {go: [prob] for go, prob in preds.items()}
+        print(preds)
 
         combine_probabilities(predictions)
 
     np.save("pred-seq2go-%s.npy" % GoAspect(asp), predictions)
-
