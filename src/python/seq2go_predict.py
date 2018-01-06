@@ -36,9 +36,9 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
-def combine_probabilities(probabilities):
-    for go, ps in probabilities.items():
-        probabilities[go] = 1 - np.prod([(1 - p) for p in ps])
+def combine_probabilities(go2probs):
+    for go, ps in go2probs.items():
+        go2probs[go] = 1 - np.prod([(1 - p) for p in ps])
 
 
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
@@ -127,7 +127,7 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
 
     probs = {}
     for t in range(len(all_decoder_outputs)):
-        print(t)
+        print(all_decoder_outputs[t])
         for ni, pr in enumerate(all_decoder_outputs[t]):
             if ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
