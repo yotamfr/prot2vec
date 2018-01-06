@@ -112,8 +112,6 @@ def add_arguments(parser):
                         default=gettempdir(), help="Specify the output directory.")
     parser.add_argument('-r', '--resume', required=True, type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
-    parser.add_argument("-d", "--device", type=str, default='cpu',
-                        help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
     parser.add_argument("-l", "--limit", type=int, default=None,
                         help="Limit the size of benchmark.")
 
@@ -133,7 +131,7 @@ if __name__ == "__main__":
     ckptpath = args.out_dir
     lim = args.limit
 
-    set_use_cuda('gpu' in args.device)
+    set_use_cuda(False)
     set_show_attn(False)
 
     with open(os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(asp)), 'rb') as f:
