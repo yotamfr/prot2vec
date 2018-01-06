@@ -146,7 +146,6 @@ if __name__ == "__main__":
         terms, _ = predict(encoder, decoder, inp)
         terms = onto.sort(onto.augment(terms))
         if len(terms) > 0: terms = terms[1:]  # pop the root
-        print(terms)
         if seqid in predictions:
             for go in terms:
                 if go in predictions[seqid]:
@@ -155,6 +154,8 @@ if __name__ == "__main__":
                     predictions[seqid][go] = [1/KMER]
         else:
             predictions[seqid] = {go: [1/KMER] for go in terms}
+
+    for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
     print(predictions)
 
