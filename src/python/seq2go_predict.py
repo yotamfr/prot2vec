@@ -234,10 +234,10 @@ if __name__ == "__main__":
             else:
                 predictions[seqid] = {go: [1/KMER] for go in annots}
 
+    pbar.close()
+
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
-
-    pbar.close()
 
     pth = os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp))
     np.save(pth, predictions)
