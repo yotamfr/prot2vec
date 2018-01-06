@@ -130,9 +130,9 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
         for ni, pr in enumerate(all_decoder_outputs[t]):
             go = output_lang.index2word[ni]
             if go in probs:
-                probs.append(prob)
+                probs.append(pr)
             else:
-                probs[go] = [prob]
+                probs[go] = [pr]
 
     combine_probabilities(probs)
     print(probs)
