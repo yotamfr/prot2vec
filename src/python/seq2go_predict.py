@@ -96,11 +96,11 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH):
     encoder.train(False)
     decoder.train(False)
 
-    # Run words through encoder
+    # Run through encoder
     encoder_outputs, encoder_hidden = encoder(batch, input_lengths, None)
 
-    # Prepare input and output variables
-    decoder_input = Variable(torch.LongTensor([SOS_token]))
+    # Create starting vectors for decoder
+    decoder_input = Variable(torch.LongTensor([SOS_token]), volatile=True)  # SOS
     decoder_hidden = encoder_hidden[:decoder.n_layers]  # Use last (forward) hidden state from encoder
 
     all_decoder_outputs = []
