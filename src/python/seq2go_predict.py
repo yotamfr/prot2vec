@@ -1,10 +1,12 @@
+import os
 import sys
+
+import numpy as np
 
 from pymongo import MongoClient
 
 from .seq2go_train import *
 from .baselines import *
-import numpy as np
 
 
 def init_encoder_decoder(input_vocab_size,
@@ -39,30 +41,24 @@ def combine_probabilities(annotations):
         annotations[go] = 1 - np.prod([(1 - p) for p in ps])
 
 
-def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
-    input_lengths = [len(input_seq)]
-    input_seqs = [indexes_from_sequence(input_lang, input_seq)]
-    input_batches = Variable(torch.LongTensor(input_seqs), volatile=True).transpose(0, 1)
-
-    if USE_CUDA:
-        input_batches = input_batches.cuda()
+def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
+    input_lengths = [len(seq)]
+    seqix = [indexes_from_sequence(input_lang, seq)]
+    batch = Variable(torch.LongTensor(seqix), volatile=True).transpose(0, 1)
 
     # Set to not-training mode to disable dropout
     encoder.train(False)
     decoder.train(False)
 
     # Run through encoder
-    encoder_outputs, encoder_hidden = encoder(input_batches, input_lengths, None)
+    encoder_outputs, encoder_hidden = encoder(batch, input_lengths, None)
 
     # Create starting vectors for decoder
     decoder_input = Variable(torch.LongTensor([SOS_token]), volatile=True)  # SOS
     decoder_hidden = encoder_hidden[:decoder.n_layers]  # Use last (forward) hidden state from encoder
 
-    if USE_CUDA:
-        decoder_input = decoder_input.cuda()
-
     # Store output words and attention states
-    decoded_words, annotations = [], {}
+    decoded_words = []
     attentions = torch.zeros(max_length + 1, max_length + 1)
 
     # Run through decoder
@@ -71,20 +67,6 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
             decoder_input, decoder_hidden, encoder_outputs
         )
         attentions[di, :attn.size(2)] += attn.squeeze(0).squeeze(0).cpu().data
-
-        for ix, prob in enumerate(decoder_output.data.topk(10)):
-            if ix == EOS_token:
-                break
-            if ix == PAD_token:
-                print(ix)
-                continue
-            go = output_lang.index2word[ix]
-            if go in annotations:
-                print(go)
-                print(prob)
-                annotations[go].append(prob)
-            else:
-                annotations[go] = [prob]
 
         # Choose top word from output
         topv, topi = decoder_output.data.topk(1)
@@ -97,15 +79,12 @@ def predict(encoder, decoder, input_seq, max_length=MAX_LENGTH):
 
         # Next input is chosen word
         decoder_input = Variable(torch.LongTensor([ni]))
-        if USE_CUDA: decoder_input = decoder_input.cuda()
 
     # Set back to training mode
     encoder.train(True)
     decoder.train(True)
 
-    combine_probabilities(annotations)
-
-    return decoded_words, attentions[:di + 1, :len(encoder_outputs)], annotations
+    return decoded_words, attentions[:di + 1, :len(encoder_outputs)]
 
 
 def add_arguments(parser):
@@ -164,16 +143,15 @@ if __name__ == "__main__":
         if binp or bout or not blen:
             predictions[seqid] = {}
             continue
-        _, _, preds = predict(encoder, decoder, inp)
+        terms, _ = predict(encoder, decoder, inp)
         if seqid in predictions:
-            for go, ps in preds.items():
+            for go in terms:
                 if go in predictions[seqid]:
-                    predictions[go][seqid].append(preds[go])
+                    predictions[seqid][go].append(1/KMER)
                 else:
-                    predictions[seqid] = [preds[go]]
+                    predictions[seqid][go] = [1/KMER]
         else:
-            predictions[seqid] = {go: [prob] for go, prob in preds.items()}
-        print(preds)
+            predictions[seqid] = {go: [1/KMER] for go in terms}
 
         combine_probabilities(predictions)
 
