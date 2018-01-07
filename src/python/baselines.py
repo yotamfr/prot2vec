@@ -166,7 +166,7 @@ def _get_labeled_data(db, query, limit, propagate=True):
 
     if propagate:
         for k, v in seqid2goid.items():
-            annots = onto.propagate(annots, include_root=False)
+            annots = ONTO.propagate(annots, include_root=False)
             seqid2goid[k] = set(annots)
 
     return seqid2seq, seqid2goid, goid2seqid
