@@ -41,7 +41,6 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
 
 def combine_probabilities(go2probs):
     for go, probs in go2probs.items():
-        print(probs)
         go2probs[go] = 1 - np.prod([(1 - pr) for pr in probs])
 
 
@@ -217,7 +216,7 @@ if __name__ == "__main__":
         if binp or bout or not blen:
             tgt = {seqid: valid_sequences[seqid]}
             bl_preds = bl(train_seqs, train_annots, tgt, args.fallback, load_file=False)
-            predictions[seqid] = {go: [pr] for go, pr in bl_preds.items()}
+            predictions[seqid] = {go: [pr] for go, pr in bl_preds[seqid].items()}
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
