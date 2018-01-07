@@ -90,7 +90,7 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
     return decoded_words, attentions[:di + 1, :len(encoder_outputs)]
 
 
-def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
+def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-4):
 
     input_lengths = [len(seq)]
     seqix = [indexes_from_sequence(input_lang, seq)]
