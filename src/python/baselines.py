@@ -1,6 +1,5 @@
 import os
 import sys
-
 import subprocess
 
 from tqdm import tqdm
@@ -174,6 +173,7 @@ def _get_labeled_data(db, query, limit, propagate=True):
 
 def _prepare_naive(reference):
     global PRIOR
+    if PRIOR: return
     go2count = {}
     for _, go_terms in reference.items():
         for go in go_terms:
@@ -193,8 +193,9 @@ def _naive(target, reference):
 
 
 def _prepare_blast(sequences):
-    records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
+    if os.path.exists(blastdb_pth): return
+    records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
 
