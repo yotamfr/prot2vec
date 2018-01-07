@@ -39,15 +39,10 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
-def propagate_probabilities(go, probs):
-    anc = onto.augment([go])
-    if len(anc) == 0:
-        return
-    for father in anc[1:]:
-        if father in probs:
-            probs[father].append(p)
-        else:
-            probs[father] = [p]
+def combine_probabilities(go2probs):
+    for go, ps in go2probs.items():
+        go2probs[go] = 1 - np.prod([(1 - p) for p in ps])
+
 
 
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
@@ -139,7 +134,8 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
         for ni, pr in enumerate(all_decoder_outputs[t]):
             if pr < eps or ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
-            for go in onto.augment([output_lang.index2word[ni]])[1:]:
+            leaf = output_lang.index2word[ni]
+            for go in onto.propagate([leaf], include_root=False):
                 if go in probs:
                     probs[go].append(pr)
                 else:
@@ -232,8 +228,7 @@ if __name__ == "__main__":
                 predictions[seqid] = {go: [pr] for go, pr in preds.items()}
         else:
             annots, _ = predict(encoder, decoder, inp)
-            annots = onto.sort(onto.augment(annots))
-            if len(annots) > 0: annots = annots[1:]  # pop the root
+            annots = onto.propagate(annots, include_root=False)
             if seqid in predictions:
                 for go in annots:
                     if go in predictions[seqid]:
