@@ -579,19 +579,19 @@ def main_loop(
         optimizer_cuda(encoder_optimizer)
         optimizer_cuda(decoder_optimizer)
 
-    job = sconce.Job('seq2go-nmt', {
-        'attn_model': attn_model,
-        'n_layers': n_layers,
-        'dropout': dropout,
-        'decoder_hidden_size': decoder_hidden_size,
-        'encoder_hidden_size': encoder_hidden_size,
-        'learning_rate': learning_rate,
-        'clip': clip,
-        'teacher_forcing_ratio': teacher_forcing_ratio,
-        'decoder_learning_ratio': decoder_learning_ratio,
-    })
-    job.plot_every = plot_every
-    job.log_every = print_every
+    # job = sconce.Job('seq2go-nmt', {
+    #     'attn_model': attn_model,
+    #     'n_layers': n_layers,
+    #     'dropout': dropout,
+    #     'decoder_hidden_size': decoder_hidden_size,
+    #     'encoder_hidden_size': encoder_hidden_size,
+    #     'learning_rate': learning_rate,
+    #     'clip': clip,
+    #     'teacher_forcing_ratio': teacher_forcing_ratio,
+    #     'decoder_learning_ratio': decoder_learning_ratio,
+    # })
+    # job.plot_every = plot_every
+    # job.log_every = print_every
 
     # Keep track of time elapsed and running averages
     start = time.time()
@@ -625,7 +625,7 @@ def main_loop(
         eca += ec
         dca += dc
 
-        job.record(epoch, loss)
+        # job.record(epoch, loss)
 
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
