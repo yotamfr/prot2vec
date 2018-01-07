@@ -248,7 +248,7 @@ class Dataset(object):
 
     def __str__(self):
         num_anno = sum(map(lambda record: len(record.lbl), self.records))
-        num_go = len(reduce(lambda x, y: x | y, map(lambda r: r.lbl, self.records), set()))
+        num_go = len(reduce(lambda x, y: x | y, map(lambda r: set(r.lbl), self.records), set()))
         num_seq = len(self)
         s = '\n#Annotaions\t%d\n#GO-Terms\t%d\n#Sequences\t%d' % (num_anno, num_go, num_seq)
         return s
