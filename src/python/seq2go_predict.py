@@ -44,7 +44,6 @@ def combine_probabilities(go2probs):
         go2probs[go] = 1 - np.prod([(1 - p) for p in ps])
 
 
-
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
     input_lengths = [len(seq)]
     seqix = [indexes_from_sequence(input_lang, seq)]
@@ -216,7 +215,8 @@ if __name__ == "__main__":
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
             tgt = {seqid: valid_sequences[seqid]}
-            predictions[seqid] = bl(train_seqs, train_annots, tgt, args.fallback, load_file=False)
+            bl_preds = bl(train_seqs, train_annots, tgt, args.fallback, load_file=False)
+            predictions[seqid] = {go: [pr] for go, pr in bl_preds.items()}
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
