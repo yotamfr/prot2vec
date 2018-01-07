@@ -215,8 +215,8 @@ if __name__ == "__main__":
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
-            seq = valid_sequences[seqid]
-            predictions[seqid] = bl(train_seqs, train_annots, [seq], args.fallback, load_file=False)
+            tgt = {seqid: valid_sequences[seqid]}
+            predictions[seqid] = bl(train_seqs, train_annots, tgt, args.fallback, load_file=False)
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
