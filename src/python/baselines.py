@@ -280,7 +280,7 @@ def precision(tau, predictions, targets):
         if len(preds) == 0:
             continue
         P.append(preds)
-        T.append(targets[seqid])
+        T.append(set(targets[seqid]))
 
     assert len(P) == len(T)
     if len(P) == 0: return 1.0
@@ -304,7 +304,7 @@ def recall(tau, predictions, targets, partial_evaluation=False):
         preds = set([go for go, prob in annotations.items() if prob >= tau])
         if not partial_evaluation and len(annotations) == 0: continue
         P.append(preds)
-        T.append(targets[seqid])
+        T.append(set(targets[seqid]))
 
     assert len(P) == len(T)
     if len(P) == 0: return 0.0
