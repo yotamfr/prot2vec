@@ -40,8 +40,9 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
 
 
 def combine_probabilities(go2probs):
-    for go, ps in go2probs.items():
-        go2probs[go] = 1 - np.prod([(1 - p) for p in ps])
+    for go, probs in go2probs.items():
+        print(probs)
+        go2probs[go] = 1 - np.prod([(1 - pr) for pr in probs])
 
 
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
@@ -221,11 +222,11 @@ if __name__ == "__main__":
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
             if seqid in predictions:
-                for go, prob in preds.items():
+                for go, pr in preds.items():
                     if go in predictions[seqid]:
-                        predictions[seqid][go].append(prob)
+                        predictions[seqid][go].append(pr)
                     else:
-                        predictions[seqid][go] = [prob]
+                        predictions[seqid][go] = [pr]
             else:
                 predictions[seqid] = {go: [pr] for go, pr in preds.items()}
         else:
