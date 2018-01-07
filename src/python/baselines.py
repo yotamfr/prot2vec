@@ -31,7 +31,7 @@ t1 = datetime.datetime(2014, 9, 1, 0, 0)
 
 ASPECT = 'F'
 ONTO = None
-PRIOR = {}
+PRIOR = None
 THRESHOLDS = np.arange(0.1, 1, 0.02)
 
 # unparseables = ["Cross_product_review", "Involved_in",
@@ -60,6 +60,7 @@ def init_GO(asp=ASPECT, src=None):
     ASPECT = asp
     ONTO = get_ontology(asp)
     return ONTO
+
 
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
@@ -187,6 +188,8 @@ def _prepare_naive(reference):
 
 def _naive(target, reference):
     global PRIOR
+    if not PRIOR:
+        _prepare_naive(reference)
     return PRIOR
 
 
@@ -238,7 +241,10 @@ def _blast(target, reference, topn=None, choose_max_prob=True):
 
 def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
 
-    pbar = tqdm(range(len(target_seqs)), desc="targets processed")
+    if len(target_seqs > 1):
+        pbar = tqdm(range(len(target_seqs)), desc="targets processed")
+    else:
+        pbar = None
 
     if binary_mode:
         predictions = np.zeros((len(target_seqs), len(ONTO.classes)))
@@ -248,13 +254,13 @@ def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
             for go, prob in preds.items():
                 bin_preds[ONTO[go]] = prob
             predictions[i, :] = bin_preds
-            pbar.update(1)
+            if pbar: pbar.update(1)
     else:
         predictions = {}
         for _, (seqid, seq) in enumerate(target_seqs.items()):
             predictions[seqid] = func_predict(seq, reference_annots)
-            pbar.update(1)
-    pbar.close()
+            if pbar: pbar.update(1)
+    if pbar: pbar.close()
 
     return predictions
 

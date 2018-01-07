@@ -9,6 +9,7 @@ from pymongo import MongoClient
 
 from .seq2go_train import *
 from .baselines import *
+from .baselines import predict as bl
 
 
 def init_encoder_decoder(input_vocab_size,
@@ -191,7 +192,8 @@ if __name__ == "__main__":
         output_lang = pickle.load(f)
         set_output_lang(output_lang)
 
-    _, _, valid_sequences, valid_annotations = load_training_and_validation(db, limit=lim)
+    train_seqs, train_annots, valid_sequences, valid_annotations = \
+        load_training_and_validation(db, limit=lim)
     gen = KmerGoPairsGen(KMER, valid_sequences, valid_annotations, emb=None)
 
     encoder, decoder = init_encoder_decoder(input_lang.n_words, output_lang.n_words)
@@ -209,7 +211,8 @@ if __name__ == "__main__":
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
-            predictions[seqid] = PRIOR
+            seq = seqid2seq[seqid]
+            predictions[seqid] = bl(train_seqs, train_annots, [seq], "naive", load_file=False)
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
