@@ -209,7 +209,7 @@ if __name__ == "__main__":
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
-            predictions[seqid] = {}
+            predictions[seqid] = PRIOR
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
