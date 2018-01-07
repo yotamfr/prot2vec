@@ -39,9 +39,15 @@ def load_encoder_decoder_weights(encoder, decoder, resume_path):
         print("=> no checkpoint found at '%s'" % args.resume)
 
 
-def combine_probabilities(go2probs):
-    for go, ps in go2probs.items():
-        go2probs[go] = 1 - np.prod([(1 - p) for p in ps])
+def propagate_probabilities(go, probs):
+    anc = onto.augment([go])
+    if len(anc) == 0:
+        return
+    for father in anc[1:]:
+        if father in probs:
+            probs[father].append(p)
+        else:
+            probs[father] = [p]
 
 
 def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
@@ -133,11 +139,11 @@ def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-3):
         for ni, pr in enumerate(all_decoder_outputs[t]):
             if pr < eps or ni == EOS_token or ni == SOS_token or ni == PAD_token:
                 continue
-            go = output_lang.index2word[ni]
-            if go in probs:
-                probs[go].append(pr)
-            else:
-                probs[go] = [pr]
+            for go in onto.augment([output_lang.index2word[ni]])[1:]:
+                if go in probs:
+                    probs[go].append(pr)
+                else:
+                    probs[go] = [pr]
 
     combine_probabilities(probs)
     return probs
@@ -211,7 +217,7 @@ if __name__ == "__main__":
         binp = np.any([word not in input_lang.word2index for word in inp])
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
-            seq = seqid2seq[seqid]
+            seq = valid_sequences[seqid]
             predictions[seqid] = bl(train_seqs, train_annots, [seq], "naive", load_file=False)
             continue
         if args.predict_proba:
