@@ -134,7 +134,7 @@ class Ontology(object):
     def sort(self, go_terms):
         return sorted(go_terms, key=lambda go: self[go])
 
-    def augment(self, go_terms, max_length=None):
+    def propagate(self, go_terms, max_length=None, include_root=True):
         G = self._graph
         lbl = set(filter(lambda x: G.has_node(x), go_terms))
         if max_length:
@@ -143,6 +143,9 @@ class Ontology(object):
         else:
             anc = map(lambda go: nx.descendants(G, go), lbl)
             aug = reduce(lambda x, y: x | y, anc, lbl)
+        aug = onto.sort(aug)
+        if not include_root:
+            aug = aug[1:]
         return aug
 
     def binarize(self, go_labels):

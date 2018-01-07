@@ -244,7 +244,7 @@ class Dataset(object):
         for i, record in enumerate(self.records):
             if verbose:
                 sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
-            record.lbl = onto.augment(record.lbl, max_length)
+            record.lbl = onto.propagate(record.lbl, max_length)
 
     def __str__(self):
         num_anno = sum(map(lambda record: len(record.lbl), self.records))
