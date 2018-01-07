@@ -143,7 +143,7 @@ class Ontology(object):
         else:
             anc = map(lambda go: nx.descendants(G, go), lbl)
             aug = reduce(lambda x, y: x | y, anc, lbl)
-        aug = onto.sort(aug)
+        aug = self.sort(aug)
         if not include_root:
             aug = aug[1:]
         return aug
