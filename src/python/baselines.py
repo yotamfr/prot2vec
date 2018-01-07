@@ -199,7 +199,7 @@ def _prepare_blast(sequences):
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
 
 
-def _blast(target, reference, topn=None, choose_max_prob=True):
+def _blast(target, reference, topn=None, choose_max_prob=False):
 
     query_pth = os.path.join(tmp_dir, 'query-%s.fasta' % GoAspect(ASPECT))
     output_pth = os.path.join(tmp_dir, "blastp-%s.out" % GoAspect(ASPECT))
@@ -240,7 +240,7 @@ def _blast(target, reference, topn=None, choose_max_prob=True):
 
 def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
 
-    if len(target_seqs > 1):
+    if len(target_seqs) > 1:
         pbar = tqdm(range(len(target_seqs)), desc="targets processed")
     else:
         pbar = None

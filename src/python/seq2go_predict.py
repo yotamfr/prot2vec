@@ -166,6 +166,8 @@ def add_arguments(parser):
                         help="Limit the size of benchmark.")
     parser.add_argument('--predict_proba', action='store_true', default=False,
                         help="Predict probabilities?")
+    parser.add_argument("--fallback", type=str, choices=['naive', 'blast'],
+                        default="naive", help="Specify a fallback baseline method.")
 
 
 if __name__ == "__main__":
@@ -214,7 +216,7 @@ if __name__ == "__main__":
         bout = np.any([word not in output_lang.word2index for word in out])
         if binp or bout or not blen:
             seq = valid_sequences[seqid]
-            predictions[seqid] = bl(train_seqs, train_annots, [seq], "naive", load_file=False)
+            predictions[seqid] = bl(train_seqs, train_annots, [seq], args.fallback, load_file=False)
             continue
         if args.predict_proba:
             preds = predict_proba(encoder, decoder, inp)
