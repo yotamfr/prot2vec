@@ -225,6 +225,7 @@ class Dataset(object):
         self.transform = transform
         self.records = []
         self.do_init(uid2seq, uid2lbl)
+        self.augmented = False
 
     def do_init(self, uid2seq, uid2lbl):
         records = self.records = []
@@ -239,12 +240,15 @@ class Dataset(object):
             records.append(record)
 
     def augment(self, max_length=None):
+        if self.augmented:
+            return
         n, m = len(self), 0
         onto = self.onto
         for i, record in enumerate(self.records):
             if verbose:
                 sys.stdout.write("\r{0:.0f}%".format(100.0 * i/n))
             record.lbl = onto.propagate(record.lbl, max_length)
+        self.augmented = True
 
     def __str__(self):
         num_anno = sum(map(lambda record: len(record.lbl), self.records))
