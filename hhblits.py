@@ -1,13 +1,18 @@
 import os
 import sys
+import io
+
 import subprocess
 from tqdm import tqdm
 
-# import A3MIO
+import A3MIO
 from Bio.Seq import Seq
 from Bio import SeqIO, AlignIO
-from Bio.Align.AlignInfo import SummaryInfo
 from Bio.SeqRecord import SeqRecord
+from Bio.Align.AlignInfo import SummaryInfo
+from Bio.Blast.Applications import NcbipsiblastCommandline
+
+from concurrent.futures import ThreadPoolExecutor
 
 from src.python.preprocess import *
 
@@ -145,6 +150,46 @@ def _run_parallel_hhblits_msa(sequences):
     pbar.close()
 
 
+def _hhblits(seq_record):
+
+    global pbar
+
+    seqid, seq = seq_record.id, str(seq_record.seq)
+    database = "dbs/uniprot20_2016_02/uniprot20_2016_02"
+    cline = "hhblits -i 'stdin' -d %s -n 2 -a3m 'stdout' -o /dev/null" % database
+    child = subprocess.Popen(cline,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True,
+                             shell=(sys.platform != "win32"))
+    _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
+    # cline = NcbipsiblastCommandline(help=True)
+    # "psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm"
+    assert child.returncode == 0
+    a3m = list(AlignIO.parse(io.StringIO(stdout), "a3m"))
+    pssm = SummaryInfo(a3m[0]).pos_specific_score_matrix(chars_to_ignore=[GAP])
+    return seqid, seq, pssm
+
+
+def _run_parallel_hhblits(sequences, num_threads=4):
+
+    global pbar
+
+    records = [SeqRecord(Seq(v), k) for k, v in sequences.items()]
+
+    pbar = tqdm(range(len(records)), desc="sequences processed")
+
+    e = ThreadPoolExecutor(num_threads)
+
+    for seqid, seq, pssm, in e.map(_hhblits, records):
+        db.pssm.update_one({
+            "_id": seqid}, {
+            '$set': {"pssm": pssm.pssm, "seq": seq}
+        }, upsert=True)
+        pbar.update(1)
+
+
 def _run_hhblits_msa(sequences):
     seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
                    if not os.path.exists("%s/%s.out" % (out_dir, id))]
@@ -237,8 +282,10 @@ if __name__ == "__main__":
     lim = args.limit
 
     seqs, _, _ = _get_annotated_uniprot(db, lim)
-    if args.parallel:
-        _run_parallel_hhblits_msa(seqs)
-    else:
-        _run_hhblits_msa(seqs)
-    _load_pssms(seqs)
+    # if args.parallel:
+    #     _run_parallel_hhblits_msa(seqs)
+    # else:
+    #     _run_hhblits_msa(seqs)
+    # _load_pssms(seqs)
+
+    _run_parallel_hhblits(seqs, num_cpu)

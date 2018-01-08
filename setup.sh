@@ -30,8 +30,7 @@ done
 #sudo apt-get install ncbi-blast+
 #sudo apt-get install hhsuite
 
-#wget http://raptorx.uchicago.edu/download/eHVlZmVuZy5jdWlAa2F1c3QuZWR1LnNh/25/ #nr90.tar.gz
-
+# git clone https://github.com/soedinglab/hh-suite.git
 
 conda create -p virtualenv python=3.6
 

@@ -89,7 +89,7 @@ def predict(encoder, decoder, seq, max_length=MAX_LENGTH):
     return decoded_words, attentions[:di + 1, :len(encoder_outputs)]
 
 
-def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-4):
+def predict_proba(encoder, decoder, seq, max_length=MAX_LENGTH, eps=1e-2):
 
     input_lengths = [len(seq)]
     seqix = [indexes_from_sequence(input_lang, seq)]
@@ -166,7 +166,7 @@ def add_arguments(parser):
     parser.add_argument('--predict_proba', action='store_true', default=False,
                         help="Predict probabilities?")
     parser.add_argument("--fallback", type=str, choices=['naive', 'blast'],
-                        default="naive", help="Specify a fallback baseline method.")
+                        required=True, help="Specify a fallback baseline method.")
 
 
 if __name__ == "__main__":
@@ -245,5 +245,6 @@ if __name__ == "__main__":
     for seqid, preds in predictions.items():
         combine_probabilities(predictions[seqid])
 
-    pth = os.path.join(ckptpath, "pred-seq2go-%s.npy" % GoAspect(asp))
+    fname = ("pred-seq2go-proba-%s.npy" if args.predict_proba else "pred-seq2go-%s.npy") % GoAspect(asp)
+    pth = os.path.join(ckptpath, fname)
     np.save(pth, predictions)

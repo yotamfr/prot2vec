@@ -173,7 +173,9 @@ def _get_labeled_data(db, query, limit, propagate=True):
 
 def _prepare_naive(reference):
     global PRIOR
-    if PRIOR: return
+    prior_pth = os.path.join(tmp_dir, 'prior-%s.npy' % GoAspect(ASPECT))
+    if os.path.exists(prior_pth):
+        PRIOR = np.load(prior_pth).item()
     go2count = {}
     for _, go_terms in reference.items():
         for go in go_terms:
@@ -182,7 +184,9 @@ def _prepare_naive(reference):
             else:
                 go2count[go] = 1
     total = len(reference)
-    PRIOR = {go: count/total for go, count in go2count.items()}
+    prior = {go: count/total for go, count in go2count.items()}
+    np.save(prior_pth, prior)
+    PRIOR = prior
 
 
 def _naive(target, reference):
@@ -200,7 +204,7 @@ def _prepare_blast(sequences):
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
 
 
-def _blast(target, reference, topn=None, choose_max_prob=False):
+def _blast(target, reference, topn=None, choose_max_prob=True):
 
     query_pth = os.path.join(tmp_dir, 'query-%s.fasta' % GoAspect(ASPECT))
     output_pth = os.path.join(tmp_dir, "blastp-%s.out" % GoAspect(ASPECT))
@@ -276,13 +280,14 @@ def precision(tau, predictions, targets):
 
     P, T = [], []
     for seqid, annotations in predictions.items():
-        preds = set([go for go, prob in annotations.items() if prob >= tau])
+        preds = [go for go, prob in annotations.items() if prob >= tau]
         if len(preds) == 0:
             continue
-        P.append(preds)
+        P.append(set(preds))
         T.append(set(targets[seqid]))
 
     assert len(P) == len(T)
+
     if len(P) == 0: return 1.0
 
     total = sum([len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)])
@@ -301,12 +306,13 @@ def recall(tau, predictions, targets, partial_evaluation=False):
 
     P, T = [], []
     for seqid, annotations in predictions.items():
-        preds = set([go for go, prob in annotations.items() if prob >= tau])
+        preds = [go for go, prob in annotations.items() if prob >= tau]
         if not partial_evaluation and len(annotations) == 0: continue
-        P.append(preds)
+        P.append(set(preds))
         T.append(set(targets[seqid]))
 
     assert len(P) == len(T)
+
     if len(P) == 0: return 0.0
 
     total = sum([len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)])
@@ -324,10 +330,10 @@ def F_max(P, T, thresholds=THRESHOLDS):
 
 
 def predict(reference_seqs, reference_annots, target_seqs, method, load_file=True):
-    pred_path = os.path.join(tmp_dir, 'pred-%s-%s.npy' % (method, GoAspect(ASPECT)))
-    if load_file and os.path.exists(pred_path):
-        return np.load(pred_path).item()
     if method == "blast":
+        pred_path = os.path.join(tmp_dir, 'pred-blast-%s.npy' % GoAspect(ASPECT))
+        if load_file and os.path.exists(pred_path):
+            return np.load(pred_path).item()
         _prepare_blast(reference_seqs)
         predictions = _predict(reference_annots, target_seqs, _blast)
         np.save(pred_path, predictions)
@@ -335,8 +341,13 @@ def predict(reference_seqs, reference_annots, target_seqs, method, load_file=Tru
     elif method == "naive":
         _prepare_naive(reference_annots)
         predictions = _predict(reference_annots, target_seqs, _naive)
-        np.save(pred_path, predictions)
         return predictions
+    elif method == "seq2go":
+        pred_path = os.path.join(tmp_dir, 'pred-seq2go-%s.npy' % GoAspect(ASPECT))
+        return np.load(pred_path).item()
+    elif method == "seq2go-proba":
+        pred_path = os.path.join(tmp_dir, 'pred-seq2go-proba-%s.npy' % GoAspect(ASPECT))
+        return np.load(pred_path).item()
     else:
         print("Unknown method")
 
