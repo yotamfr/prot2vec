@@ -32,7 +32,6 @@ prefix_hhsuite = "/usr/share/hhsuite/scripts/"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
 
-ASPECT = 'F'
 batch_size = 8
 num_cpu = 2
 GAP = '-'
@@ -51,15 +50,18 @@ def _get_annotated_uniprot(db, limit):
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
 
-    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, ASPECT).load()
+    uniprot_ids = []
+    for asp in ['F', 'C', 'P']:
+        seqid2goid, _ = GoAnnotationCollectionLoader(s, c, asp).load()
+        uniprot_ids.extend(list(seqid2goid.keys()))
 
-    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    query = {"_id": {"$in": unique(uniprot_ids).tolist()}}
     num_seq = db.uniprot.count(query)
     src_seq = db.uniprot.find(query)
 
     seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
 
-    return seqid2seq, seqid2goid, goid2seqid
+    return seqid2seq
 
 
 #    CREDIT TO SPIDER2
@@ -111,7 +113,7 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_parallel_hhblits_msa(sequences):
+def _run_hhblits_batched(sequences):
     records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
                if not os.path.exists("%s/%s.out" % (out_dir, id))]
     i, n = 0, len(records)
@@ -120,7 +122,7 @@ def _run_parallel_hhblits_msa(sequences):
     while i < n:
         j = min(i+batch_size, n)
         batch = records[i:j]
-        sequences_fasta = 'SEQ-%s.fasta' % GoAspect(ASPECT)
+        sequences_fasta = 'SEQ.fasta'
         SeqIO.write(batch, open(os.path.join(out_dir, sequences_fasta), 'w+'), "fasta")
         pwd = os.getcwd()
         os.chdir(out_dir)
@@ -133,7 +135,7 @@ def _run_parallel_hhblits_msa(sequences):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        cline = "%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d\'"\
+        cline = "%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d -o /dev/null\'"\
                 % (prefix_hhsuite, uniprot20name, uniprot20name, num_cpu)
         child = subprocess.Popen(cline,
                                  stdout=subprocess.PIPE,
@@ -143,6 +145,9 @@ def _run_parallel_hhblits_msa(sequences):
 
         handle, _ = child.communicate()
         assert child.returncode == 0
+
+        _load_pssms(seqs)
+
         os.chdir(pwd)
         pbar.update(j - i)
         i = j
@@ -150,29 +155,52 @@ def _run_parallel_hhblits_msa(sequences):
     pbar.close()
 
 
-def _hhblits(seq_record):
+def _hhblits(seq_record, cleanup=True):
 
     global pbar
 
     seqid, seq = seq_record.id, str(seq_record.seq)
     database = "dbs/uniprot20_2016_02/uniprot20_2016_02"
-    cline = "hhblits -i 'stdin' -d %s -n 2 -a3m 'stdout' -o /dev/null" % database
+    msa_pth = os.path.join(tmp_dir, "%s.msa" % seqid)
+
+    cline = "hhblits -i 'stdin' -d %s -n 2 -opsi %s -o /dev/null" % (database, msa_pth)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
-    _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
-    # cline = NcbipsiblastCommandline(help=True)
-    # "psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm"
+    _, _ = child.communicate(input=">%s\n%s" % (seqid, seq))
     assert child.returncode == 0
-    a3m = list(AlignIO.parse(io.StringIO(stdout), "a3m"))
-    pssm = SummaryInfo(a3m[0]).pos_specific_score_matrix(chars_to_ignore=[GAP])
-    return seqid, seq, pssm
+
+    # sys.stdin = io.StringIO(stdout)
+    # cline = NcbipsiblastCommandline(help=True)
+
+    seq_pth = os.path.join(tmp_dir, "%s.seq" % seqid)
+    SeqIO.write(seq_record, open(seq_pth, 'w+'), "fasta")
+    mat_pth = os.path.join(tmp_dir, "%s.pssm" % seqid)
+
+    cline = "psiblast -subject %s -in_msa %s -out_ascii_pssm %s" % (seq_pth, msa_pth, mat_pth)
+    child = subprocess.Popen(cline,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True,
+                             shell=(sys.platform != "win32"))
+    _, _ = child.communicate()
+    assert child.returncode == 0
+
+    aa, pssm = read_pssm(mat_pth)
+
+    if cleanup:
+        os.remove(seq_pth)
+        os.remove(msa_pth)
+        os.remove(mat_pth)
+
+    return seqid, seq, pssm, aa
 
 
-def _run_parallel_hhblits(sequences, num_threads=4):
+def _run_hhblits_multithread(sequences, num_threads=4):
 
     global pbar
 
@@ -182,19 +210,19 @@ def _run_parallel_hhblits(sequences, num_threads=4):
 
     e = ThreadPoolExecutor(num_threads)
 
-    for seqid, seq, pssm, in e.map(_hhblits, records):
+    for (seqid, seq, pssm, _) in e.map(_hhblits, records):
         db.pssm.update_one({
             "_id": seqid}, {
-            '$set': {"pssm": pssm.pssm, "seq": seq}
+            '$set': {"pssm": pssm, "seq": seq}
         }, upsert=True)
         pbar.update(1)
 
 
-def _run_hhblits_msa(sequences):
+def _run_hhblits(sequences):
     seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
                    if not os.path.exists("%s/%s.out" % (out_dir, id))]
 
-    fasta = 'SEQ-%s.fasta' % GoAspect(ASPECT)
+    fasta = 'SEQ.fasta'
     SeqIO.write(seq_records, open(os.path.join(out_dir, fasta), 'w+'), "fasta")
     pwd = os.getcwd()
 
@@ -259,9 +287,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
-    parser.add_argument('--parallel', action='store_true', default=False,
-                        help="Work in parallel mode.")
-    parser.add_argument("--num_cpu", type=int, default=2,
+
+    parser.add_argument("--num_cpu", type=int, default=4,
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=8,
                         help="How many sequences in batch (when running in parallel mode).")
@@ -281,11 +308,7 @@ if __name__ == "__main__":
     db = client['prot2vec']
     lim = args.limit
 
-    seqs, _, _ = _get_annotated_uniprot(db, lim)
-    # if args.parallel:
-    #     _run_parallel_hhblits_msa(seqs)
-    # else:
-    #     _run_hhblits_msa(seqs)
-    # _load_pssms(seqs)
+    seqs = _get_annotated_uniprot(db, lim)
+    _run_hhblits_batched(seqs)
 
-    _run_parallel_hhblits(seqs, num_cpu)
+    # _run_hhblits_multithread(seqs, num_cpu)
