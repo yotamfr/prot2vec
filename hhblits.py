@@ -288,9 +288,9 @@ def add_arguments(parser):
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
 
-    parser.add_argument("--num_cpu", type=int, default=4,
+    parser.add_argument("--num_cpu", type=int, default=2,
                         help="How many cpus for computing PSSM (when running in parallel mode).")
-    parser.add_argument("--batch_size", type=int, default=8,
+    parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
 
 
