@@ -110,7 +110,7 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_hhblits_batched(sequences, cleanup=False):
+def _run_hhblits_batched(sequences, cleanup=True):
     os.environ['HHLIB'] = "/usr/share/hhsuite"
 
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
