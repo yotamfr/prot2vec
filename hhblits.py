@@ -10,7 +10,6 @@ from Bio.Seq import Seq
 from Bio import SeqIO, AlignIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Align.AlignInfo import SummaryInfo
-from Bio.Blast.Applications import NcbipsiblastCommandline
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,14 +26,13 @@ import argparse
 out_dir = "./hhblits"
 if not os.path.exists(out_dir): os.mkdir(out_dir)
 
-prefix_hhsuite = "/usr/share/hhsuite/scripts/"
-
+prefix_hhsuite = "/usr/share/hhsuite/scripts"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
 
 batch_size = 8
 num_cpu = 2
-GAP = '-'
+IGNORE = [aa for aa in map(str.lower, AA.dictionary.keys())] + ['-']  # ignore deletions + insertions
 
 
 def prepare_uniprot20():
@@ -61,7 +59,7 @@ def _get_annotated_uniprot(db, limit):
 
     seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
 
-    return seqid2seq
+    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: len(pair[1]))
 
 
 #    CREDIT TO SPIDER2
@@ -113,17 +111,19 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_hhblits_batched(sequences):
-    records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
-               if not os.path.exists("%s/%s.out" % (out_dir, id))]
+def _run_hhblits_batched(sequences, cleanup=False):
+    os.environ['HHLIB'] = "/usr/share/hhsuite"
+
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
     while i < n:
         j = min(i+batch_size, n)
         batch = records[i:j]
-        sequences_fasta = 'SEQ.fasta'
+        sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
         SeqIO.write(batch, open(os.path.join(out_dir, sequences_fasta), 'w+'), "fasta")
+
         pwd = os.getcwd()
         os.chdir(out_dir)
         cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, sequences_fasta)
@@ -134,9 +134,9 @@ def _run_hhblits_batched(sequences):
                                  shell=(sys.platform != "win32"))
         handle, _ = child.communicate()
         assert child.returncode == 0
-
-        cline = "%s/multithread.pl \'*.seq\' \'hhblits -i $file -d ../dbs/%s/%s -opsi $name.out -n 2 -cpu %d -o /dev/null\'"\
-                % (prefix_hhsuite, uniprot20name, uniprot20name, num_cpu)
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.fas -n 2 -mact 0.97 -cpu %d" % \
+                      (uniprot20name, uniprot20name, num_cpu)
+        cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
@@ -146,9 +146,17 @@ def _run_hhblits_batched(sequences):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        _load_pssms(seqs)
-
+        e = ThreadPoolExecutor(num_cpu)
+        for (seq, pssm) in e.map(_get_pssm, batch):
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"pssm": pssm.pssm, "seq": str(seq.seq)}
+            }, upsert=True)
         os.chdir(pwd)
+
+        if cleanup:
+            os.system("rm %s/*" % out_dir)
+
         pbar.update(j - i)
         i = j
 
@@ -258,28 +266,12 @@ def _run_hhblits(sequences):
     pbar.close()
 
 
-# MUST BE RUN AFTER BLITS FINISHED
-def _load_pssms(sequences):
-    msa_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
-    pbar = tqdm(range(len(msa_records)), desc="sequences processed")
-
-    for seq in msa_records:
-        pwd = os.getcwd()
-        os.chdir(out_dir)
-        # a3m = list(AlignIO.parse(open("%s.a3m" % seq.id, 'r'), "a3m"))
-        # pssm = SummaryInfo(a3m[0]).pos_specific_score_matrix(chars_to_ignore=[GAP])
-        _set_unique_ids("%s.out" % seq.id, "%s.msa" % seq.id)
-        os.system("psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>out.log 2>err.log" %
-                  (seq.id, seq.id, seq.id))
-        aa, pssm = read_pssm("%s.pssm" % seq.id)
-        os.chdir(pwd)
-        db.pssm.update_one({
-            "_id": seq.id}, {
-            '$set': {"pssm": pssm, "seq": ''.join(aa)}
-        }, upsert=True)
-        pbar.update(1)
-
-    pbar.close()
+# MUST BE RUN AFTER HHBLITS FINISHED
+def _get_pssm(seq):
+    a3m = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "a3m"))
+    for record in a3m[0]._records: record._seq = record._seq.upper()
+    pssm = SummaryInfo(a3m[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
+    return seq, pssm
 
 
 def add_arguments(parser):
@@ -287,7 +279,6 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
-
     parser.add_argument("--num_cpu", type=int, default=2,
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
@@ -310,5 +301,3 @@ if __name__ == "__main__":
 
     seqs = _get_annotated_uniprot(db, lim)
     _run_hhblits_batched(seqs)
-
-    # _run_hhblits_multithread(seqs, num_cpu)

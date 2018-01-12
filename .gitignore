@@ -10,7 +10,6 @@ data
 hmmer
 hhblits
 hh-suite
-Data/*.obo
 
 models
 figures
