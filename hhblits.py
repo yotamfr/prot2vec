@@ -147,15 +147,14 @@ def _run_hhblits_batched(sequences, cleanup=False):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm, aa) in e.map(_get_pssm, batch):
-            db.pssm.update_one({
-                "_id": seq.id}, {
-                '$set': {"pssm": pssm,
-                         "aa": ''.join(aa),
-                         "seq": str(seq.seq),
-                         "length": len(aa)}
-            }, upsert=True)
+        # e = ThreadPoolExecutor(num_cpu)
+        # for (seq, pssm, aa) in e.map(_get_pssm, batch):
+        #     db.pssm.update_one({
+        #         "_id": seq.id}, {
+        #         '$set': {"pssm": pssm,
+        #                  "seq": str(seq.seq),
+        #                  "length": len(seq.seq)}
+        #     }, upsert=True)
 
         if cleanup:
             os.system("rm ./*")
@@ -315,23 +314,23 @@ def _get_pssm(seq):
     handle, _ = child.communicate()
     assert child.returncode == 0
 
-    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
-
-    cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
-            % (seq.id, seq.id, seq.id)
-    child = subprocess.Popen(cline,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-    _, _ = child.communicate()
-    assert child.returncode == 0
+    # _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+    #
+    # cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
+    #         % (seq.id, seq.id, seq.id)
+    # child = subprocess.Popen(cline,
+    #                          stdout=subprocess.PIPE,
+    #                          stderr=subprocess.PIPE,
+    #                          universal_newlines=True,
+    #                          shell=(sys.platform != "win32"))
+    # _, _ = child.communicate()
+    # assert child.returncode == 0
 
     # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
     # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
-    aa, pssm = read_pssm("%s.pssm" % seq.id)
+    # aa, pssm = read_pssm("%s.pssm" % seq.id)
 
-    return seq, pssm, aa
+    return seq, pssm
 
 
 def add_arguments(parser):
