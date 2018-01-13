@@ -134,7 +134,7 @@ def _run_hhblits_batched(sequences, cleanup=False):
                                  shell=(sys.platform != "win32"))
         handle, _ = child.communicate()
         assert child.returncode == 0
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 1000 -mact 0.9 -cpu %d" % \
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 2000 -mact 0.9 -cpu %d" % \
                       (uniprot20name, uniprot20name, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
@@ -146,12 +146,12 @@ def _run_hhblits_batched(sequences, cleanup=False):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        # e = ThreadPoolExecutor(num_cpu)
-        # for (seq, pssm) in e.map(_get_pssm, batch):
-        #     db.pssm.update_one({
-        #         "_id": seq.id}, {
-        #         '$set': {"pssm": pssm.pssm, "seq": str(seq.seq)}
-        #     }, upsert=True)
+        e = ThreadPoolExecutor(num_cpu)
+        for (seq, pssm) in e.map(_get_pssm, batch):
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"pssm": pssm, "seq": str(seq.seq)}
+            }, upsert=True)
 
         if cleanup:
             os.system("rm ./*")
@@ -279,7 +279,7 @@ def _get_pssm(seq):
     # handle, _ = child.communicate()
     # assert child.returncode == 0
 
-    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -id 90 -cov 70" % (seq.id, seq.id)
+    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -id 90 -cov 50" % (seq.id, seq.id)
     child = subprocess.Popen(cline,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
@@ -298,7 +298,7 @@ def _get_pssm(seq):
     # handle, _ = child.communicate()
     # assert child.returncode == 0
 
-    cline = "%s/reformat.pl -r %s.fil.a3m %s.fas" % (prefix_hhsuite, seq.id, seq.id)
+    cline = "%s/reformat.pl -r %s.fil.a3m %s.psi" % (prefix_hhsuite, seq.id, seq.id)
     child = subprocess.Popen(cline,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
@@ -307,20 +307,20 @@ def _get_pssm(seq):
     handle, _ = child.communicate()
     assert child.returncode == 0
 
-    # cline = "psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm" \
-    #         % (seq.id, seq.id, seq.id)
-    # child = subprocess.Popen(cline,
-    #                          stdin=subprocess.PIPE,
-    #                          stdout=subprocess.PIPE,
-    #                          stderr=subprocess.PIPE,
-    #                          universal_newlines=True,
-    #                          shell=(sys.platform != "win32"))
-    # _, _ = child.communicate()
-    # assert child.returncode == 0
+    cline = "psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm" \
+            % (seq.id, seq.id, seq.id)
+    child = subprocess.Popen(cline,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True,
+                             shell=(sys.platform != "win32"))
+    _, _ = child.communicate()
+    assert child.returncode == 0
 
-    aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
-    pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
-    # _, pssm = read_pssm("%s.pssm" % seq.id)
+    # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
+    # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
+    _, pssm = read_pssm("%s.pssm" % seq.id)
 
     return seq, pssm
 
