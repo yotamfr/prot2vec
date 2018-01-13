@@ -137,7 +137,7 @@ def _run_hhblits_batched(sequences, cleanup=False):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d" % \
+        hhblits_cmd = "hhblits_omp -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d" % \
                       (uniprot20name, uniprot20name, max_filter, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
