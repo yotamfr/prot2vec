@@ -289,8 +289,8 @@ def _get_pssm(seq):
 
     cline = "hhfilter -i %s.a3m -o %s.fil.a3m -id 90 -cov 50" % (seq.id, seq.id)
     child = subprocess.Popen(cline,
-                             # stdout=subprocess.PIPE,
-                             # stderr=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
 
