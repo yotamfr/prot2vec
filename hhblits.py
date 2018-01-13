@@ -141,22 +141,22 @@ def _run_hhblits_batched(sequences, cleanup=False):
                       (uniprot20name, uniprot20name, max_filter, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
-                                 # stdout=subprocess.PIPE,
-                                 # stderr=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
                                  universal_newlines=True,
                                  shell=(sys.platform != "win32"))
 
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        # e = ThreadPoolExecutor(num_cpu)
-        # for (seq, pssm, aa) in e.map(_get_pssm, batch):
-        #     db.pssm.update_one({
-        #         "_id": seq.id}, {
-        #         '$set': {"pssm": pssm,
-        #                  "seq": str(seq.seq),
-        #                  "length": len(seq.seq)}
-        #     }, upsert=True)
+        e = ThreadPoolExecutor(num_cpu)
+        for (seq, pssm) in e.map(_get_pssm, batch):
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"pssm": pssm,
+                         "seq": str(seq.seq),
+                         "length": len(seq.seq)}
+            }, upsert=True)
 
         if cleanup:
             os.system("rm ./*")
