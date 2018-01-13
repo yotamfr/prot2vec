@@ -40,7 +40,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit):
+def _get_annotated_uniprot(db, limit, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
 
     c = limit if limit else db.goa_uniprot.count(query)
@@ -52,7 +52,7 @@ def _get_annotated_uniprot(db, limit):
         seqid2goid, _ = GoAnnotationCollectionLoader(s, c, asp).load()
         uniprot_ids.extend(list(seqid2goid.keys()))
 
-    query = {"_id": {"$in": unique(uniprot_ids).tolist()}}
+    query = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": {"$lte": max_length}}
     num_seq = db.uniprot.count(query)
     src_seq = db.uniprot.find(query)
 
@@ -110,7 +110,7 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_hhblits_batched(sequences, cleanup=True):
+def _run_hhblits_batched(sequences, cleanup=False):
     os.environ['HHLIB'] = "/usr/share/hhsuite"
 
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
@@ -120,12 +120,13 @@ def _run_hhblits_batched(sequences, cleanup=True):
     while i < n:
         j = min(i+batch_size, n)
         batch = records[i:j]
-        sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
-        SeqIO.write(batch, open(os.path.join(out_dir, sequences_fasta), 'w+'), "fasta")
-
         pwd = os.getcwd()
         os.chdir(out_dir)
+
+        sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
+        SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
         cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, sequences_fasta)
+
         child = subprocess.Popen(cline,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
@@ -133,7 +134,7 @@ def _run_hhblits_batched(sequences, cleanup=True):
                                  shell=(sys.platform != "win32"))
         handle, _ = child.communicate()
         assert child.returncode == 0
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -mact 0.9 -cpu %d" % \
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 1000 -mact 0.9 -cpu %d" % \
                       (uniprot20name, uniprot20name, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
@@ -145,17 +146,16 @@ def _run_hhblits_batched(sequences, cleanup=True):
         handle, _ = child.communicate()
         assert child.returncode == 0
 
-        e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm) in e.map(_get_pssm, batch):
-            db.pssm.update_one({
-                "_id": seq.id}, {
-                # '$set': {"pssm": pssm.pssm, "seq": str(seq.seq)}
-                '$set': {"pssm": pssm.pssm, "seq": str(seq.seq)}
-            }, upsert=True)
-        os.chdir(pwd)
+        # e = ThreadPoolExecutor(num_cpu)
+        # for (seq, pssm) in e.map(_get_pssm, batch):
+        #     db.pssm.update_one({
+        #         "_id": seq.id}, {
+        #         '$set': {"pssm": pssm.pssm, "seq": str(seq.seq)}
+        #     }, upsert=True)
 
         if cleanup:
-            os.system("rm %s/*" % out_dir)
+            os.system("rm ./*")
+        os.chdir(pwd)
 
         pbar.update(j - i)
         i = j
@@ -171,18 +171,19 @@ def _hhblits(seq_record, cleanup=True):
     database = "dbs/uniprot20_2016_02/uniprot20_2016_02"
     msa_pth = os.path.join(tmp_dir, "%s.msa" % seqid)
 
-    cline = "hhblits -i 'stdin' -d %s -n 2 -opsi %s -o /dev/null" % (database, msa_pth)
+    # cline = "hhblits -i 'stdin' -d %s -n 2 -opsi %s -o /dev/null" % (database, msa_pth)
+
+    cline = "hhblits_omp -i 'stdin' -d %s -n 2 -oa3m 'stdout'" % database,
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
-    _, _ = child.communicate(input=">%s\n%s" % (seqid, seq))
+    _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
     assert child.returncode == 0
 
-    # sys.stdin = io.StringIO(stdout)
-    # cline = NcbipsiblastCommandline(help=True)
+    sys.stdin = io.StringIO(stdout)
 
     seq_pth = os.path.join(tmp_dir, "%s.seq" % seqid)
     SeqIO.write(seq_record, open(seq_pth, 'w+'), "fasta")
