@@ -29,7 +29,7 @@ prefix_hhsuite = "/usr/share/hhsuite/scripts"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
 
-batch_size = 8
+batch_size = 2
 num_cpu = 2
 max_filter = 2000
 IGNORE = [aa for aa in map(str.lower, AA.dictionary.keys())] + ['-']  # ignore deletions + insertions
@@ -126,28 +126,15 @@ def _run_hhblits_batched(sequences, cleanup=False):
 
         sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
-        cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, sequences_fasta)
+        cline = "%s/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
+                % (prefix_hhsuite, sequences_fasta)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        child = subprocess.Popen(cline,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 universal_newlines=True,
-                                 shell=(sys.platform != "win32"))
-
-        handle, _ = child.communicate()
-        assert child.returncode == 0
-
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d" % \
-                      (uniprot20name, uniprot20name, max_filter, num_cpu)
-        cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
-        child = subprocess.Popen(cline,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 universal_newlines=True,
-                                 shell=(sys.platform != "win32"))
-
-        handle, _ = child.communicate()
-        assert child.returncode == 0
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d"\
+                      % (uniprot20name, uniprot20name, max_filter, num_cpu)
+        cline = "%s/multithread.pl \'*.seq\' \'%s\' 1>/dev/null 2>/dev/null" \
+                % (prefix_hhsuite, hhblits_cmd)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
         for (seq, pssm) in e.map(_get_pssm, batch):
@@ -280,54 +267,20 @@ def _run_hhblits(sequences):
 def _get_pssm(seq):
 
     # cline = "%s/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
-    # child = subprocess.Popen(cline,
-    #                          stdout=subprocess.PIPE,
-    #                          stderr=subprocess.PIPE,
-    #                          universal_newlines=True,
-    #                          shell=(sys.platform != "win32"))
-    # handle, _ = child.communicate()
-    # assert child.returncode == 0
+    # assert os.WEXITSTATUS(os.system(cline)) == 0
 
     cline = "hhfilter -i %s.a3m -o %s.fil.a3m -id 90 -cov 50" % (seq.id, seq.id)
-    child = subprocess.Popen(cline,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-
-    handle, _ = child.communicate()
-    assert child.returncode == 0
-
-    # cline = "%s/reformat.pl -r %s.fil.a3m %s.psi" % (prefix_hhsuite, seq.id, seq.id)
-    # child = subprocess.Popen(cline,
-    #                          stdout=subprocess.PIPE,
-    #                          stderr=subprocess.PIPE,
-    #                          universal_newlines=True,
-    #                          shell=(sys.platform != "win32"))
-    # handle, _ = child.communicate()
-    # assert child.returncode == 0
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
     cline = "%s/reformat.pl -r %s.fil.a3m %s.psi" % (prefix_hhsuite, seq.id, seq.id)
-    child = subprocess.Popen(cline,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-    handle, _ = child.communicate()
-    assert child.returncode == 0
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
     cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (seq.id, seq.id, seq.id)
-    child = subprocess.Popen(cline,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-    _, _ = child.communicate()
-    assert child.returncode == 0
-    #
+    assert os.WEXITSTATUS(os.system(cline)) == 0
+
     # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
     # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
     aa, pssm = read_pssm("%s.pssm" % seq.id)
