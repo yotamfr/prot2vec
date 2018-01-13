@@ -134,7 +134,7 @@ def _run_hhblits_batched(sequences, cleanup=False):
                                  shell=(sys.platform != "win32"))
         handle, _ = child.communicate()
         assert child.returncode == 0
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 2000 -mact 0.9 -cpu %d" % \
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 1000 -mact 0.9 -cpu %d" % \
                       (uniprot20name, uniprot20name, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
@@ -147,10 +147,13 @@ def _run_hhblits_batched(sequences, cleanup=False):
         assert child.returncode == 0
 
         e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm) in e.map(_get_pssm, batch):
+        for (seq, pssm, aa) in e.map(_get_pssm, batch):
             db.pssm.update_one({
                 "_id": seq.id}, {
-                '$set': {"pssm": pssm, "seq": str(seq.seq)}
+                '$set': {"pssm": pssm,
+                         "aa": ''.join(aa),
+                         "seq": str(seq.seq),
+                         "length": len(aa)}
             }, upsert=True)
 
         if cleanup:
@@ -161,6 +164,10 @@ def _run_hhblits_batched(sequences, cleanup=False):
         i = j
 
     pbar.close()
+
+
+def _read_a3m(seq):
+    return seq, open("%s.a3m" % str(seq.id), 'r').read()
 
 
 def _hhblits(seq_record, cleanup=True):
@@ -307,7 +314,9 @@ def _get_pssm(seq):
     handle, _ = child.communicate()
     assert child.returncode == 0
 
-    cline = "psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm" \
+    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+
+    cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (seq.id, seq.id, seq.id)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
@@ -320,9 +329,9 @@ def _get_pssm(seq):
 
     # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
     # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
-    _, pssm = read_pssm("%s.pssm" % seq.id)
+    aa, pssm = read_pssm("%s.pssm" % seq.id)
 
-    return seq, pssm
+    return seq, pssm, aa
 
 
 def add_arguments(parser):
