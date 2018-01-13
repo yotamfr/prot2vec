@@ -31,6 +31,7 @@ uniprot20name = "uniprot20_2016_02"
 
 batch_size = 8
 num_cpu = 2
+max_filter = 2000
 IGNORE = [aa for aa in map(str.lower, AA.dictionary.keys())] + ['-']  # ignore deletions + insertions
 
 
@@ -134,8 +135,8 @@ def _run_hhblits_batched(sequences, cleanup=False):
                                  shell=(sys.platform != "win32"))
         handle, _ = child.communicate()
         assert child.returncode == 0
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt 1000 -mact 0.9 -cpu %d" % \
-                      (uniprot20name, uniprot20name, num_cpu)
+        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d" % \
+                      (uniprot20name, uniprot20name, max_filter, num_cpu)
         cline = "%s/multithread.pl \'*.seq\' \'%s\'" % (prefix_hhsuite, hhblits_cmd)
         child = subprocess.Popen(cline,
                                  stdout=subprocess.PIPE,
@@ -319,8 +320,8 @@ def _get_pssm(seq):
     cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (seq.id, seq.id, seq.id)
     child = subprocess.Popen(cline,
-                             stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
+                             # stdin=subprocess.PIPE,
+                             # stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
@@ -339,6 +340,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
+    parser.add_argument("--max_filter", type=int, default=2000,
+                        help="How many sequences to include in the MSA for PSSM computation.")
     parser.add_argument("--num_cpu", type=int, default=2,
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
@@ -352,6 +355,7 @@ if __name__ == "__main__":
 
     num_cpu = args.num_cpu
     batch_size = args.batch_size
+    max_filter = args.max_filter
 
     prepare_uniprot20()
 
