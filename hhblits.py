@@ -136,14 +136,14 @@ def _run_hhblits_batched(sequences, cleanup=False):
                 % (prefix_hhsuite, hhblits_cmd)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm) in e.map(_get_pssm, batch):
-            db.pssm.update_one({
-                "_id": seq.id}, {
-                '$set': {"pssm": pssm,
-                         "seq": str(seq.seq),
-                         "length": len(seq.seq)}
-            }, upsert=True)
+        # e = ThreadPoolExecutor(num_cpu)
+        # for (seq, pssm) in e.map(_get_pssm, batch):
+        #     db.pssm.update_one({
+        #         "_id": seq.id}, {
+        #         '$set': {"pssm": pssm,
+        #                  "seq": str(seq.seq),
+        #                  "length": len(seq.seq)}
+        #     }, upsert=True)
 
         if cleanup:
             os.system("rm ./*")
