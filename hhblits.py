@@ -32,7 +32,7 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 2000
-IGNORE = [aa for aa in map(str.lower, AA.dictionary.keys())] + ['-']  # ignore deletions + insertions
+IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
 
 def prepare_uniprot20():
@@ -67,7 +67,7 @@ def read_pssm(pssm_file):
         # this function reads the pssm file given as input, and returns a LEN x 20 matrix of pssm values.
 
         # index of 'ACDE..' in 'ARNDCQEGHILKMFPSTWYV'(blast order)
-        idx_res = (0, 4, 3, 6, 13, 7, 8, 9, 11, 10, 12, 2, 14, 5, 1, 15, 16, 19, 17, 18)
+        # idx_res = (0, 4, 3, 6, 13, 7, 8, 9, 11, 10, 12, 2, 14, 5, 1, 15, 16, 19, 17, 18)
 
         # open the two files, read in their data and then close them
         if pssm_file == 'STDIN': fp = sys.stdin
@@ -97,7 +97,7 @@ def read_pssm(pssm_file):
                         pssm_temp = [-float(line[k*3+9: k*3+12]) for k in range(20)]
                         pass
                 else: continue
-                pssm.append([pssm_temp[k] for k in idx_res])
+                pssm.append({AA.index2aa[k]: pssm_temp[k] for k in range(20)})
 
         return aa, pssm
 
@@ -114,7 +114,8 @@ def _set_unique_ids(input_file, output_file):
 def _run_hhblits_batched(sequences, cleanup=False):
     os.environ['HHLIB'] = "/usr/share/hhsuite"
 
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
+               if not db.pssm.find_one({"_id": seqid})]
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
@@ -269,18 +270,18 @@ def _get_pssm(seq):
     # cline = "%s/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov 50" % (seq.id, seq.id)
+    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov 70 1>/dev/null 2>&1" % (seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    # cline = "%s/reformat.pl -r %s.fil.a3m %s.fas" % (prefix_hhsuite, seq.id, seq.id)
-    # assert os.WEXITSTATUS(os.system(cline)) == 0
+    cline = "%s/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/reformat.pl -r %s.fil.a3m %s.psi" % (prefix_hhsuite, seq.id, seq.id)
+    cline = "%s/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
+    cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
