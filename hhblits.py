@@ -136,14 +136,14 @@ def _run_hhblits_batched(sequences, cleanup=False):
                 % (prefix_hhsuite, hhblits_cmd)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        # e = ThreadPoolExecutor(num_cpu)
-        # for (seq, pssm) in e.map(_get_pssm, batch):
-        #     db.pssm.update_one({
-        #         "_id": seq.id}, {
-        #         '$set': {"pssm": pssm,
-        #                  "seq": str(seq.seq),
-        #                  "length": len(seq.seq)}
-        #     }, upsert=True)
+        e = ThreadPoolExecutor(num_cpu)
+        for (seq, pssm) in e.map(_get_pssm, batch):
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"pssm": pssm,
+                         "seq": str(seq.seq),
+                         "length": len(seq.seq)}
+            }, upsert=True)
 
         if cleanup:
             os.system("rm ./*")
@@ -269,8 +269,11 @@ def _get_pssm(seq):
     # cline = "%s/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -id 90 -cov 50" % (seq.id, seq.id)
+    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov 50" % (seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
+
+    # cline = "%s/reformat.pl -r %s.fil.a3m %s.fas" % (prefix_hhsuite, seq.id, seq.id)
+    # assert os.WEXITSTATUS(os.system(cline)) == 0
 
     cline = "%s/reformat.pl -r %s.fil.a3m %s.psi" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
