@@ -28,34 +28,35 @@ verbose = True
 class AminoAcids(object):
 
     def __init__(self):
-        self.dictionary =\
+        self.aa2index = \
             {
-             "A": 0,
-             "R": 1,
-             "N": 2,
-             "D": 3,
-             "C": 4,
-             "E": 5,
-             "Q": 6,
-             "G": 7,
-             "H": 8,
-             "I": 9,
-             "L": 10,
-             "K": 11,
-             "M": 12,
-             "F": 13,
-             "P": 14,
-             "O": 15,
-             "U": 16,
-             "S": 17,
-             "T": 18,
-             "W": 19,
-             "Y": 20,
-             "V": 21,
-             "X": 22,
-             "B": 23,
-             "Z": 24
+                "A": 0,
+                "R": 1,
+                "N": 2,
+                "D": 3,
+                "C": 4,
+                "E": 5,
+                "Q": 6,
+                "G": 7,
+                "H": 8,
+                "I": 9,
+                "L": 10,
+                "K": 11,
+                "M": 12,
+                "F": 13,
+                "P": 14,
+                "S": 15,
+                "T": 16,
+                "W": 17,
+                "Y": 18,
+                "V": 19,
+                "X": 20,
+                "B": 21,
+                "Z": 22,
+                "O": 23,
+                "U": 24
             }
+        self.index2aa = {v: k for k, v in self.aa2index.items()}
 
 
 AA = AminoAcids()
@@ -217,7 +218,7 @@ class Identity(object):
 class Dataset(object):
 
     def __init__(self, uid2seq, uid2lbl, ontology,
-                 embedder=Seq2Vec(AA.dictionary),
+                 embedder=Seq2Vec(AA.aa2index),
                  transform=Identity()):
 
         self._emb = embedder
@@ -469,7 +470,7 @@ def load_data(db, asp='F', codes=exp_codes, limit=None):
     return Dataset(seqid2seq, seqid2goid, onto), goid2seqid
 
 
-def load_cafa3(db, data_dir, asp, aa_emb=AA.dictionary, seqs_filter=None, lbls_filter=None, trans=None):
+def load_cafa3(db, data_dir, asp, aa_emb=AA.aa2index, seqs_filter=None, lbls_filter=None, trans=None):
 
     aspect = GoAspect(asp)
     seq2vec = Seq2Vec(aa_emb)
