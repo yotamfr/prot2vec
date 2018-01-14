@@ -126,11 +126,6 @@ def _run_hhblits_batched(sequences):
                 break
             if db.pssm.find_one({"_id": seq.id}):
                 continue
-            db.pssm.update_one({
-                "_id": seq.id}, {
-                '$set': {"seq": str(seq.seq),
-                         "length": len(seq.seq)}
-            }, upsert=True)
             batch.append(seq)
 
         pwd = os.getcwd()
@@ -158,7 +153,9 @@ def _run_hhblits_batched(sequences):
         for (seq, pssm) in e.map(_get_pssm, batch):
             db.pssm.update_one({
                 "_id": seq.id}, {
-                '$set': {"pssm": pssm}
+                '$set': {"pssm": pssm,
+                         "seq": str(seq.seq),
+                         "length": len(seq.seq)}
             }, upsert=False)
 
         if cleanup:
@@ -284,12 +281,12 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
-
     if output_fasta:
-        cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+        cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+
+    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
