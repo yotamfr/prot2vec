@@ -2,6 +2,8 @@ import os
 import sys
 import io
 
+from numpy import unique
+
 import subprocess
 from tqdm import tqdm
 
@@ -12,8 +14,6 @@ from Bio.Align.AlignInfo import SummaryInfo
 
 from concurrent.futures import ThreadPoolExecutor
 
-from src.python.preprocess import *
-
 from pymongo import MongoClient
 
 from tempfile import gettempdir
@@ -21,6 +21,45 @@ tmp_dir = gettempdir()
 
 import argparse
 
+
+exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"]
+
+
+class AminoAcids(object):
+
+    def __init__(self):
+        self.aa2index = \
+            {
+                "A": 0,
+                "R": 1,
+                "N": 2,
+                "D": 3,
+                "C": 4,
+                "E": 5,
+                "Q": 6,
+                "G": 7,
+                "H": 8,
+                "I": 9,
+                "L": 10,
+                "K": 11,
+                "M": 12,
+                "F": 13,
+                "P": 14,
+                "S": 15,
+                "T": 16,
+                "W": 17,
+                "Y": 18,
+                "V": 19,
+                "X": 20,
+                "B": 21,
+                "Z": 22,
+                "O": 23,
+                "U": 24
+            }
+        self.index2aa = {v: k for k, v in self.aa2index.items()}
+
+
+AA = AminoAcids()
 
 out_dir = "./hhblits"
 
@@ -46,21 +85,13 @@ def prepare_uniprot20():
 
 def _get_annotated_uniprot(db, limit, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
-
-    c = limit if limit else db.goa_uniprot.count(query)
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
-
-    uniprot_ids = []
-    for asp in ['F', 'C', 'P']:
-        seqid2goid, _ = GoAnnotationCollectionLoader(s, c, asp).load()
-        uniprot_ids.extend(list(seqid2goid.keys()))
+    uniprot_ids = map(lambda doc: doc["DB_Object_ID"], s)
 
     query = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": {"$lte": max_length}}
-    num_seq = db.uniprot.count(query)
-    src_seq = db.uniprot.find(query)
-
-    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
+    s = db.uniprot.find(query)
+    seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
 
