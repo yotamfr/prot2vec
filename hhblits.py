@@ -19,47 +19,10 @@ from pymongo import MongoClient
 from tempfile import gettempdir
 tmp_dir = gettempdir()
 
+from src.python.consts import *
+
 import argparse
 
-
-exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"]
-
-
-class AminoAcids(object):
-
-    def __init__(self):
-        self.aa2index = \
-            {
-                "A": 0,
-                "R": 1,
-                "N": 2,
-                "D": 3,
-                "C": 4,
-                "E": 5,
-                "Q": 6,
-                "G": 7,
-                "H": 8,
-                "I": 9,
-                "L": 10,
-                "K": 11,
-                "M": 12,
-                "F": 13,
-                "P": 14,
-                "S": 15,
-                "T": 16,
-                "W": 17,
-                "Y": 18,
-                "V": 19,
-                "X": 20,
-                "B": 21,
-                "Z": 22,
-                "O": 23,
-                "U": 24
-            }
-        self.index2aa = {v: k for k, v in self.aa2index.items()}
-
-
-AA = AminoAcids()
 
 out_dir = "./hhblits"
 
@@ -74,6 +37,8 @@ batch_size = 2
 num_cpu = 2
 max_filter = 2000
 coverage = 70
+
+
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
 
@@ -145,7 +110,7 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_hhblits_batched(sequences, cleanup=False):
+def _run_hhblits_batched(sequences):
 
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if not db.pssm.find_one({"_id": seqid})]
@@ -181,6 +146,12 @@ def _run_hhblits_batched(sequences, cleanup=False):
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, num_cpu)
         cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, hhblits_cmd)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
+
+        hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil.a3m -cov %d" \
+                       % (prefix_hhsuite, coverage)
+        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' 1>/dev/null 2>/dev/null" \
+                % (prefix_hhsuite, hhfilter_cmd)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
@@ -228,7 +199,7 @@ def _hhblits(seq_record, cleanup=True):
     SeqIO.write(seq_record, open(seq_pth, 'w+'), "fasta")
     mat_pth = os.path.join(tmp_dir, "%s.pssm" % seqid)
 
-    cline = "%/psiblast -subject %s -in_msa %s -out_ascii_pssm %s" \
+    cline = "%s/psiblast -subject %s -in_msa %s -out_ascii_pssm %s" \
             % (prefix_blast, seq_pth, msa_pth, mat_pth)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
@@ -313,14 +284,12 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov %d 1>/dev/null 2>&1" % (seq.id, seq.id, coverage)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
-
     cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
+    if output_fasta:
+        cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
@@ -352,6 +321,8 @@ def add_arguments(parser):
                         help="How many sequences in batch (when running in parallel mode).")
     parser.add_argument("--coverage", type=int, default=70,
                         help="The desired coverage (for the alignment algorithm).")
+    parser.add_argument('--keep_files', action='store_true', default=False,
+                        help="Whether to keep intermediate files.")
 
 
 if __name__ == "__main__":
@@ -366,6 +337,9 @@ if __name__ == "__main__":
     coverage = args.coverage
     prefix_blast = args.prefix_blast
     prefix_hhsuite = args.prefix_hhsuite
+
+    cleanup = not args.keep_files
+    output_fasta = args.keep_files
 
     os.environ['HHLIB'] = prefix_hhsuite
 
