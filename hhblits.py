@@ -87,7 +87,7 @@ def _get_annotated_uniprot(db, limit, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
-    uniprot_ids = map(lambda doc: doc["DB_Object_ID"], s)
+    uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
 
     query = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": {"$lte": max_length}}
     s = db.uniprot.find(query)
