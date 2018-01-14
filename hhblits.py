@@ -23,15 +23,17 @@ import argparse
 
 
 out_dir = "./hhblits"
+
 if not os.path.exists(out_dir): os.mkdir(out_dir)
 
-prefix_hhsuite = "/usr/share/hhsuite/scripts"
+prefix_hhsuite = "/usr/share/hhsuite"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
 
 batch_size = 2
 num_cpu = 2
 max_filter = 2000
+coverage = 70
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
 
@@ -112,7 +114,6 @@ def _set_unique_ids(input_file, output_file):
 
 
 def _run_hhblits_batched(sequences, cleanup=False):
-    os.environ['HHLIB'] = "/usr/share/hhsuite"
 
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if not db.pssm.find_one({"_id": seqid})]
@@ -127,13 +128,13 @@ def _run_hhblits_batched(sequences, cleanup=False):
 
         sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
-        cline = "%s/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
+        cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        hhblits_cmd = "hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d"\
-                      % (uniprot20name, uniprot20name, max_filter, num_cpu)
-        cline = "%s/multithread.pl \'*.seq\' \'%s\' 1>/dev/null 2>/dev/null" \
+        hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d"\
+                      % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, num_cpu)
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, hhblits_cmd)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
@@ -168,9 +169,8 @@ def _hhblits(seq_record, cleanup=True):
     database = "dbs/uniprot20_2016_02/uniprot20_2016_02"
     msa_pth = os.path.join(tmp_dir, "%s.msa" % seqid)
 
-    # cline = "hhblits -i 'stdin' -d %s -n 2 -opsi %s -o /dev/null" % (database, msa_pth)
-
-    cline = "hhblits_omp -i 'stdin' -d %s -n 2 -oa3m 'stdout'" % database,
+    cline = "%s/bin/hhblits_omp -i 'stdin' -d %s -n 2 -oa3m 'stdout'"\
+            % (prefix_hhsuite, database)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
@@ -233,7 +233,7 @@ def _run_hhblits(sequences):
     pwd = os.getcwd()
 
     os.chdir(out_dir)
-    cline = "%s/splitfasta.pl %s" % (prefix_hhsuite, fasta)
+    cline = "%s/scripts/splitfasta.pl %s" % (prefix_hhsuite, fasta)
     child = subprocess.Popen(cline,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
@@ -247,8 +247,8 @@ def _run_hhblits(sequences):
     pbar = tqdm(range(len(seq_records)), desc="sequences processed")
     for seq in seq_records:
         os.chdir(out_dir)
-        cline = "hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
-                % (seq.id, uniprot20name, uniprot20name, seq.id)
+        cline = "%s/bin/hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
+                % (prefix_hhsuite, seq.id, uniprot20name, uniprot20name, seq.id)
         child = subprocess.Popen(cline,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
@@ -267,16 +267,16 @@ def _run_hhblits(sequences):
 # MUST BE RUN AFTER HHBLITS FINISHED
 def _get_pssm(seq):
 
-    # cline = "%s/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
+    # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov 70 1>/dev/null 2>&1" % (seq.id, seq.id)
+    cline = "hhfilter -i %s.a3m -o %s.fil.a3m -cov %d 1>/dev/null 2>&1" % (seq.id, seq.id, coverage)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
@@ -295,6 +295,8 @@ def _get_pssm(seq):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
+    parser.add_argument("--prefix_hhsuite", type=str, default='/usr/share/hhsuite',
+                        help="Specify where you installed hhsuite.")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
     parser.add_argument("--max_filter", type=int, default=2000,
@@ -303,9 +305,12 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
+    parser.add_argument("--coverage", type=int, default=70,
+                        help="The desired coverage (for the alignment algorithm).")
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
@@ -313,6 +318,10 @@ if __name__ == "__main__":
     num_cpu = args.num_cpu
     batch_size = args.batch_size
     max_filter = args.max_filter
+    coverage = args.coverage
+    prefix_hhsuite = args.prefix_hhsuite
+
+    os.environ['HHLIB'] = prefix_hhsuite
 
     prepare_uniprot20()
 
