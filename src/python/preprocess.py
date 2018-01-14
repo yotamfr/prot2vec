@@ -1,6 +1,6 @@
 import os
 import sys
-import wget
+# import wget
 import datetime
 
 import numpy as np
