@@ -27,6 +27,7 @@ out_dir = "./hhblits"
 if not os.path.exists(out_dir): os.mkdir(out_dir)
 
 prefix_hhsuite = "/usr/share/hhsuite"
+prefix_blast = "/usr/bin"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
 
@@ -61,7 +62,7 @@ def _get_annotated_uniprot(db, limit, max_length=2818):
 
     seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
 
-    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: len(pair[1]))
+    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
 
 
 #    CREDIT TO SPIDER2
@@ -121,12 +122,25 @@ def _run_hhblits_batched(sequences, cleanup=False):
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
     while i < n:
-        j = min(i+batch_size, n)
-        batch = records[i:j]
+        batch = []
+        while len(batch) < batch_size:
+            if len(records) > 0:
+                seq = records.pop()
+            else:
+                break
+            if db.pssm.find_one({"_id": seq.id}):
+                continue
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"seq": str(seq.seq),
+                         "length": len(seq.seq)}
+            }, upsert=True)
+            batch.append(seq)
+
         pwd = os.getcwd()
         os.chdir(out_dir)
 
-        sequences_fasta = 'batch-%d.fasta' % (j//batch_size)
+        sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
         cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, sequences_fasta)
@@ -142,17 +156,14 @@ def _run_hhblits_batched(sequences, cleanup=False):
         for (seq, pssm) in e.map(_get_pssm, batch):
             db.pssm.update_one({
                 "_id": seq.id}, {
-                '$set': {"pssm": pssm,
-                         "seq": str(seq.seq),
-                         "length": len(seq.seq)}
-            }, upsert=True)
+                '$set': {"pssm": pssm}
+            }, upsert=False)
 
         if cleanup:
             os.system("rm ./*")
         os.chdir(pwd)
 
-        pbar.update(j - i)
-        i = j
+        pbar.update(batch_size)
 
     pbar.close()
 
@@ -186,7 +197,8 @@ def _hhblits(seq_record, cleanup=True):
     SeqIO.write(seq_record, open(seq_pth, 'w+'), "fasta")
     mat_pth = os.path.join(tmp_dir, "%s.pssm" % seqid)
 
-    cline = "psiblast -subject %s -in_msa %s -out_ascii_pssm %s" % (seq_pth, msa_pth, mat_pth)
+    cline = "%/psiblast -subject %s -in_msa %s -out_ascii_pssm %s" \
+            % (prefix_blast, seq_pth, msa_pth, mat_pth)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
@@ -281,8 +293,8 @@ def _get_pssm(seq):
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    cline = "psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
-            % (seq.id, seq.id, seq.id)
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
+            % (prefix_blast, seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
     # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
@@ -297,6 +309,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
     parser.add_argument("--prefix_hhsuite", type=str, default='/usr/share/hhsuite',
                         help="Specify where you installed hhsuite.")
+    parser.add_argument("--prefix_blast", type=str, default='/usr/bin',
+                        help="Specify where you installed ncbi blast.")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
     parser.add_argument("--max_filter", type=int, default=2000,
@@ -319,6 +333,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     max_filter = args.max_filter
     coverage = args.coverage
+    prefix_blast = args.prefix_blast
     prefix_hhsuite = args.prefix_hhsuite
 
     os.environ['HHLIB'] = prefix_hhsuite
