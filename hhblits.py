@@ -290,7 +290,7 @@ def _get_pssm(seq):
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (prefix_blast, seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
