@@ -143,7 +143,7 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, hhblits_cmd)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil.a3m -cov %d" \
+        hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
         cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, hhfilter_cmd)
@@ -282,13 +282,13 @@ def _get_pssm(seq):
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
     if output_fasta:
-        cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+        cline = "%s/scripts/reformat.pl -r %s.fil %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/scripts/reformat.pl -r %s.fil.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
+    cline = "%s/scripts/reformat.pl -r %s.fil %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+    # _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (prefix_blast, seq.id, seq.id, seq.id)
