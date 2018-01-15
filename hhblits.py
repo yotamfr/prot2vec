@@ -51,7 +51,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit, min_length=1, max_length=2818):
+def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
@@ -62,7 +62,7 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=2818):
     s = db.uniprot.find(query)
     seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
-    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: len(pair[1]))
+    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
 
 
 #    CREDIT TO SPIDER2
