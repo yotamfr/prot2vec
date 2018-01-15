@@ -134,25 +134,26 @@ def _run_hhblits_batched(sequences):
         pwd = os.getcwd()
         os.chdir(out_dir)
 
-        os.system("rm ./*.seq")
-
         # print('000000000000000000000000000000')
+        os.system("rm ./*.seq")
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
         cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+
         # print('1111111111111111111111111111111')
+        os.system("rm ./*.a3m")
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
         cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
-        # print('222222222222222222222222222222')
 
-        os.system("rm ./*.a3m")
+        # print('222222222222222222222222222222')
+        os.system("rm ./*.fil")
 
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
@@ -160,8 +161,6 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('3333333333333333333333333333333')
-
-        os.system("rm ./*.fil")
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
