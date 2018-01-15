@@ -62,7 +62,7 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=2818):
     s = db.uniprot.find(query)
     seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
-    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
+    return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: len(pair[1]))
 
 
 #    CREDIT TO SPIDER2
