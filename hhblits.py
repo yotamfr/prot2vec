@@ -318,11 +318,12 @@ def _get_pssm(seq):
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
     aln = []
-    for line in open("%s.psi" % seq.id, 'rt'):
-        r = line.strip().split(' ')
-        if len(r) < 2:
-            continue
-        aln.append(r)
+    with open("%s.psi" % seq.id, 'rt') as f:
+        for line in f.readlines():
+            r = line.strip().split(' ')
+            if len(r) < 2:
+                continue
+            aln.append(r)
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
