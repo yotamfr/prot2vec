@@ -50,7 +50,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit, min_length=32, max_length=2818):
+def _get_annotated_uniprot(db, limit, min_length=100, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
