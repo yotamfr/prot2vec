@@ -32,7 +32,7 @@ done
 
 # git clone https://github.com/soedinglab/hh-suite.git
 
-# wget ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.7.1+-src.tar.gz
+# wget ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.2.31/ncbi-blast-2.2.31+-x64-linux.tar.gz
 # installation instructions: https://www.ncbi.nlm.nih.gov/books/NBK279671/
 
 conda create -p virtualenv python=3.6

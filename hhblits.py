@@ -298,7 +298,10 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+    if os.path.exists("%s.psi" % seq.id):
+        _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+    else:
+        return seq, []
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
