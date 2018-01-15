@@ -134,7 +134,7 @@ def _run_hhblits_batched(sequences):
         pwd = os.getcwd()
         os.chdir(out_dir)
 
-        if cleanup: os.system("rm ./*")
+        os.system("rm ./*.seq")
 
         # print('000000000000000000000000000000')
 
@@ -152,12 +152,16 @@ def _run_hhblits_batched(sequences):
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('222222222222222222222222222222')
 
+        os.system("rm ./*.a3m")
+
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
         cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('3333333333333333333333333333333')
+
+        os.system("rm ./*.fil")
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
@@ -182,10 +186,6 @@ def _run_hhblits_batched(sequences):
             }, upsert=True)
 
         # print('666666666666666666666666666666666666666')
-
-        os.system("rm ./*.seq")
-        os.system("rm ./*.a3m")
-        os.system("rm ./*.fil")
 
         if cleanup: os.system("rm ./*")
 
