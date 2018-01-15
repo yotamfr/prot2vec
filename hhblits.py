@@ -139,28 +139,28 @@ def _run_hhblits_batched(sequences):
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
-        cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
+        cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         print('1111111111111111111111111111111')
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
-        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         print('222222222222222222222222222222')
 
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
-        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d" \
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         print('3333333333333333333333333333333')
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
-            cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+            cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d" \
                     % (prefix_hhsuite, reformat_cmd, num_cpu)
             assert os.WEXITSTATUS(os.system(cline)) == 0
         print('44444444444444444444444444444444444')
@@ -320,7 +320,7 @@ def _get_pssm(seq):
     aln = []
     with open("%s.psi" % seq.id, 'rt') as f:
         for line in f.readlines():
-            r = line.strip().split(' ')
+            r = line.strip().split()
             if len(r) < 2:
                 continue
             aln.append(r)
