@@ -32,11 +32,13 @@ prefix_hhsuite = "/usr/share/hhsuite"
 prefix_blast = "/usr/bin"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
+# uniprot20name = "uniprot20_2013_03"
 
 batch_size = 2
 num_cpu = 2
 max_filter = 2000
 coverage = 70
+mact = 0.9
 
 
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
@@ -137,17 +139,28 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact 0.9 -cpu %d"\
-                      % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, num_cpu)
-        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' 1>/dev/null 2>/dev/null" \
-                % (prefix_hhsuite, hhblits_cmd)
+        hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
+                      % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+                % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
-        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' 1>/dev/null 2>/dev/null" \
-                % (prefix_hhsuite, hhfilter_cmd)
+        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+                % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+
+        reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
+        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
+                % (prefix_hhsuite, reformat_cmd, num_cpu)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
+
+        if output_fasta:
+            reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
+            cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
+                    % (prefix_hhsuite, reformat_cmd, num_cpu)
+            assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
         for (seq, pssm) in e.map(_get_pssm, batch):
@@ -156,7 +169,11 @@ def _run_hhblits_batched(sequences):
                 '$set': {"pssm": pssm,
                          "seq": str(seq.seq),
                          "length": len(seq.seq)}
-            }, upsert=False)
+            }, upsert=True)
+
+        os.system("rm ./*.seq")
+        os.system("rm ./*.a3m")
+        os.system("rm ./*.fil")
 
         if cleanup:
             os.system("rm ./*")
@@ -281,16 +298,9 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    if output_fasta:
-        cline = "%s/scripts/reformat.pl -r %s.fil %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
-        assert os.WEXITSTATUS(os.system(cline)) == 0
+    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    cline = "%s/scripts/reformat.pl -r %s.fil %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seq.id, seq.id)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
-
-    # _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
-
-    cline = "%s/psiblast -subject %s.seq -in_msa %s.psi -out_ascii_pssm %s.pssm" \
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
             % (prefix_blast, seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
@@ -316,8 +326,10 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
-    parser.add_argument("--coverage", type=int, default=70,
+    parser.add_argument("--coverage", type=int, default=51,
                         help="The desired coverage (for the alignment algorithm).")
+    parser.add_argument("--mact", type=int, default=0.9,
+                        help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
     parser.add_argument('--keep_files', action='store_true', default=False,
                         help="Whether to keep intermediate files.")
 
@@ -332,6 +344,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     max_filter = args.max_filter
     coverage = args.coverage
+    mact = args.mact
     prefix_blast = args.prefix_blast
     prefix_hhsuite = args.prefix_hhsuite
 
