@@ -36,7 +36,7 @@ uniprot20name = "uniprot20_2016_02"
 
 batch_size = 2
 num_cpu = 2
-max_filter = 2000
+max_filter = 20000
 coverage = 51
 mact = 0.9
 
@@ -171,7 +171,7 @@ def _run_hhblits_batched(sequences):
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm, aln) in e.map(_get_pssm, batch):
+        for (seq, pssm, aln) in e.map(_get_pssm, [seq for seq in batch if os.path.exists("%s.a3m" % seq.id)]):
             db.pssm.update_one({
                 "_id": seq.id}, {
                 '$set': {"pssm": pssm,
@@ -345,7 +345,7 @@ def add_arguments(parser):
                         help="Specify where you installed ncbi blast.")
     parser.add_argument("--limit", type=int, default=None,
                         help="How many sequences for PSSM computation.")
-    parser.add_argument("--max_filter", type=int, default=2000,
+    parser.add_argument("--max_filter", type=int, default=20000,
                         help="How many sequences to include in the MSA for PSSM computation.")
     parser.add_argument("--num_cpu", type=int, default=2,
                         help="How many cpus for computing PSSM (when running in parallel mode).")
