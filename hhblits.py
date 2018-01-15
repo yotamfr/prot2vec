@@ -56,15 +56,13 @@ def prepare_uniprot20():
 
 
 def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
-    query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
-    s = db.goa_uniprot.find(query)
+    q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date': {"$lte": t1}}
+    s = db.goa_uniprot.find(q)
     if limit: s = s.limit(limit)
     uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
 
-    query = {"_id": {"$in": unique(uniprot_ids).tolist()},
-             "length": {"$gte": min_length, "$lte": max_length},
-             'Date': {"$lte": t1}}
-    s = db.uniprot.find(query)
+    q = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": {"$gte": min_length, "$lte": max_length}}
+    s = db.uniprot.find(q)
     seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
