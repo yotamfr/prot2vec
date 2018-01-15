@@ -3,6 +3,8 @@ import sys
 import io
 import glob
 
+import datetime
+
 from numpy import unique
 
 import subprocess
@@ -41,6 +43,8 @@ max_filter = 20000
 coverage = 60
 mact = 0.9
 
+t0 = datetime.datetime(2014, 1, 1, 0, 0)
+t1 = datetime.datetime(2014, 9, 1, 0, 0)
 
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
@@ -58,7 +62,8 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
     uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
 
     query = {"_id": {"$in": unique(uniprot_ids).tolist()},
-             "length": {"$gte": min_length, "$lte": max_length}}
+             "length": {"$gte": min_length, "$lte": max_length},
+             'Date': {"$lte": t1}}
     s = db.uniprot.find(query)
     seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
