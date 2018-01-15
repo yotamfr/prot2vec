@@ -141,24 +141,28 @@ def _run_hhblits_batched(sequences):
         cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+        print('1111111111111111111111111111111')
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
         cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+        print('222222222222222222222222222222')
 
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
         cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
+        print('3333333333333333333333333333333')
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
             cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
                     % (prefix_hhsuite, reformat_cmd, num_cpu)
             assert os.WEXITSTATUS(os.system(cline)) == 0
+        print('44444444444444444444444444444444444')
 
         reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
         cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
@@ -298,6 +302,7 @@ def _run_hhblits(sequences):
 
 # MUST BE RUN AFTER HHBLITS FINISHED
 def _get_pssm(seq):
+    print('5555555555555555555555555555555555')
 
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
