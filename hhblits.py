@@ -50,7 +50,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit, min_length=50, max_length=2818):
+def _get_annotated_uniprot(db, limit, min_length=1, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
@@ -133,6 +133,9 @@ def _run_hhblits_batched(sequences):
 
         pwd = os.getcwd()
         os.chdir(out_dir)
+
+        if cleanup: os.system("rm ./*")
+
         # print('000000000000000000000000000000')
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
@@ -144,7 +147,7 @@ def _run_hhblits_batched(sequences):
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
-        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d" \
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('222222222222222222222222222222')
@@ -184,8 +187,7 @@ def _run_hhblits_batched(sequences):
         os.system("rm ./*.a3m")
         os.system("rm ./*.fil")
 
-        if cleanup:
-            os.system("rm ./*")
+        if cleanup: os.system("rm ./*")
 
         os.chdir(pwd)
 
