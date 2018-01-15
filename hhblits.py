@@ -93,9 +93,11 @@ def read_pssm(pssm_file):
                 aa_temp = split_line[1]
                 aa.append(aa_temp)
                 if len(split_line) in (44, 22):
-                        pssm_temp = [-float(i) for i in split_line[2:22]]
+                        # pssm_temp = [-float(i) for i in split_line[2:22]]
+                        pssm_temp = [float(i) for i in split_line[2:22]]
                 elif len(line) > 70:  # in case double digits of pssm
-                        pssm_temp = [-float(line[k*3+9: k*3+12]) for k in range(20)]
+                        # pssm_temp = [-float(line[k*3+9: k*3+12]) for k in range(20)]
+                        pssm_temp = [float(line[k*3+9: k*3+12]) for k in range(20)]
                         pass
                 else: continue
                 pssm.append({AA.index2aa[k]: pssm_temp[k] for k in range(20)})
@@ -151,10 +153,10 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
-        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
-                % (prefix_hhsuite, reformat_cmd, num_cpu)
-        assert os.WEXITSTATUS(os.system(cline)) == 0
+        # reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
+        # cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
+        #         % (prefix_hhsuite, reformat_cmd, num_cpu)
+        # assert os.WEXITSTATUS(os.system(cline)) == 0
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
@@ -163,10 +165,11 @@ def _run_hhblits_batched(sequences):
             assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
-        for (seq, pssm) in e.map(_get_pssm, batch):
+        for (seq, pssm, aln) in e.map(_get_pssm, batch):
             db.pssm.update_one({
                 "_id": seq.id}, {
                 '$set': {"pssm": pssm,
+                         "alignment": aln,
                          "seq": str(seq.seq),
                          "length": len(seq.seq)}
             }, upsert=True)
@@ -298,10 +301,15 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    if os.path.exists("%s.psi" % seq.id):
-        _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
-    else:
-        return seq, []
+    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi 1>/dev/null 2>&1" \
+            % (prefix_hhsuite, seq.id, seq.id)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
+
+    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+
+    aln = []
+    for line in open("%s.psi" % seq.id, 'rt'):
+        aln.append(line.split(' '))
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
@@ -311,7 +319,7 @@ def _get_pssm(seq):
     # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
     aa, pssm = read_pssm("%s.pssm" % seq.id)
 
-    return seq, pssm
+    return seq, pssm, aln
 
 
 def add_arguments(parser):
