@@ -180,12 +180,15 @@ def _run_hhblits_batched(sequences):
                          "length": len(seq.seq)}
             }, upsert=True)
 
+        print('666666666666666666666666666666666666666')
+
         os.system("rm ./*.seq")
         os.system("rm ./*.a3m")
         os.system("rm ./*.fil")
 
         if cleanup:
             os.system("rm ./*")
+
         os.chdir(pwd)
 
         pbar.update(batch_size)
