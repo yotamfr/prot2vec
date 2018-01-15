@@ -37,7 +37,7 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 20000
-coverage = 51
+coverage = 60
 mact = 0.9
 
 
@@ -94,10 +94,8 @@ def read_pssm(pssm_file):
                 aa_temp = split_line[1]
                 aa.append(aa_temp)
                 if len(split_line) in (44, 22):
-                        # pssm_temp = [-float(i) for i in split_line[2:22]]
                         pssm_temp = [float(i) for i in split_line[2:22]]
                 elif len(line) > 70:  # in case double digits of pssm
-                        # pssm_temp = [-float(line[k*3+9: k*3+12]) for k in range(20)]
                         pssm_temp = [float(line[k*3+9: k*3+12]) for k in range(20)]
                         pass
                 else: continue
@@ -351,7 +349,7 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
-    parser.add_argument("--coverage", type=int, default=51,
+    parser.add_argument("--coverage", type=int, default=60,
                         help="The desired coverage (for the alignment algorithm).")
     parser.add_argument("--mact", type=int, default=0.9,
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
