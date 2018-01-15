@@ -37,7 +37,7 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 20000
-coverage = 51
+coverage = 60
 mact = 0.9
 
 
@@ -50,7 +50,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit, min_length=1, max_length=2818):
+def _get_annotated_uniprot(db, limit, min_length=50, max_length=2818):
     query = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(query)
     if limit: s = s.limit(limit)
@@ -349,7 +349,7 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
-    parser.add_argument("--coverage", type=int, default=51,
+    parser.add_argument("--coverage", type=int, default=60,
                         help="The desired coverage (for the alignment algorithm).")
     parser.add_argument("--mact", type=int, default=0.9,
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
