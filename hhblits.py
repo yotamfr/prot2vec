@@ -1,6 +1,7 @@
 import os
 import sys
 import io
+import glob
 
 from numpy import unique
 
@@ -135,7 +136,7 @@ def _run_hhblits_batched(sequences):
         os.chdir(out_dir)
 
         # print('000000000000000000000000000000')
-        os.system("rm ./*.seq")
+        if len(glob.glob('*.seq')): os.system("rm *.seq")
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
@@ -144,7 +145,7 @@ def _run_hhblits_batched(sequences):
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         # print('1111111111111111111111111111111')
-        os.system("rm ./*.a3m")
+        if len(glob.glob('*.a3m')): os.system("rm *.a3m")
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
@@ -153,7 +154,7 @@ def _run_hhblits_batched(sequences):
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         # print('222222222222222222222222222222')
-        os.system("rm ./*.fil")
+        if len(glob.glob('*.fil')): os.system("rm *.fil")
 
         hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
                        % (prefix_hhsuite, coverage)
