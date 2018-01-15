@@ -154,16 +154,16 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, hhfilter_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        # reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
-        # cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
-        #         % (prefix_hhsuite, reformat_cmd, num_cpu)
-        # assert os.WEXITSTATUS(os.system(cline)) == 0
-
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
             cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null" \
                     % (prefix_hhsuite, reformat_cmd, num_cpu)
             assert os.WEXITSTATUS(os.system(cline)) == 0
+
+        reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
+        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
+                % (prefix_hhsuite, reformat_cmd, num_cpu)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
         for (seq, pssm, aln) in e.map(_get_pssm, batch):
@@ -302,15 +302,18 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi" \
-            % (prefix_hhsuite, seq.id, seq.id)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
+    # cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi" \
+    #         % (prefix_hhsuite, seq.id, seq.id)
+    # assert os.WEXITSTATUS(os.system(cline)) == 0
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
     aln = []
     for line in open("%s.psi" % seq.id, 'rt'):
-        aln.append(line.split(' '))
+        r = line.strip().split(' ')
+        if len(r) < 2:
+            continue
+        aln.append(r)
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
