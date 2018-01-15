@@ -37,7 +37,7 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 2000
-coverage = 70
+coverage = 51
 mact = 0.9
 
 
@@ -300,7 +300,7 @@ def _get_pssm(seq):
 
     _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm" \
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
