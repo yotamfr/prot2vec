@@ -37,7 +37,7 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 20000
-coverage = 60
+coverage = 51
 mact = 0.9
 
 
@@ -144,7 +144,7 @@ def _run_hhblits_batched(sequences):
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
-        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null" \
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('222222222222222222222222222222')
@@ -349,7 +349,7 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
-    parser.add_argument("--coverage", type=int, default=60,
+    parser.add_argument("--coverage", type=int, default=51,
                         help="The desired coverage (for the alignment algorithm).")
     parser.add_argument("--mact", type=int, default=0.9,
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
