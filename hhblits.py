@@ -302,7 +302,7 @@ def _get_pssm(seq):
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi 1>/dev/null 2>&1" \
+    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi" \
             % (prefix_hhsuite, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
