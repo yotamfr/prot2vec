@@ -135,6 +135,7 @@ def _run_hhblits_batched(sequences):
 
         pwd = os.getcwd()
         os.chdir(out_dir)
+        print('000000000000000000000000000000')
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
@@ -165,7 +166,7 @@ def _run_hhblits_batched(sequences):
         print('44444444444444444444444444444444444')
 
         reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
-        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>/dev/null"\
+        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d"\
                 % (prefix_hhsuite, reformat_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
