@@ -144,7 +144,7 @@ def _run_hhblits_batched(sequences):
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
-        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
+        cline = "%s/scripts/multithread.pl \'*.seq\' \'%s\' -cpu %d 1>/dev/null" \
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
         # print('222222222222222222222222222222')
