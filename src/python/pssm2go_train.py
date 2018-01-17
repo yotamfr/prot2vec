@@ -242,7 +242,7 @@ def pad_out(seq, max_length):
 def random_batch(batch_size):
 
     # Choose random pairs
-    ix = random.choice(list(range(len(pairs))))
+    ix = random.choice(list(range(len(pairs), len(pairs)-batch_size)))
     input_seqs = sorted([pair[0] for pair in pairs[ix:ix+batch_size]], key=lambda s: -len(s))
     target_seqs = [indexes_from_sequence(output_lang, pair[1]) for pair in pairs[ix:ix+batch_size]]
 
