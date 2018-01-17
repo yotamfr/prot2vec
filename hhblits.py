@@ -3,7 +3,7 @@ import sys
 import io
 import glob
 
-import datetime
+from datetime import datetime, timedelta
 
 from numpy import unique
 
@@ -40,11 +40,11 @@ uniprot20name = "uniprot20_2016_02"
 batch_size = 2
 num_cpu = 2
 max_filter = 20000
-coverage = 60
+coverage = 0
 mact = 0.9
 
-t0 = datetime.datetime(2014, 1, 1, 0, 0)
-t1 = datetime.datetime(2014, 9, 1, 0, 0)
+t0 = datetime(2014, 1, 1, 0, 0)
+t1 = datetime(2014, 9, 1, 0, 0)
 
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
@@ -119,8 +119,11 @@ def _set_unique_ids(input_file, output_file):
 
 def _run_hhblits_batched(sequences):
 
+    is_new = {"$gte": datetime.utcnow() - timedelta(hours=1)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
-               if not db.pssm.find_one({"_id": seqid})]
+               if not db.pssm.find_one({"_id": seqid})
+               or not db.pssm.find_one({"_id": seqid, "update_at": is_new})]
+
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
@@ -138,7 +141,6 @@ def _run_hhblits_batched(sequences):
         pwd = os.getcwd()
         os.chdir(out_dir)
 
-        # print('000000000000000000000000000000')
         if len(glob.glob('*.seq')): os.system("rm *.seq")
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
@@ -147,7 +149,6 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        # print('1111111111111111111111111111111')
         if len(glob.glob('*.a3m')): os.system("rm *.a3m")
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
@@ -156,26 +157,25 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, hhblits_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        # print('222222222222222222222222222222')
-        if len(glob.glob('*.fil')): os.system("rm *.fil")
+        if coverage > 0:
+            if len(glob.glob('*.fil')): os.system("rm *.fil")
+            hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
+                           % (prefix_hhsuite, coverage)
+            cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
+                    % (prefix_hhsuite, hhfilter_cmd, num_cpu)
+            assert os.WEXITSTATUS(os.system(cline)) == 0
 
-        hhfilter_cmd = "%s/bin/hhfilter -i $file -o $name.fil -cov %d" \
-                       % (prefix_hhsuite, coverage)
-        cline = "%s/scripts/multithread.pl \'*.a3m\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
-                % (prefix_hhsuite, hhfilter_cmd, num_cpu)
-        assert os.WEXITSTATUS(os.system(cline)) == 0
-        # print('3333333333333333333333333333333')
+        suffix = 'fil' if coverage > 0 else 'a3m'
 
         if output_fasta:
             reformat_cmd = "%s/scripts/reformat.pl -r a3m fas $file $name.fas" % prefix_hhsuite
-            cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
-                    % (prefix_hhsuite, reformat_cmd, num_cpu)
+            cline = "%s/scripts/multithread.pl \'*.%s\' \'%s\' -cpu %d 1>/dev/null 2>&1" \
+                    % (prefix_hhsuite, suffix, reformat_cmd, num_cpu)
             assert os.WEXITSTATUS(os.system(cline)) == 0
-        # print('44444444444444444444444444444444444')
 
         reformat_cmd = "%s/scripts/reformat.pl -r a3m psi $file $name.psi" % prefix_hhsuite
-        cline = "%s/scripts/multithread.pl \'*.fil\' \'%s\' -cpu %d 1>/dev/null 2>&1"\
-                % (prefix_hhsuite, reformat_cmd, num_cpu)
+        cline = "%s/scripts/multithread.pl \'*.%s\' \'%s\' -cpu %d 1>/dev/null 2>&1"\
+                % (prefix_hhsuite, suffix, reformat_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         e = ThreadPoolExecutor(num_cpu)
@@ -185,10 +185,9 @@ def _run_hhblits_batched(sequences):
                 '$set': {"pssm": pssm,
                          "alignment": aln,
                          "seq": str(seq.seq),
-                         "length": len(seq.seq)}
+                         "length": len(seq.seq),
+                         "updated_at": datetime.utcnow()}
             }, upsert=True)
-
-        # print('666666666666666666666666666666666666666')
 
         if cleanup: os.system("rm ./*")
 
@@ -309,7 +308,6 @@ def _run_hhblits(sequences):
 
 # MUST BE RUN AFTER HHBLITS FINISHED
 def _get_pssm(seq):
-    # print('5555555555555555555555555555555555')
 
     # cline = "%s/scripts/addss.pl %s.a3m" % (prefix_hhsuite, seq.id)
     # assert os.WEXITSTATUS(os.system(cline)) == 0
@@ -354,7 +352,7 @@ def add_arguments(parser):
                         help="How many cpus for computing PSSM (when running in parallel mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
-    parser.add_argument("--coverage", type=int, default=60,
+    parser.add_argument("--coverage", type=int, default=0,
                         help="The desired coverage (for the alignment algorithm).")
     parser.add_argument("--mact", type=int, default=0.9,
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
