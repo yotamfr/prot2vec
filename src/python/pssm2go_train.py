@@ -563,7 +563,7 @@ def main_loop(
     assert encoder_hidden_size == decoder_hidden_size
 
     # Initialize models
-    encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+    encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers + 1, dropout=dropout)
     decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
                                   dropout=dropout, embedding=output_embedding)
 
