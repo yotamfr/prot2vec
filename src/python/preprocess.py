@@ -78,6 +78,14 @@ class UniprotCollectionLoader(SequenceLoader):
         return doc["_id"], doc["sequence"]
 
 
+class PssmCollectionLoader(SequenceLoader):
+    def __init__(self, src_sequence, num_sequences):
+        super(PssmCollectionLoader, self).__init__(src_sequence, num_sequences)
+
+    def parse_sequence(self, doc):
+        return doc["_id"], (doc["seq"], doc["pssm"])
+
+
 class MappingLoader(object):
     def __init__(self, src_mapping, num_mapping):
         self.mapping_source = src_mapping
