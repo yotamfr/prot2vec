@@ -119,10 +119,10 @@ def _set_unique_ids(input_file, output_file):
 
 def _run_hhblits_batched(sequences):
 
-    is_new = {"$gte": datetime.utcnow() - timedelta(hours=1)}
+    is_new = {"$gte": datetime.utcnow() - timedelta(days=1)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if not db.pssm.find_one({"_id": seqid})
-               or not db.pssm.find_one({"_id": seqid, "update_at": is_new})]
+               or not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
@@ -202,7 +202,24 @@ def _read_a3m(seq):
     return seq, open("%s.a3m" % str(seq.id), 'r').read()
 
 
-def _hhblits(seq_record, cleanup=True):
+def _run_hhblits_parallel(sequences):
+    global pbar
+
+    records = [SeqRecord(Seq(v), k) for k, v in sequences.items()]
+
+    pbar = tqdm(range(len(records)), desc="sequences processed")
+
+    e = ThreadPoolExecutor(num_cpu)
+
+    for (seqid, seq, pssm, _) in e.map(_hhblits, records):
+        db.pssm.update_one({
+            "_id": seqid}, {
+            '$set': {"pssm": pssm, "seq": seq}
+        }, upsert=True)
+        pbar.update(1)
+
+
+def _hhblits(seq_record):
 
     global pbar
 
@@ -248,62 +265,44 @@ def _hhblits(seq_record, cleanup=True):
     return seqid, seq, pssm, aa
 
 
-def _run_hhblits_multithread(sequences, num_threads=4):
-
-    global pbar
-
-    records = [SeqRecord(Seq(v), k) for k, v in sequences.items()]
-
-    pbar = tqdm(range(len(records)), desc="sequences processed")
-
-    e = ThreadPoolExecutor(num_threads)
-
-    for (seqid, seq, pssm, _) in e.map(_hhblits, records):
-        db.pssm.update_one({
-            "_id": seqid}, {
-            '$set': {"pssm": pssm, "seq": seq}
-        }, upsert=True)
-        pbar.update(1)
-
-
-def _run_hhblits(sequences):
-    seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
-                   if not os.path.exists("%s/%s.out" % (out_dir, id))]
-
-    fasta = 'SEQ.fasta'
-    SeqIO.write(seq_records, open(os.path.join(out_dir, fasta), 'w+'), "fasta")
-    pwd = os.getcwd()
-
-    os.chdir(out_dir)
-    cline = "%s/scripts/splitfasta.pl %s" % (prefix_hhsuite, fasta)
-    child = subprocess.Popen(cline,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-
-    handle, _ = child.communicate()
-    assert child.returncode == 0
-    os.chdir(pwd)
-
-    pbar = tqdm(range(len(seq_records)), desc="sequences processed")
-    for seq in seq_records:
-        os.chdir(out_dir)
-        cline = "%s/bin/hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
-                % (prefix_hhsuite, seq.id, uniprot20name, uniprot20name, seq.id)
-        child = subprocess.Popen(cline,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 universal_newlines=True,
-                                 shell=(sys.platform != "win32"))
-
-        handle, _ = child.communicate()
-        assert child.returncode == 0
-        os.chdir(pwd)
-
-        pbar.update(1)
-
-    pbar.close()
+# def _run_hhblits(sequences):
+#     seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
+#                    if not os.path.exists("%s/%s.out" % (out_dir, id))]
+#
+#     fasta = 'SEQ.fasta'
+#     SeqIO.write(seq_records, open(os.path.join(out_dir, fasta), 'w+'), "fasta")
+#     pwd = os.getcwd()
+#
+#     os.chdir(out_dir)
+#     cline = "%s/scripts/splitfasta.pl %s" % (prefix_hhsuite, fasta)
+#     child = subprocess.Popen(cline,
+#                              stdout=subprocess.PIPE,
+#                              stderr=subprocess.PIPE,
+#                              universal_newlines=True,
+#                              shell=(sys.platform != "win32"))
+#
+#     handle, _ = child.communicate()
+#     assert child.returncode == 0
+#     os.chdir(pwd)
+#
+#     pbar = tqdm(range(len(seq_records)), desc="sequences processed")
+#     for seq in seq_records:
+#         os.chdir(out_dir)
+#         cline = "%s/bin/hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
+#                 % (prefix_hhsuite, seq.id, uniprot20name, uniprot20name, seq.id)
+#         child = subprocess.Popen(cline,
+#                                  stdout=subprocess.PIPE,
+#                                  stderr=subprocess.PIPE,
+#                                  universal_newlines=True,
+#                                  shell=(sys.platform != "win32"))
+#
+#         handle, _ = child.communicate()
+#         assert child.returncode == 0
+#         os.chdir(pwd)
+#
+#         pbar.update(1)
+#
+#     pbar.close()
 
 
 # MUST BE RUN AFTER HHBLITS FINISHED
@@ -384,6 +383,8 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']
     lim = args.limit
+
+    db.pssm.create_index("updated_at")
 
     seqs = _get_annotated_uniprot(db, lim)
     _run_hhblits_batched(seqs)
