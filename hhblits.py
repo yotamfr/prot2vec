@@ -119,7 +119,7 @@ def _set_unique_ids(input_file, output_file):
 
 def _run_hhblits_batched(sequences):
 
-    is_new = {"$gte": datetime.utcnow() - timedelta(days=1)}
+    is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if not db.pssm.find_one({"_id": seqid})
                or not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
