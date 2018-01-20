@@ -115,10 +115,12 @@ class EncoderCNN(nn.Module):
         self.gru = nn.GRU(input_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
-        features = self.cnn(input_seqs)
         print(input_seqs.size())
-        print(features.size())
         print(input_lengths.size())
+        cnn_input = input_seqs.transpose(0, 1).unsqueeze(1)
+        print(cnn_input.size())
+        features = self.cnn(cnn_input)
+        print(features.size())
         # Note: we run this all at once (over multiple batches of multiple sequences)
         packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
         outputs, hidden = self.gru(packed, hidden)
