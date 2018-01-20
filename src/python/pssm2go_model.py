@@ -99,7 +99,7 @@ class CNN(nn.Module):
             nn.Conv2d(10, 10, kernel_size=(2, 1)),
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(10, 20, kernel_size=(2, 1)),
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
         )
