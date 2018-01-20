@@ -86,6 +86,46 @@ class EncoderRNN(nn.Module):
         return outputs, hidden
 
 
+class CNN(nn.Module):
+    def __init__(self, input_size):
+
+        inp_size = input_size
+
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 10, kernel_size=(2, inp_size - 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.LeakyReLU(inplace=True),
+            nn.MaxPool2d((2, 1)))
+
+    def forward(self, x):
+        out = self.features(x)
+        return out
+
+
+class EncoderCNN(nn.Module):
+    def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1):
+        super(EncoderRNN, self).__init__()
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.n_layers = n_layers
+        self.dropout = dropout
+        self.cnn = CNN(input_size)
+        self.gru = nn.GRU(input_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
+
+    def forward(self, input_seqs, input_lengths, hidden=None):
+        features = self.cnn(input_seqs)
+        print(input_seqs.size())
+        print(features.size())
+        print(input_lengths.size())
+        # Note: we run this all at once (over multiple batches of multiple sequences)
+        packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
+        outputs, hidden = self.gru(packed, hidden)
+        outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
+        outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
+        return outputs, hidden
+
+
 class Attn(nn.Module):
     def __init__(self, method, hidden_size):
         super(Attn, self).__init__()

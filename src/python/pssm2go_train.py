@@ -496,6 +496,8 @@ def show_plot(points):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
+    parser.add_argument('--cnn', action='store_true', default=False,
+                        help="Use CNN to extract features from input seqeucne.")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
@@ -563,7 +565,11 @@ def main_loop(
     assert encoder_hidden_size == decoder_hidden_size
 
     # Initialize models
-    encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers + 1, dropout=dropout)
+    if not args.cnn:
+        encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+    else:
+        encoder = EncoderCNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+
     decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
                                   dropout=dropout, embedding=output_embedding)
 
