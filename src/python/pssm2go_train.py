@@ -497,7 +497,7 @@ def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
     parser.add_argument('--cnn', action='store_true', default=False,
-                        help="Use CNN to extract features from input seqeucne.")
+                        help="Use CNN to extract features from input sequence.")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,

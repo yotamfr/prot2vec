@@ -88,6 +88,7 @@ class EncoderRNN(nn.Module):
 
 class CNN(nn.Module):
     def __init__(self, input_size):
+        super(CNN, self).__init__()
 
         inp_size = input_size
 
@@ -104,7 +105,7 @@ class CNN(nn.Module):
 
 class EncoderCNN(nn.Module):
     def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1):
-        super(EncoderRNN, self).__init__()
+        super(EncoderCNN, self).__init__()
 
         self.input_size = input_size
         self.hidden_size = hidden_size
