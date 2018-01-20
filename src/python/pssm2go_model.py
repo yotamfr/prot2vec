@@ -126,10 +126,10 @@ class EncoderCNN(nn.Module):
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
         features_length = [(l//(2 ** self.cnn.n_layers)) - 1 for l in input_lengths]
-        print(input_seqs.size())
-        print(input_lengths)
-        print(input_features.size())
-        print(features_length)
+        # print(input_seqs.size())
+        # print(input_lengths)
+        # print(input_features.size())
+        # print(features_length)
         # Note: we run this all at once (over multiple batches of multiple sequences)
         # packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
         packed = torch.nn.utils.rnn.pack_padded_sequence(input_features, features_length)
