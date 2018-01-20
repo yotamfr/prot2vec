@@ -104,6 +104,8 @@ class CNN(nn.Module):
             nn.MaxPool2d((2, 1)),
         )
 
+        self.n_layers = 3
+
     def forward(self, x):
         out = self.features(x)
         out = out.view(out.size(2), out.size(0), out.size(1) * out.size(3))
@@ -122,14 +124,15 @@ class EncoderCNN(nn.Module):
         self.gru = nn.GRU(input_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
+        input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
+        features_length = [(l//(2 ** self.cnn.n_layers)) - 1 for l in input_lengths]
         print(input_seqs.size())
         print(input_lengths)
-        cnn_input = input_seqs.transpose(0, 1).unsqueeze(1)
-        print(cnn_input.size())
-        features = self.cnn(cnn_input)
-        print(features.size())
+        print(input_features.size())
+        print(features_length)
         # Note: we run this all at once (over multiple batches of multiple sequences)
-        packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
+        # packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
+        packed = torch.nn.utils.rnn.pack_padded_sequence(input_features, features_length)
         outputs, hidden = self.gru(packed, hidden)
         outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
         outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
