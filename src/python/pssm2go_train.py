@@ -465,7 +465,8 @@ def show_plot_visdom():
 
 def evaluate_and_show_attention(encoder, decoder, input_seq, target_words=None):
     output_words, attentions = evaluate(encoder, decoder, input_seq)
-    input_words = [AA.index2aa[vec[:len(AA)].index(1)] for vec in input_seq]
+    input_words = [AA.index2aa[vec[:len(AA)].index(1) if 1 in vec[:len(AA)] else 20]
+                   for vec in input_seq]
     output_sequence = ' '.join(output_words)
     input_sequence = ' '.join(input_words)
     target_sequence = ' '.join(target_words)
