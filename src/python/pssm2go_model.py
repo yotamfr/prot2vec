@@ -94,12 +94,19 @@ class CNN(nn.Module):
 
         self.features = nn.Sequential(
             nn.Conv2d(1, 10, kernel_size=(2, inp_size - 1)),
+            nn.LeakyReLU(inplace=True),
+            nn.MaxPool2d((2, 1)),
             nn.Conv2d(10, 10, kernel_size=(2, 1)),
             nn.LeakyReLU(inplace=True),
-            nn.MaxPool2d((2, 1)))
+            nn.MaxPool2d((2, 1)),
+            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.LeakyReLU(inplace=True),
+            nn.MaxPool2d((2, 1)),
+        )
 
     def forward(self, x):
         out = self.features(x)
+        out = out.view(out.size(2), out.size(0), out.size(1) * out.size(3))
         return out
 
 
