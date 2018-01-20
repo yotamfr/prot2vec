@@ -116,7 +116,7 @@ class EncoderCNN(nn.Module):
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         print(input_seqs.size())
-        print(input_lengths.size())
+        print(input_lengths)
         cnn_input = input_seqs.transpose(0, 1).unsqueeze(1)
         print(cnn_input.size())
         features = self.cnn(cnn_input)
