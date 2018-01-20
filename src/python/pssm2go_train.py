@@ -152,7 +152,7 @@ def filter_pairs(pairs_gen):
     original_pairs = []
     for _, inp, out in pairs_gen:
         original_pairs.append((inp, out))
-        if MIN_LENGTH <= len(inp) <= MAX_LENGTH and MIN_LENGTH <= len(out) <= MAX_LENGTH:
+        if MIN_LENGTH <= len(inp) <= MAX_LENGTH:
             filtered_pairs.append((inp, out))
     return original_pairs, filtered_pairs
 
