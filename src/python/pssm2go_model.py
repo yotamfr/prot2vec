@@ -92,19 +92,44 @@ class CNN(nn.Module):
 
         inp_size = input_size
 
+        # self.conv1f6 = nn.Conv2d(1, 10, kernel_size=(6, inp_size))
+        # self.conv1f10 = nn.Conv2d(1, 10, kernel_size=(10, inp_size))
+        # self.relu1 = nn.ReLU(inplace=True)
+        # self.conv2f6 = nn.Conv2d(10, 10, kernel_size=(6, 2))
+        # self.conv2f10 = nn.Conv2d(10, 10, kernel_size=(10, 2))
+        # self.relu2 = nn.ReLU(inplace=True)
+        # self.conv2f6 = nn.Conv2d(10, 20, kernel_size=(6, 2))
+        # self.conv2f10 = nn.Conv2d(10, 20, kernel_size=(10, 2))
+        # self.relu2 = nn.ReLU(inplace=True)
+        # self.mp = nn.MaxPool2d((2, 1))
+
+        # nn.Conv2d(10, 10, kernel_size=(6, 1)),
+
         self.features = nn.Sequential(
-            nn.Conv2d(1, 20, kernel_size=(3, inp_size)),
-            nn.LeakyReLU(inplace=True),
-            nn.MaxPool2d((2, 1)),
-            nn.Conv2d(20, 20, kernel_size=(3, 1)),
-            nn.LeakyReLU(inplace=True),
-            nn.MaxPool2d((2, 1)),
-            nn.Conv2d(20, 40, kernel_size=(3, 1)),
-            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(1, 10, kernel_size=(6, inp_size)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(10, 40, kernel_size=(6, 1)),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
         )
 
-        self.n_layers = 3
+        self.n_pool_layers = 1
 
     def forward(self, x):
         out = self.features(x)
@@ -125,7 +150,7 @@ class EncoderCNN(nn.Module):
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
-        features_length = [(l//(2 ** self.cnn.n_layers)) - 1 for l in input_lengths]
+        features_length = [(l//(2 ** self.cnn.n_pool_layers)) - 1 for l in input_lengths]
         # print(input_seqs.size())
         # print(input_lengths)
         # print(input_features.size())
