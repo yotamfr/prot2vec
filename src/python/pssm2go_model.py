@@ -93,13 +93,13 @@ class CNN(nn.Module):
         inp_size = input_size
 
         self.features = nn.Sequential(
-            nn.Conv2d(1, 10, kernel_size=(2, inp_size - 1)),
+            nn.Conv2d(1, 20, kernel_size=(3, inp_size)),
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
-            nn.Conv2d(10, 10, kernel_size=(2, 1)),
+            nn.Conv2d(20, 20, kernel_size=(3, 1)),
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
-            nn.Conv2d(10, 20, kernel_size=(2, 1)),
+            nn.Conv2d(20, 40, kernel_size=(3, 1)),
             nn.LeakyReLU(inplace=True),
             nn.MaxPool2d((2, 1)),
         )
