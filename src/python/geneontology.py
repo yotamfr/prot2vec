@@ -20,8 +20,8 @@ num_epochs = 3
 
 DATA_ROOT = gettempdir()
 
-obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
-#obo_src = "Data/go-basic.obo" if os.path.exists("Data") else "../../Data/go-basic.obo"
+# obo_src = "http://purl.obolibrary.org/obo/go/go-basic.obo"
+obo_src = "Data/go-basic.obo" if os.path.exists("Data") else "../../Data/go-basic.obo"
 
 verbose = True
 

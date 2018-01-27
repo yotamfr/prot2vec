@@ -118,7 +118,7 @@ def _get_labeled_data(db, query, limit):
 
     seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
 
-    seqid2goid = {k: sorted(v, key=lambda go: onto[go])
+    seqid2goid = {k: sorted(v, key=lambda go: onto[go] if go in onto else -1)
                   for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
     return seqid2seqpssm, seqid2goid
