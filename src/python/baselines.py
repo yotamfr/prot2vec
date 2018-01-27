@@ -22,7 +22,7 @@ from pymongo import MongoClient
 from tempfile import gettempdir
 tmp_dir = gettempdir()
 
-from shutil import copyfile
+from concurrent.futures import ThreadPoolExecutor
 
 import argparse
 
@@ -201,6 +201,27 @@ def _prepare_blast(sequences):
     records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
+
+
+# def loo_blast(targets, reference, num_cpu=4):
+#     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
+#     records = [SeqRecord(Seq(seq), id) for id, seq in targets.items()]
+#     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
+#     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
+#
+#     predictions = dict()
+#     e = ThreadPoolExecutor(num_cpu)
+#     def _loo_blsast_helper(inpt):
+#         tgtid, seq = inpt
+#         tmp = reference[tgtid]
+#         del reference[tgtid]
+#         predictions[tgtid] = _blast(seq, reference, topn=None, choose_max_prob=False)
+#         reference[tgtid] = tmp
+#
+#     for tgtid, seq in e.map(_loo_blsast_helper, targets.items()):
+#         pass
+#
+#     return predictions
 
 
 def _blast(target, reference, topn=None, choose_max_prob=True):

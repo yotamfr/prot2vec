@@ -120,8 +120,11 @@ def _get_labeled_data(db, query, limit, propagate=True):
 
     if propagate:
         for k, v in seqid2goid.items():
-            annots = onto.propagate(v, include_root=False)
-            seqid2goid[k] = annots
+            annots = [onto.propagate([go], include_root=False) for go in v]
+            seqid2goid[k] = opt = []
+            for can in annots:
+                if len(can) > len(opt):
+                    seqid2goid[k] = opt = can
 
     seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
