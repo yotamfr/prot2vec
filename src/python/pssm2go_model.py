@@ -103,8 +103,6 @@ class CNN(nn.Module):
         # self.relu2 = nn.ReLU(inplace=True)
         # self.mp = nn.MaxPool2d((2, 1))
 
-        # nn.Conv2d(10, 10, kernel_size=(6, 1)),
-
         self.features = nn.Sequential(
             nn.Conv2d(1, 10, kernel_size=(6, inp_size)),
             nn.ReLU(inplace=True),
@@ -215,13 +213,14 @@ class Attn(nn.Module):
 
 
 class LuongAttnDecoderRNN(nn.Module):
-    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, dropout=0.1, embedding=None):
+    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, dropout=0.1, embedding=None, prior_size=0):
         super(LuongAttnDecoderRNN, self).__init__()
 
         # Keep for reference
         self.attn_model = attn_model
         self.hidden_size = hidden_size
         self.output_size = output_size
+        self.prior_size = prior_size
         self.n_layers = n_layers
         self.dropout = dropout
 
@@ -237,14 +236,14 @@ class LuongAttnDecoderRNN(nn.Module):
 
         self.embedding_dropout = nn.Dropout(dropout)
         self.gru = nn.GRU(embedding_size, hidden_size, n_layers, dropout=dropout)
-        self.concat = nn.Linear(hidden_size * 2, hidden_size)
+        self.concat = nn.Linear(hidden_size * 2 + prior_size, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
 
         # Choose attention model
         if attn_model != 'none':
             self.attn = Attn(attn_model, hidden_size)
 
-    def forward(self, input_seq, last_hidden, encoder_outputs):
+    def forward(self, input_seq, last_hidden, encoder_outputs, prior):
         # Note: we run this one step at a time
 
         # Get the embedding of the current input word (last output word)
@@ -265,7 +264,10 @@ class LuongAttnDecoderRNN(nn.Module):
         # concatenated together (Luong eq. 5)
         rnn_output = rnn_output.squeeze(0)  # S=1 x B x N -> B x N
         context = context.squeeze(1)  # B x S=1 x N -> B x N
-        concat_input = torch.cat((rnn_output, context), 1)
+        if prior:
+            concat_input = torch.cat((rnn_output, context, prior), 1)
+        else:
+            concat_input = torch.cat((rnn_output, context), 1)
         concat_output = F.tanh(self.concat(concat_input))
 
         # Finally predict next token (Luong eq. 6, without softmax)

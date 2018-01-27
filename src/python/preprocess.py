@@ -26,6 +26,11 @@ cafa2_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA-2013-tar
 verbose = True
 
 
+def set_verbose(val):
+    global verbose
+    verbose = val
+
+
 def blocks(files, size=8192*1024):
     while True:
         buffer = files.read(size)
@@ -83,7 +88,7 @@ class PssmCollectionLoader(SequenceLoader):
         super(PssmCollectionLoader, self).__init__(src_sequence, num_sequences)
 
     def parse_sequence(self, doc):
-        return doc["_id"], (doc["seq"], doc["pssm"])
+        return doc["_id"], (doc["seq"], doc["pssm"], doc["alignment"])
 
 
 class MappingLoader(object):

@@ -1,4 +1,5 @@
-
+import numpy as np
+from Bio.SubsMat import MatrixInfo
 
 exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"]
 
@@ -69,5 +70,22 @@ class AminoAcids(object):
 
         }
 
+        self.blosum62 = {k: [0] * 25 for k in self.aa2index.keys()}
+        for k1, v1 in self.aa2index.items():
+            if k1 == "O" or k1 == "U":
+                continue
+            for k2, v2 in self.aa2index.items():
+                if k2 == "O": k2 = "K"
+                elif k2 == "U": k2 = "C"
+                self.blosum62[k1][v2] = MatrixInfo.blosum62[(k1, k2)] \
+                    if (k1, k2) in MatrixInfo.blosum62 else MatrixInfo.blosum62[(k2, k1)]
+
+        self.blosum62['O'][:] = self.blosum62['K'][:]
+        self.blosum62['U'][:] = self.blosum62['C'][:]
+
 
 AA = AminoAcids()
+
+
+if __name__=="__main__":
+    print(AA.blosum62)

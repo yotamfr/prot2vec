@@ -44,6 +44,8 @@ SHOW_PLOT = False
 
 USE_CUDA = False
 
+USE_PRIOR = False
+
 PAD_token = 0
 SOS_token = 1
 EOS_token = 2
@@ -52,7 +54,7 @@ EOS_token = 2
 MIN_LENGTH = 50
 MAX_LENGTH = 500
 
-MIN_COUNT = 2
+MIN_COUNT = 1
 
 
 class Lang(object):
@@ -150,14 +152,14 @@ def load_training_and_validation(db, limit=None):
 def filter_pairs(pairs_gen):
     filtered_pairs = []
     original_pairs = []
-    for _, inp, out in pairs_gen:
+    for _, inp, prior, out in pairs_gen:
         original_pairs.append((inp, out))
         if MIN_LENGTH <= len(inp) <= MAX_LENGTH:
-            filtered_pairs.append((inp, out))
+            filtered_pairs.append((inp, prior, out))
     return original_pairs, filtered_pairs
 
 
-class PssmGoPairsGen(object):
+class DataGenerator(object):
 
     def __init__(self, seqid2seqpssm, seqid2goid):
 
@@ -165,19 +167,25 @@ class PssmGoPairsGen(object):
         self.seqid2goid = seqid2goid
 
     def __iter__(self):
-        seqid2seqpssm = self.seqid2seqpssm
         seqid2goid = self.seqid2goid
-        sorted_keys = sorted(seqid2goid.keys(), key=lambda k: len(seqid2seqpssm[k][0]))
-        for seqid in sorted_keys:
-            annots = seqid2goid[seqid]
-            seq, pssm = seqid2seqpssm[seqid]
+        seqid2seqpssm = self.seqid2seqpssm
+        for seqid in sorted(seqid2goid.keys(), key=lambda k: len(seqid2seqpssm[k][0])):
+            seq, pssm, _ = seqid2seqpssm[seqid]
             if len(pssm) != len(seq):
                 print("WARN: wrong PSSM! (%s)" % seqid)
                 continue
             matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
                       for i, aa in enumerate(seq)]
+            if USE_PRIOR:
+                blast2go = predict({k: v0 for k, (v0, v1) in seqid2seqpssm.items()},
+                                   {k: v for k, v in seqid2goid.items() if k != seqid},
+                                   {seqid: seq},
+                                   'blast')
+            else:
+                blast2go = None
+            annots = seqid2goid[seqid]
             sent_go = onto.propagate(annots, include_root=False)
-            yield (seqid, matrix, sent_go)
+            yield (seqid, matrix, blast2go, sent_go)
 
 
 def prepare_data(pairs_gen):
@@ -187,7 +195,7 @@ def prepare_data(pairs_gen):
 
     print("Indexing words...")
     for pair in pairs2:
-        output_lang.index_words(pair[1])
+        output_lang.index_words(pair[2])
 
     print('Indexed %d words in GO' % output_lang.n_words)
     return pairs2
@@ -203,9 +211,14 @@ def trim_pairs(pairs):
         if verbose:
             sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
-        input_seq, output_annots = pair
+        input_seq, prior_annots, output_annots = pair
         keep_input = True
         keep_output = True
+
+        if prior_annots:
+            for word in prior_annots.keys():
+                if word not in output_lang.word2index:
+                    del prior_annots[word]
 
         for word in output_annots:
             if word not in output_lang.word2index:
@@ -243,8 +256,14 @@ def random_batch(batch_size):
 
     # Choose random pairs
     ix = random.choice(list(range(len(pairs)-batch_size)))
-    input_seqs = sorted([pair[0] for pair in pairs[ix:ix+batch_size]], key=lambda s: -len(s))
-    target_seqs = [indexes_from_sequence(output_lang, pair[1]) for pair in pairs[ix:ix+batch_size]]
+    sample = sorted([x for x in pairs[ix:ix+batch_size]], key=lambda x: -len(x[0]))
+    input_seqs = [inp for (inp, _, _) in sample]
+    if USE_PRIOR:
+        input_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()]
+                       for (_, prior, _) in sample]
+    else:
+        input_prior = None
+    target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, out) in sample]
 
     # For input and target sequences, get array of lengths and pad with 0s to max length
     input_lengths = [len(s) for s in input_seqs]
@@ -260,13 +279,14 @@ def random_batch(batch_size):
         input_var = input_var.cuda()
         target_var = target_var.cuda()
 
-    return input_var, input_lengths, target_var, target_lengths
+    return input_var, input_lengths, target_var, target_lengths, input_prior
 
 
 def test_models():
 
     small_batch_size = 3
-    input_batches, input_lengths, target_batches, target_lengths = random_batch(small_batch_size)
+    input_batches, input_lengths, target_batches, target_lengths, input_prior = \
+        random_batch(small_batch_size)
 
     print('input_batches', input_batches.size())  # (max_len x batch_size)
     print('target_batches', target_batches.size())  # (max_len x batch_size)
@@ -300,7 +320,7 @@ def test_models():
     # Run through decoder one time step at a time
     for t in range(max_target_length):
         decoder_output, decoder_hidden, decoder_attn = decoder_test(
-            decoder_input, decoder_hidden, encoder_outputs
+            decoder_input, decoder_hidden, encoder_outputs, input_prior
         )
         all_decoder_outputs[t] = decoder_output # Store this step's outputs
         decoder_input = target_batches[t] # Next input is current target
@@ -314,8 +334,10 @@ def test_models():
     print('loss', loss.data[0])
 
 
-def train(input_batches, input_lengths, target_batches, target_lengths, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, batch_size, grad_clip, gamma):
+def train(input_batches, input_lengths, target_batches, target_lengths, input_prior,
+          encoder, decoder, encoder_optimizer, decoder_optimizer,
+          batch_size, grad_clip, gamma):
+
     # Zero gradients of both optimizers
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
@@ -338,7 +360,7 @@ def train(input_batches, input_lengths, target_batches, target_lengths, encoder,
     # Run through decoder one time step at a time
     for t in range(max_target_length):
         decoder_output, decoder_hidden, decoder_attn = decoder(
-            decoder_input, decoder_hidden, encoder_outputs
+            decoder_input, decoder_hidden, encoder_outputs, input_prior
         )
 
         all_decoder_outputs[t] = decoder_output
@@ -615,11 +637,12 @@ def main_loop(
         epoch += 1
 
         # Get training data for this cycle
-        input_batches, input_lengths, target_batches, target_lengths = random_batch(batch_size)
+        input_batches, input_lengths, target_batches, target_lengths, input_prior =\
+            random_batch(batch_size)
 
         # Run the train function
         loss, ec, dc = train(
-            input_batches, input_lengths, target_batches, target_lengths,
+            input_batches, input_lengths, target_batches, target_lengths, input_prior,
             encoder, decoder,
             encoder_optimizer, decoder_optimizer,
             batch_size, clip, gamma
@@ -726,7 +749,7 @@ if __name__ == "__main__":
     input_size = len(AA) * 2
 
     output_lang = Lang("GO")
-    gen = PssmGoPairsGen(seqid2seqpssm, seqid2goid)
+    gen = DataGenerator(seqid2seqpssm, seqid2goid)
     pairs = prepare_data(gen)
 
     output_lang.trim(MIN_COUNT)

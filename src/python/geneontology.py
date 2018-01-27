@@ -115,8 +115,8 @@ class Ontology(object):
         self._mlb = MultiLabelBinarizer().fit([classes])
 
         key_val = [(go, i) for i, go in enumerate(classes)]
-        self._direct_dict = {k: v for k, v in key_val}
-        self._reverse_dict = {v: k for k, v in key_val}
+        self.go2ix = {k: v for k, v in key_val}
+        self.ix2go = {v: k for k, v in key_val}
 
         emb_fname = os.path.join('%s/%s-poincare-dim%d-epochs%d.emb'
                                  % (DATA_ROOT, aspect, dim, num_epochs)) \
@@ -155,7 +155,7 @@ class Ontology(object):
         return self._kv[go]
 
     def __getitem__(self, go):
-        return self._direct_dict[go]
+        return self.go2ix[go]
 
     def __str__(self):
         k, n = (len(nx.dag_longest_path(self._graph))), len(self)
