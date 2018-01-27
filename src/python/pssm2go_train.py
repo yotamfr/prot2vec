@@ -576,7 +576,7 @@ def main_loop(
     encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
-    batch_size=12,
+    batch_size=6,
     # batch_size=50,
 
     # Configure training/optimization
