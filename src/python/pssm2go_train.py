@@ -178,9 +178,14 @@ class DataGenerator(object):
                                    'blast')
             else:
                 blast2go = None
+
+            annots = []
             for leaf in seqid2goid[seqid]:
-                annots = onto.propagate([leaf], include_root=False)
-                yield (seqid, matrix, blast2go, annots)
+                is_a = onto.propagate([leaf], include_root=False)
+                if len(is_a) > len(annots):
+                    annots = is_a
+
+            yield (seqid, matrix, blast2go, annots)
 
 
 def prepare_data(pairs_gen):
@@ -565,7 +570,7 @@ def main_loop(
     encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
-    batch_size=8,
+    batch_size=6,
     # batch_size=50,
 
     # Configure training/optimization
