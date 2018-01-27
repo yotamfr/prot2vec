@@ -102,10 +102,6 @@ class CNN(nn.Module):
             nn.BatchNorm2d(10),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(10, 10, kernel_size=(6, 1)),
-            nn.BatchNorm2d(10),
-            nn.ReLU(inplace=True),
-
             nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(10, 20, kernel_size=(6, 1)),
@@ -116,17 +112,9 @@ class CNN(nn.Module):
             nn.BatchNorm2d(20),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(20, 20, kernel_size=(6, 1)),
-            nn.BatchNorm2d(20),
-            nn.ReLU(inplace=True),
-
             nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(20, 40, kernel_size=(6, 1)),
-            nn.BatchNorm2d(40),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(40, 40, kernel_size=(6, 1)),
             nn.BatchNorm2d(40),
             nn.ReLU(inplace=True),
 
@@ -158,7 +146,7 @@ class EncoderCNN(nn.Module):
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
-        features_length = [(l//(2 ** self.cnn.n_pool_layers)) - 1 for l in input_lengths]
+        features_length = [(l//(2 ** self.cnn.n_pool_layers)) for l in input_lengths]
         # features_length = input_lengths
         # print(input_features.size())
         # print(features_length)
