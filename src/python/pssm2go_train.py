@@ -399,7 +399,7 @@ def time_since(since, percent):
     return '%s (- %s)' % (as_minutes(s), as_minutes(rs))
 
 
-def evaluate(encoder, decoder, input_seq, max_length=MAX_LENGTH):
+def evaluate(encoder, decoder, input_seq, input_prior=None, max_length=MAX_LENGTH):
     input_lengths = [len(input_seq)]
     input_batches = Variable(torch.FloatTensor([input_seq]), volatile=True).transpose(0, 1)
 
@@ -427,7 +427,7 @@ def evaluate(encoder, decoder, input_seq, max_length=MAX_LENGTH):
     # Run through decoder
     for di in range(max_length):
         decoder_output, decoder_hidden, decoder_attention = decoder(
-            decoder_input, decoder_hidden, encoder_outputs
+            decoder_input, decoder_hidden, encoder_outputs, input_prior
         )
         decoder_attentions[di, :decoder_attention.size(2)] += decoder_attention.squeeze(0).squeeze(0).cpu().data
 
@@ -452,8 +452,8 @@ def evaluate(encoder, decoder, input_seq, max_length=MAX_LENGTH):
 
 
 def evaluate_randomly(encoder, decoder):
-    [input_seq, _, target_seq] = random.choice(pairs)
-    evaluate_and_show_attention(encoder, decoder, input_seq, target_seq)
+    [input_seq, prior, target_seq] = random.choice(pairs)
+    evaluate_and_show_attention(encoder, decoder, input_seq, target_seq, prior)
 
 
 def show_attention(input_sequence, output_words, attentions):
@@ -485,8 +485,8 @@ def show_plot_visdom():
     vis.image(torchvision.transforms.ToTensor()(im), win=attn_win, opts={'title': attn_win})
 
 
-def evaluate_and_show_attention(encoder, decoder, input_seq, target_words=None):
-    output_words, attentions = evaluate(encoder, decoder, input_seq)
+def evaluate_and_show_attention(encoder, decoder, input_seq, target_words=None, input_prior=None):
+    output_words, attentions = evaluate(encoder, decoder, input_seq, input_prior)
     input_words = [AA.index2aa[vec[:len(AA)].index(1) if 1 in vec[:len(AA)] else 20]
                    for vec in input_seq]
     output_sequence = ' '.join(output_words)
