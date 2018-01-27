@@ -1,7 +1,6 @@
 import os
 import sys
 import wget
-import datetime
 
 import numpy as np
 
@@ -13,10 +12,6 @@ from .geneontology import *
 
 from .consts import *
 
-
-cafa2_cutoff = datetime.datetime(2014, 1, 1, 0, 0)
-cafa3_cutoff = datetime.datetime(2017, 2, 2, 0, 0)
-today_cutoff = datetime.datetime.now()
 
 cafa3_targets_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_targets.tgz'
 cafa3_train_url = 'http://biofunctionprediction.org/cafa-targets/CAFA3_training_data.tgz'
