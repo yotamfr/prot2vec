@@ -535,11 +535,11 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-p", "--print_every", type=int, default=2,
+    parser.add_argument("-p", "--print_every", type=int, default=1,
                         help="How often should main_loop print training stats.")
     parser.add_argument("-e", "--eval_every", type=int, default=10,
                         help="How often should main_loop evaluate the model.")
-    parser.add_argument("-l", "--max_length", type=int, default=500,
+    parser.add_argument("-l", "--max_length", type=int, default=200,
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=2,
                         help="Minimal word count (both input and output).")

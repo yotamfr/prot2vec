@@ -43,8 +43,6 @@ max_filter = 20000
 coverage = 0
 mact = 0.9
 
-t0 = datetime(2014, 1, 1, 0, 0)
-t1 = datetime(2014, 9, 1, 0, 0)
 
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
@@ -56,7 +54,7 @@ def prepare_uniprot20():
 
 
 def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
-    q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date': {"$lte": t1}}
+    q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date': {"$lte": today_cutoff}}
     s = db.goa_uniprot.find(q)
     if limit: s = s.limit(limit)
     uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
