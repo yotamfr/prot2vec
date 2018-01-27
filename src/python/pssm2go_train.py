@@ -452,7 +452,7 @@ def evaluate(encoder, decoder, input_seq, max_length=MAX_LENGTH):
 
 
 def evaluate_randomly(encoder, decoder):
-    [input_seq, target_seq] = random.choice(pairs)
+    [input_seq, _, target_seq] = random.choice(pairs)
     evaluate_and_show_attention(encoder, decoder, input_seq, target_seq)
 
 
