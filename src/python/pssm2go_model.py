@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 USE_CUDA = False
 
+KERN_SIZE = 3
 
 def set_cuda(val):
     global USE_CUDA
@@ -94,31 +95,31 @@ class CNN(nn.Module):
 
         self.features = nn.Sequential(
 
-            nn.Conv2d(1, 10, kernel_size=(6, inp_size)),
+            nn.Conv2d(1, 10, kernel_size=(KERN_SIZE, inp_size)),
             nn.BatchNorm2d(10),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(10, 10, kernel_size=(6, 1)),
+            nn.Conv2d(10, 10, kernel_size=(KERN_SIZE, 1)),
             nn.BatchNorm2d(10),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(10, 20, kernel_size=(6, 1)),
+            nn.Conv2d(10, 20, kernel_size=(KERN_SIZE, 1)),
             nn.BatchNorm2d(20),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(20, 20, kernel_size=(6, 1)),
+            nn.Conv2d(20, 20, kernel_size=(KERN_SIZE, 1)),
             nn.BatchNorm2d(20),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(20, 40, kernel_size=(6, 1)),
+            nn.Conv2d(20, 40, kernel_size=(KERN_SIZE, 1)),
             nn.BatchNorm2d(40),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(40, 40, kernel_size=(6, 1)),
+            nn.Conv2d(40, 40, kernel_size=(KERN_SIZE, 1)),
             nn.BatchNorm2d(40),
             nn.ReLU(inplace=True),
 

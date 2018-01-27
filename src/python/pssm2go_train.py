@@ -51,8 +51,8 @@ SOS_token = 1
 EOS_token = 2
 
 
-MIN_LENGTH = 96
-MAX_LENGTH = 500
+MIN_LENGTH = 48
+MAX_LENGTH = 480
 
 MIN_COUNT = 2
 
@@ -522,7 +522,7 @@ def add_arguments(parser):
     parser.add_argument('--cnn', action='store_true', default=False,
                         help="Use CNN to extract features from input sequence.")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
-                        default="F", help="Specify the ontology aspect.")
+                        required=True, help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
     parser.add_argument("-m", "--model_name", type=str, required=False,
