@@ -539,7 +539,7 @@ def add_arguments(parser):
                         help="How often should main_loop print training stats.")
     parser.add_argument("-e", "--eval_every", type=int, default=10,
                         help="How often should main_loop evaluate the model.")
-    parser.add_argument("-l", "--max_length", type=int, default=50,
+    parser.add_argument("-l", "--max_length", type=int, default=500,
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=2,
                         help="Minimal word count (both input and output).")
