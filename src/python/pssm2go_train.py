@@ -51,7 +51,7 @@ SOS_token = 1
 EOS_token = 2
 
 
-MIN_LENGTH = 64
+MIN_LENGTH = 80
 MAX_LENGTH = 500
 
 MIN_COUNT = 2
