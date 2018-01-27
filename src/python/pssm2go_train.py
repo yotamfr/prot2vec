@@ -104,7 +104,7 @@ class Lang(object):
             self.index_word(word)
 
 
-def _get_labeled_data(db, query, limit, propagate=True):
+def _get_labeled_data(db, query, limit, propagate=True, one_leaf_only=True):
 
     c = limit if limit else db.goa_uniprot.count(query)
     s = db.goa_uniprot.find(query)
@@ -120,11 +120,14 @@ def _get_labeled_data(db, query, limit, propagate=True):
 
     if propagate:
         for k, v in seqid2goid.items():
-            annots = [onto.propagate([go], include_root=False) for go in v]
-            seqid2goid[k] = opt = []
-            for can in annots:
-                if len(can) > len(opt):
-                    seqid2goid[k] = opt = can
+            if one_leaf_only:
+                annots = [onto.propagate([go], include_root=False) for go in v]
+                seqid2goid[k] = opt = []
+                for can in annots:
+                    if len(can) > len(opt):
+                        seqid2goid[k] = opt = can
+            else:
+                seqid2goid[k] = onto.propagate(v, include_root=False)
 
     seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
