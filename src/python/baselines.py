@@ -10,6 +10,8 @@ from Bio.SeqRecord import SeqRecord
 
 from Bio.Blast.Applications import NcbiblastpCommandline
 
+from .consts import *
+
 from .preprocess import *
 
 from itertools import cycle
@@ -24,9 +26,6 @@ from shutil import copyfile
 
 import argparse
 
-
-t0 = datetime.datetime(2014, 1, 1, 0, 0)
-t1 = datetime.datetime(2014, 9, 1, 0, 0)
 
 ASPECT = 'F'
 ONTO = None
