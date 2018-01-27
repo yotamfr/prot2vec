@@ -104,7 +104,7 @@ class Lang(object):
             self.index_word(word)
 
 
-def _get_labeled_data(db, query, limit, propagate=True, one_leaf_only=True):
+def _get_labeled_data(db, query, limit):
 
     c = limit if limit else db.goa_uniprot.count(query)
     s = db.goa_uniprot.find(query)
@@ -117,17 +117,6 @@ def _get_labeled_data(db, query, limit, propagate=True, one_leaf_only=True):
     src_seq = db.pssm.find(query)
 
     seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
-
-    if propagate:
-        for k, v in seqid2goid.items():
-            if one_leaf_only:
-                annots = [onto.propagate([go], include_root=False) for go in v]
-                seqid2goid[k] = opt = []
-                for can in annots:
-                    if len(can) > len(opt):
-                        seqid2goid[k] = opt = can
-            else:
-                seqid2goid[k] = onto.propagate(v, include_root=False)
 
     seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
@@ -189,9 +178,9 @@ class DataGenerator(object):
                                    'blast')
             else:
                 blast2go = None
-            annots = seqid2goid[seqid]
-            sent_go = onto.propagate(annots, include_root=False)
-            yield (seqid, matrix, blast2go, sent_go)
+            for leaf in seqid2goid[seqid]:
+                annots = onto.propagate([leaf], include_root=False)
+                yield (seqid, matrix, blast2go, annots)
 
 
 def prepare_data(pairs_gen):
@@ -576,7 +565,7 @@ def main_loop(
     encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
-    batch_size=6,
+    batch_size=8,
     # batch_size=50,
 
     # Configure training/optimization
