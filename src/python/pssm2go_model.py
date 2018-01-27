@@ -124,7 +124,7 @@ class CNN(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(10, 40, kernel_size=(6, 1)),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d((2, 1)),
+            # nn.MaxPool2d((2, 1)),
         )
 
         self.n_pool_layers = 1
@@ -148,13 +148,11 @@ class EncoderCNN(nn.Module):
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
-        features_length = [(l//(2 ** self.cnn.n_pool_layers)) - 1 for l in input_lengths]
-        # print(input_seqs.size())
-        # print(input_lengths)
+        # features_length = [(l//(2 ** self.cnn.n_pool_layers)) - 1 for l in input_lengths]
+        features_length = input_lengths
         # print(input_features.size())
         # print(features_length)
         # Note: we run this all at once (over multiple batches of multiple sequences)
-        # packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
         packed = torch.nn.utils.rnn.pack_padded_sequence(input_features, features_length)
         outputs, hidden = self.gru(packed, hidden)
         outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
