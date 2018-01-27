@@ -118,7 +118,8 @@ def _get_labeled_data(db, query, limit):
 
     seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
 
-    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
+    seqid2goid = {k: sorted(v, key=lambda go: onto[go])
+                  for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
     return seqid2seqpssm, seqid2goid
 
@@ -166,24 +167,24 @@ class DataGenerator(object):
         seqid2seqpssm = self.seqid2seqpssm
         for seqid in sorted(seqid2goid.keys(), key=lambda k: len(seqid2seqpssm[k][0])):
             seq, pssm, _ = seqid2seqpssm[seqid]
+
             if len(pssm) != len(seq):
                 print("WARN: wrong PSSM! (%s)" % seqid)
                 continue
+
             matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
                       for i, aa in enumerate(seq)]
+
             if USE_PRIOR:
                 blast2go = predict({k: v0 for k, (v0, v1) in seqid2seqpssm.items()},
                                    {k: v for k, v in seqid2goid.items() if k != seqid},
-                                   {seqid: seq},
-                                   'blast')
+                                   {seqid: seq}, 'blast')
             else:
                 blast2go = None
 
             annots = []
             for leaf in seqid2goid[seqid]:
-                is_a = onto.propagate([leaf], include_root=False)
-                if len(is_a) > len(annots):
-                    annots = is_a
+                annots += list(onto.propagate([leaf], include_root=False))
 
             yield (seqid, matrix, blast2go, annots)
 
@@ -575,7 +576,7 @@ def main_loop(
 
     # Configure training/optimization
     clip=50.0,
-    gamma=1.0,
+    gamma=2.0,
     teacher_forcing_ratio=0.5,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
