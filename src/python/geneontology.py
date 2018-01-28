@@ -136,11 +136,11 @@ class Ontology(object):
 
     def propagate(self, go_terms, include_root=True):
         G = self._graph
-        lbl = sorted(filter(lambda x: G.has_node(x), go_terms), key=lambda go: self[go])
+        lbl = self.sort(filter(lambda x: G.has_node(x), go_terms))
         # if max_length:
         #     anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
         #     aug = set([k for d in anc for k, v in d.items() if v <= max_length])
-        anc = map(lambda go: list(nx.descendants(G, go)) + [go], lbl)
+        anc = map(lambda go: self.sort(nx.descendants(G, go)) + [go], lbl)
         aug = reduce(lambda x, y: x + y, anc, [])
         if not include_root:
             aug = aug[1:]
