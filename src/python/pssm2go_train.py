@@ -117,9 +117,7 @@ def _get_labeled_data(db, query, limit):
     src_seq = db.pssm.find(query)
 
     seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
-
-    seqid2goid = {k: sorted(v, key=lambda go: onto[go] if go in onto else -1)
-                  for k, v in seqid2goid.items() if k in seqid2seqpssm}
+    seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
 
     return seqid2seqpssm, seqid2goid
 
@@ -182,9 +180,7 @@ class DataGenerator(object):
             else:
                 blast2go = None
 
-            annots = []
-            for leaf in seqid2goid[seqid]:
-                annots += list(onto.propagate([leaf], include_root=False))
+            annots = onto.propagate(seqid2goid[seqid], include_root=False)
 
             yield (seqid, matrix, blast2go, annots)
 
