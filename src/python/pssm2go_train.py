@@ -118,6 +118,7 @@ def _get_labeled_data(db, query, limit):
 
     seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
     seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
+    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
 
     return seqid2seqpssm, seqid2goid
 
