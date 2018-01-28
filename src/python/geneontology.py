@@ -140,11 +140,12 @@ class Ontology(object):
         # if max_length:
         #     anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
         #     aug = set([k for d in anc for k, v in d.items() if v <= max_length])
-        anc = map(lambda go: self.sort(nx.descendants(G, go)) + [go], lbl)
-        aug = reduce(lambda x, y: x + y, anc, [])
-        if not include_root:
-            aug = aug[1:]
-        return aug
+        if include_root:
+            anc = map(lambda go: self.sort(nx.descendants(G, go)) + [go], lbl)
+        else:
+            anc = map(lambda go: self.sort(nx.descendants(G, go))[1:] + [go], lbl)
+        return reduce(lambda x, y: x + y, anc, [])
+
 
     def binarize(self, go_labels):
         return self._mlb.transform(go_labels)
