@@ -32,6 +32,8 @@ ONTO = None
 PRIOR = None
 THRESHOLDS = np.arange(0.1, 1, 0.02)
 
+cleanup = True
+
 # unparseables = ["Cross_product_review", "Involved_in",
 #                 "gocheck_do_not_annotate",
 #                 "Term not to be used for direct annotation",
@@ -203,34 +205,35 @@ def _prepare_blast(sequences):
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
 
 
-# def loo_blast(targets, reference, num_cpu=4):
-#     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
-#     records = [SeqRecord(Seq(seq), id) for id, seq in targets.items()]
-#     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
-#     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
-#
-#     predictions = dict()
-#     e = ThreadPoolExecutor(num_cpu)
-#     def _loo_blsast_helper(inpt):
-#         tgtid, seq = inpt
-#         tmp = reference[tgtid]
-#         del reference[tgtid]
-#         predictions[tgtid] = _blast(seq, reference, topn=None, choose_max_prob=False)
-#         reference[tgtid] = tmp
-#
-#     for tgtid, seq in e.map(_loo_blsast_helper, targets.items()):
-#         pass
-#
-#     return predictions
+def parallel_blast(targets, reference, num_cpu=4):
+    blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
+    records = [SeqRecord(Seq(seq), id) for id, seq in reference.items()]
+    SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
+    os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
+
+    predictions = dict()
+    e = ThreadPoolExecutor(num_cpu)
+
+    def _parallel_blast_helper(s):
+        return s[0], _blast(SeqRecord(Seq(s[1]), s[0]), reference, topn=None, choose_max_prob=False)
+
+    pbar = tqdm(range(len(targets)), desc="blast2go processed")
+
+    for tgtid, preds in e.map(_parallel_blast_helper, targets.items()):
+        predictions[tgtid] = preds
+        pbar.update(1)
+
+    pbar.close()
+    return predictions
 
 
-def _blast(target, reference, topn=None, choose_max_prob=True):
+def _blast(target_fasta, reference, topn=None, choose_max_prob=True):
+    seqid, asp = target_fasta.id, GoAspect(ASPECT)
+    query_pth = os.path.join(tmp_dir, "%s-%s.fas" % (seqid, asp))
+    output_pth = os.path.join(tmp_dir, "%s-%s.out" % (seqid, asp))
+    database_pth = os.path.join(tmp_dir, 'blast-%s' % asp)
 
-    query_pth = os.path.join(tmp_dir, 'query-%s.fasta' % GoAspect(ASPECT))
-    output_pth = os.path.join(tmp_dir, "blastp-%s.out" % GoAspect(ASPECT))
-    database_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
-
-    SeqIO.write(SeqRecord(Seq(target), "QUERY"), open(query_pth, 'w+'), "fasta")
+    SeqIO.write(target_fasta, open(query_pth, 'w+'), "fasta")
 
     cline = NcbiblastpCommandline(query=query_pth, db=database_pth, out=output_pth,
                                   outfmt=5, evalue=0.001, remote=False, ungapped=False)
@@ -248,6 +251,9 @@ def _blast(target, reference, topn=None, choose_max_prob=True):
     annotations = {}
     for hsp in blast_qresult.hsps[:topn]:
 
+        if hsp.hit.id == seqid:
+            continue
+
         ident = hsp.ident_num / hsp.hit_span
         for go in reference[hsp.hit.id]:
             if go in annotations:
@@ -260,6 +266,11 @@ def _blast(target, reference, topn=None, choose_max_prob=True):
             annotations[go] = max(ps)
         else:
             annotations[go] = 1 - np.prod([(1 - p) for p in ps])
+
+    if cleanup:
+        os.remove(query_pth)
+        os.remove(output_pth)
+
     return annotations
 
 
@@ -282,7 +293,7 @@ def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
     else:
         predictions = {}
         for _, (seqid, seq) in enumerate(target_seqs.items()):
-            predictions[seqid] = func_predict(seq, reference_annots)
+            predictions[seqid] = func_predict(SeqRecord(Seq(seq), seqid), reference_annots)
             if pbar: pbar.update(1)
     if pbar: pbar.close()
 

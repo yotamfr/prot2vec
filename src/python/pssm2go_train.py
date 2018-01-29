@@ -50,7 +50,6 @@ PAD_token = 0
 SOS_token = 1
 EOS_token = 2
 
-
 MIN_LENGTH = 48
 MAX_LENGTH = 480
 
@@ -104,7 +103,7 @@ class Lang(object):
             self.index_word(word)
 
 
-def _get_labeled_data(db, query, limit):
+def _get_labeled_data(db, query, limit, pssm=True):
 
     c = limit if limit else db.goa_uniprot.count(query)
     s = db.goa_uniprot.find(query)
@@ -113,14 +112,20 @@ def _get_labeled_data(db, query, limit):
     seqid2goid, _ = GoAnnotationCollectionLoader(s, c, ASPECT).load()
 
     query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
-    num_seq = db.pssm.count(query)
-    src_seq = db.pssm.find(query)
 
-    seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
+    if pssm:
+        num_seq = db.pssm.count(query)
+        src_seq = db.pssm.find(query)
+        seqid2seq = PssmCollectionLoader(src_seq, num_seq).load()
+    else:
+        num_seq = db.uniprot.count(query)
+        src_seq = db.uniprot.find(query)
+        seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
+
     seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
-    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
+    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seq.keys()}
 
-    return seqid2seqpssm, seqid2goid
+    return seqid2seq, seqid2goid
 
 
 def load_training_and_validation(db, limit=None):
@@ -148,7 +153,7 @@ def filter_pairs(pairs_gen):
     filtered_pairs = []
     original_pairs = []
     for _, inp, prior, out in pairs_gen:
-        original_pairs.append((inp, out))
+        original_pairs.append((inp, prior, out))
         if MIN_LENGTH <= len(inp) <= MAX_LENGTH:
             filtered_pairs.append((inp, prior, out))
     return original_pairs, filtered_pairs
@@ -156,10 +161,12 @@ def filter_pairs(pairs_gen):
 
 class DataGenerator(object):
 
-    def __init__(self, seqid2seqpssm, seqid2goid):
+    def __init__(self, seqid2seqpssm, seqid2goid, blast2go=None, one_leaf=False):
 
         self.seqid2seqpssm = seqid2seqpssm
         self.seqid2goid = seqid2goid
+        self.blast2go = blast2go
+        self.one_leaf = one_leaf
 
     def __iter__(self):
         seqid2goid = self.seqid2goid
@@ -174,16 +181,21 @@ class DataGenerator(object):
             matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
                       for i, aa in enumerate(seq)]
 
-            if USE_PRIOR:
-                blast2go = predict({k: v0 for k, (v0, v1) in seqid2seqpssm.items()},
-                                   {k: v for k, v in seqid2goid.items() if k != seqid},
-                                   {seqid: seq}, 'blast')
+            if self.blast2go:
+                prior = self.blast2go[seqid]
             else:
-                blast2go = None
+                prior = None
 
-            annots = onto.propagate(seqid2goid[seqid], include_root=False)
+            if self.one_leaf:
+                annots = []
+                for leaf in seqid2goid[seqid]:
+                    anc = onto.propagate([leaf], include_root=False)
+                    if len(anc) > len(annots):
+                        annots = anc
+            else:
+                annots = onto.propagate(seqid2goid[seqid], include_root=False)
 
-            yield (seqid, matrix, blast2go, annots)
+            yield (seqid, matrix, prior, annots)
 
 
 def prepare_data(pairs_gen):
@@ -212,11 +224,6 @@ def trim_pairs(pairs):
         input_seq, prior_annots, output_annots = pair
         keep_input = True
         keep_output = True
-
-        if prior_annots:
-            for word in prior_annots.keys():
-                if word not in output_lang.word2index:
-                    del prior_annots[word]
 
         for word in output_annots:
             if word not in output_lang.word2index:
@@ -257,10 +264,11 @@ def random_batch(batch_size):
     sample = sorted([x for x in pairs[ix:ix+batch_size]], key=lambda x: -len(x[0]))
     input_seqs = [inp for (inp, _, _) in sample]
     if USE_PRIOR:
-        input_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()]
-                       for (_, prior, _) in sample]
+        input_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()] for (_, prior, _) in sample]
+        prior_var = Variable(torch.FloatTensor(input_prior))
     else:
-        input_prior = None
+        prior_var = None
+
     target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, out) in sample]
 
     # For input and target sequences, get array of lengths and pad with 0s to max length
@@ -277,7 +285,7 @@ def random_batch(batch_size):
         input_var = input_var.cuda()
         target_var = target_var.cuda()
 
-    return input_var, input_lengths, target_var, target_lengths, input_prior
+    return input_var, input_lengths, target_var, target_lengths, prior_var
 
 
 def test_models():
@@ -293,7 +301,10 @@ def test_models():
     small_n_layers = 2
 
     encoder_test = EncoderRNN(input_size, small_hidden_size, small_n_layers)
-    decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
+    if USE_PRIOR:
+        decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers, output_lang.n_words - 3)
+    else:
+        decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
 
     if USE_CUDA:
         encoder_test.cuda()
@@ -397,9 +408,14 @@ def time_since(since, percent):
     return '%s (- %s)' % (as_minutes(s), as_minutes(rs))
 
 
-def evaluate(encoder, decoder, input_seq, input_prior=None, max_length=MAX_LENGTH):
+def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
     input_lengths = [len(input_seq)]
     input_batches = Variable(torch.FloatTensor([input_seq]), volatile=True).transpose(0, 1)
+    if USE_PRIOR:
+        input_prior = [prior[go] if go in prior else 0. for go in output_lang.word2index.keys()]
+        input_prior = Variable(torch.FloatTensor([input_prior]))
+    else:
+        input_prior = None
 
     if USE_CUDA:
         input_batches = input_batches.cuda()
@@ -529,6 +545,8 @@ def add_arguments(parser):
                         help="Run in quiet mode.")
     parser.add_argument('--pretrained', action='store_true', default=False,
                         help="Specify whether to use pretrained embeddings.")
+    parser.add_argument('--blast2go', action='store_true', default=False,
+                        help="Specify whether to use blast2go predictions.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
@@ -541,6 +559,8 @@ def add_arguments(parser):
                         help="Max sequence length (both input and output).")
     parser.add_argument("-c", "--min_count", type=int, default=2,
                         help="Minimal word count (both input and output).")
+    parser.add_argument("--num_cpu", type=int, default=4,
+                        help="How many cpus for computing blast2go prior")
 
 
 def save_checkpoint(state, is_best=False):
@@ -591,8 +611,12 @@ def main_loop(
     else:
         encoder = EncoderCNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
 
-    decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
-                                  dropout=dropout, embedding=output_embedding)
+    if USE_PRIOR:
+        decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
+                                      dropout=dropout, embedding=output_embedding, prior_size=output_lang.n_words - 3)
+    else:
+        decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
+                                      dropout=dropout, embedding=output_embedding)
 
     # Initialize optimizers and criterion
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
@@ -744,10 +768,20 @@ if __name__ == "__main__":
 
     seqid2seqpssm, seqid2goid, _, _ = load_training_and_validation(db, limit=None)
 
+    if args.blast2go:
+        USE_PRIOR = True
+        targets = {k: v[0] for k, v in seqid2seqpssm.items()}
+        q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
+        reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
+        blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
+    else:
+        USE_PRIOR = False
+        blast2go = None
+
     input_size = len(AA) * 2
 
     output_lang = Lang("GO")
-    gen = DataGenerator(seqid2seqpssm, seqid2goid)
+    gen = DataGenerator(seqid2seqpssm, seqid2goid, blast2go)
     pairs = prepare_data(gen)
 
     output_lang.trim(MIN_COUNT)

@@ -210,7 +210,8 @@ class Attn(nn.Module):
 
 
 class LuongAttnDecoderRNN(nn.Module):
-    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, dropout=0.1, embedding=None, prior_size=0):
+
+    def __init__(self, attn_model, hidden_size, output_size, n_layers=1, prior_size=0, dropout=0.1, embedding=None):
         super(LuongAttnDecoderRNN, self).__init__()
 
         # Keep for reference
@@ -261,10 +262,16 @@ class LuongAttnDecoderRNN(nn.Module):
         # concatenated together (Luong eq. 5)
         rnn_output = rnn_output.squeeze(0)  # S=1 x B x N -> B x N
         context = context.squeeze(1)  # B x S=1 x N -> B x N
-        if prior:
-            concat_input = torch.cat((rnn_output, context, prior), 1)
-        else:
+        if prior is None:
             concat_input = torch.cat((rnn_output, context), 1)
+        else:
+            concat_input = torch.cat((rnn_output, context, prior), 1)
+
+        # print(prior.size())
+        # print(context.size())
+        # print(rnn_output.size())
+        # print(concat_input.size())
+
         concat_output = F.tanh(self.concat(concat_input))
 
         # Finally predict next token (Luong eq. 6, without softmax)
