@@ -54,7 +54,7 @@ def prepare_uniprot20():
 
 
 def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
-    q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date': {"$lte": today_cutoff}}
+    q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(q)
     if limit: s = s.limit(limit)
     uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
