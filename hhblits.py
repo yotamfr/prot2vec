@@ -209,7 +209,9 @@ def _run_hhblits_parallel(sequences):
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
-    pbar = tqdm(range(len(records)), desc="sequences processed")
+    n = len(records)
+    pbar = tqdm(range(n), desc="sequences processed")
+    print(n)
 
     e = ThreadPoolExecutor(num_cpu)
 
@@ -235,8 +237,8 @@ def _hhblits(seq_record):
             % (prefix_hhsuite, database, seqid)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
-                             # stdout=subprocess.PIPE,
-                             # stderr=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
     _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
