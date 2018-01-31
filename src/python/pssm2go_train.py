@@ -773,7 +773,7 @@ if __name__ == "__main__":
 
     onto = init_GO(args.aspect)
 
-    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=5000)
+    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=None)
 
     if args.blast2go:
         USE_PRIOR = True
@@ -783,7 +783,7 @@ if __name__ == "__main__":
         else:
             targets = {k: v[0] for k, v in list(trn_seq2pssm.items()) + list(tst_seq2pssm.items())}
             q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
-            reference, _ = _get_labeled_data(db, q, limit=5000, pssm=False)
+            reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
             blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
             np.save(pred_path, blast2go)
     else:
