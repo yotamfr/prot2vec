@@ -284,6 +284,8 @@ def random_batch(batch_size):
     if USE_CUDA:
         input_var = input_var.cuda()
         target_var = target_var.cuda()
+    if USE_CUDA and USE_PRIOR:
+        prior_var = prior_var.cuda()
 
     return input_var, input_lengths, target_var, target_lengths, prior_var
 

@@ -90,12 +90,3 @@ python -m ipykernel install --user --name virtualenv
 #python recurrentshop/setup.py install
 
 #git clone https://github.com/aditya-grover/node2vec.git
-
-
-
-
-
-
-
-
-

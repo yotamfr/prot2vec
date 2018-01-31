@@ -10,6 +10,7 @@ USE_CUDA = False
 
 KERN_SIZE = 3
 
+
 def set_cuda(val):
     global USE_CUDA
     USE_CUDA = val
