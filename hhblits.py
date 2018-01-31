@@ -121,6 +121,8 @@ def _run_hhblits_batched(sequences):
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
                if db.pssm.find_one({"_id": seqid, "updated_at": is_old}) or not db.pssm.find_one({"_id": seqid})]
 
+    print(len(records))
+
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
