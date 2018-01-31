@@ -421,6 +421,8 @@ def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
 
     if USE_CUDA:
         input_batches = input_batches.cuda()
+    if USE_CUDA and USE_PRIOR:
+        input_prior = input_prior.cuda()
 
     # Set to not-training mode to disable dropout
     encoder.train(False)
@@ -768,13 +770,13 @@ if __name__ == "__main__":
 
     onto = init_GO(args.aspect)
 
-    seqid2seqpssm, seqid2goid, _, _ = load_training_and_validation(db, limit=5000)
+    seqid2seqpssm, seqid2goid, _, _ = load_training_and_validation(db, limit=None)
 
     if args.blast2go:
         USE_PRIOR = True
         targets = {k: v[0] for k, v in seqid2seqpssm.items()}
         q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
-        reference, _ = _get_labeled_data(db, q, limit=5000, pssm=False)
+        reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
         blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
     else:
         USE_PRIOR = False
