@@ -774,10 +774,15 @@ if __name__ == "__main__":
 
     if args.blast2go:
         USE_PRIOR = True
-        targets = {k: v[0] for k, v in seqid2seqpssm.items()}
-        q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
-        reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
-        blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
+        pred_path = os.path.join(tmp_dir, 'pred-blast-%s.npy' % GoAspect(ASPECT))
+        if os.path.exists(pred_path):
+            blast2go = np.load(pred_path).item()
+        else:
+            targets = {k: v[0] for k, v in seqid2seqpssm.items()}
+            q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
+            reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
+            blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
+            np.save(pred_path, blast2go)
     else:
         USE_PRIOR = False
         blast2go = None
