@@ -55,6 +55,9 @@ MAX_LENGTH = 480
 
 MIN_COUNT = 2
 
+t0 = datetime(2016, 2, 1, 0, 0)
+t1 = datetime(2017, 2, 1, 0, 0)
+
 
 class Lang(object):
     def __init__(self, name):
@@ -260,8 +263,8 @@ def pad_out(seq, max_length):
 def random_batch(batch_size):
 
     # Choose random pairs
-    ix = random.choice(list(range(len(pairs)-batch_size)))
-    sample = sorted([x for x in pairs[ix:ix+batch_size]], key=lambda x: -len(x[0]))
+    ix = random.choice(list(range(len(trn_pairs) - batch_size)))
+    sample = sorted([x for x in trn_pairs[ix:ix + batch_size]], key=lambda x: -len(x[0]))
     input_seqs = [inp for (inp, _, _) in sample]
     if USE_PRIOR:
         input_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()] for (_, prior, _) in sample]
@@ -470,7 +473,7 @@ def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
 
 
 def evaluate_randomly(encoder, decoder):
-    [input_seq, prior, target_seq] = random.choice(pairs)
+    [input_seq, prior, target_seq] = random.choice(tst_pairs)
     evaluate_and_show_attention(encoder, decoder, input_seq, target_seq, prior)
 
 
@@ -770,7 +773,7 @@ if __name__ == "__main__":
 
     onto = init_GO(args.aspect)
 
-    seqid2seqpssm, seqid2goid, _, _ = load_training_and_validation(db, limit=None)
+    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=5000)
 
     if args.blast2go:
         USE_PRIOR = True
@@ -778,9 +781,9 @@ if __name__ == "__main__":
         if os.path.exists(pred_path):
             blast2go = np.load(pred_path).item()
         else:
-            targets = {k: v[0] for k, v in seqid2seqpssm.items()}
+            targets = {k: v[0] for k, v in list(trn_seq2pssm.items()) + list(tst_seq2pssm.items())}
             q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Date':  {"$lte": t0}, 'Aspect': ASPECT}
-            reference, _ = _get_labeled_data(db, q, limit=None, pssm=False)
+            reference, _ = _get_labeled_data(db, q, limit=5000, pssm=False)
             blast2go = parallel_blast(targets, reference, num_cpu=args.num_cpu)
             np.save(pred_path, blast2go)
     else:
@@ -790,14 +793,15 @@ if __name__ == "__main__":
     input_size = len(AA) * 2
 
     output_lang = Lang("GO")
-    gen = DataGenerator(seqid2seqpssm, seqid2goid, blast2go)
-    pairs = prepare_data(gen)
+    trn_pairs = prepare_data(DataGenerator(trn_seq2pssm, trn_seq2go, blast2go))
+    tst_pairs = prepare_data(DataGenerator(tst_seq2pssm, tst_seq2go, blast2go))
 
     output_lang.trim(MIN_COUNT)
 
     save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
 
-    pairs, _ = trim_pairs(pairs)
+    trn_pairs, _ = trim_pairs(trn_pairs)
+    tst_pairs, _ = trim_pairs(tst_pairs)
 
     test_models()
 
