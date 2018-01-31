@@ -200,12 +200,14 @@ def _read_a3m(seq):
 
 
 def _run_hhblits_parallel(sequences):
+
     global pbar
 
     pwd = os.getcwd()
     os.chdir(out_dir)
-
-    records = [SeqRecord(Seq(v), k) for k, v in sequences]
+    is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
+               if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
@@ -233,8 +235,8 @@ def _hhblits(seq_record):
             % (prefix_hhsuite, database, seqid)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
+                             # stdout=subprocess.PIPE,
+                             # stderr=subprocess.PIPE,
                              universal_newlines=True,
                              shell=(sys.platform != "win32"))
     _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
