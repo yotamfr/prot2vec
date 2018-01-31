@@ -215,7 +215,7 @@ def parallel_blast(targets, reference, num_cpu=4):
     e = ThreadPoolExecutor(num_cpu)
 
     def _parallel_blast_helper(s):
-        return s[0], _blast(SeqRecord(Seq(s[1]), s[0]), reference, topn=None, choose_max_prob=False)
+        return s[0], _blast(SeqRecord(Seq(s[1]), s[0]), reference, topn=None, choose_max_prob=True)
 
     pbar = tqdm(range(len(targets)), desc="blast2go processed")
 
