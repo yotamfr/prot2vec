@@ -134,7 +134,7 @@ def load_training_and_validation(db, limit=None):
                'Date':  {"$lte": t0},
                'Aspect': ASPECT}
 
-    sequences_train, annotations_train = _get_labeled_data(db, q_train, None)
+    sequences_train, annotations_train = _get_labeled_data(db, q_train, limit)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
