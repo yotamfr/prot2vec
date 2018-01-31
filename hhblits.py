@@ -202,7 +202,10 @@ def _read_a3m(seq):
 def _run_hhblits_parallel(sequences):
     global pbar
 
-    records = [SeqRecord(Seq(v), k) for k, v in sequences.items()]
+    pwd = os.getcwd()
+    os.chdir(out_dir)
+
+    records = [SeqRecord(Seq(v), k) for k, v in sequences]
 
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
@@ -213,7 +216,10 @@ def _run_hhblits_parallel(sequences):
             "_id": seqid}, {
             '$set': {"pssm": pssm, "seq": seq}
         }, upsert=True)
-        pbar.update(1)
+
+    if cleanup: os.system("rm ./*")
+    os.chdir(pwd)
+    pbar.update(1)
 
 
 def _hhblits(seq_record):
@@ -221,11 +227,10 @@ def _hhblits(seq_record):
     global pbar
 
     seqid, seq = seq_record.id, str(seq_record.seq)
-    database = "dbs/uniprot20_2016_02/uniprot20_2016_02"
-    msa_pth = os.path.join(tmp_dir, "%s.msa" % seqid)
+    database = "../dbs/uniprot20_2016_02/uniprot20_2016_02"
 
-    cline = "%s/bin/hhblits_omp -i 'stdin' -d %s -n 2 -oa3m 'stdout'"\
-            % (prefix_hhsuite, database)
+    cline = "%s/bin/hhblits -i 'stdin' -d %s -n 2 -oa3m %s.a3m"\
+            % (prefix_hhsuite, database, seqid)
     child = subprocess.Popen(cline,
                              stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE,
@@ -235,31 +240,34 @@ def _hhblits(seq_record):
     _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
     assert child.returncode == 0
 
-    sys.stdin = io.StringIO(stdout)
+    if output_fasta:
+        cline = "%s/scripts/reformat.pl -r a3m fas %s.a3m %s.fas" % (prefix_hhsuite, seqid, seqid)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    seq_pth = os.path.join(tmp_dir, "%s.seq" % seqid)
-    SeqIO.write(seq_record, open(seq_pth, 'w+'), "fasta")
-    mat_pth = os.path.join(tmp_dir, "%s.pssm" % seqid)
+    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi" % (prefix_hhsuite, seqid, seqid)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    cline = "%s/psiblast -subject %s -in_msa %s -out_ascii_pssm %s" \
-            % (prefix_blast, seq_pth, msa_pth, mat_pth)
-    child = subprocess.Popen(cline,
-                             stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-    _, _ = child.communicate()
-    assert child.returncode == 0
+    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
 
-    aa, pssm = read_pssm(mat_pth)
+    aln = []
+    with open("%s.psi" % seq.id, 'rt') as f:
+        for line in f.readlines():
+            r = line.strip().split()
+            if len(r) < 2:
+                continue
+            aln.append(r)
 
-    if cleanup:
-        os.remove(seq_pth)
-        os.remove(msa_pth)
-        os.remove(mat_pth)
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
+            % (prefix_blast, seq.id, seq.id, seq.id)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    return seqid, seq, pssm, aa
+    # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
+    # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
+    aa, pssm = read_pssm("%s.pssm" % seq.id)
+
+    if cleanup: os.remove("%s.*" % seqid)
+
+    return seqid, seq, pssm, aln
 
 
 # def _run_hhblits(sequences):
@@ -384,4 +392,4 @@ if __name__ == "__main__":
     db.pssm.create_index("updated_at")
 
     seqs = _get_annotated_uniprot(db, lim)
-    _run_hhblits_batched(seqs)
+    _run_hhblits_parallel(seqs)
