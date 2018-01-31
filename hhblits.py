@@ -53,7 +53,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
 
 
-def _get_annotated_uniprot(db, limit, min_length=1, max_length=2000):
+def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
     q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(q)
     if limit: s = s.limit(limit)
@@ -118,9 +118,9 @@ def _set_unique_ids(input_file, output_file):
 def _run_hhblits_batched(sequences):
 
     is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-               # if not db.pssm.find_one({"_id": seqid})
-               # or not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
+               if not db.pssm.find_one({"_id": seqid})
+               or not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
