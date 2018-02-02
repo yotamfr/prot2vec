@@ -97,35 +97,35 @@ class CNN(nn.Module):
         self.features = nn.Sequential(
 
             nn.Conv2d(1, 64, kernel_size=(KERN_SIZE, inp_size)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(64, 64, kernel_size=(1, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(64, 64, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(64, 128, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(128, 128, kernel_size=(1, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(128, 128, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(128, 256, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(256, 256, kernel_size=(1, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(256, 256, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
         )
