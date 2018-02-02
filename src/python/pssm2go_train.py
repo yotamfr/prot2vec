@@ -605,8 +605,8 @@ def main_loop(
 
     # Configure training/optimization
     clip=50.0,
-    gamma=1.0,
-    teacher_forcing_ratio=0.5,
+    gamma=2.0,
+    teacher_forcing_ratio=0.8,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
     n_epochs=50000,
@@ -632,7 +632,7 @@ def main_loop(
 
     # Initialize optimizers and criterion
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
 
     # optionally resume from a checkpoint
     if args.resume:
