@@ -383,7 +383,7 @@ def train(input_batches, input_lengths, target_batches, target_lengths, input_pr
         else:
             # Choose top word from output
             _, topi = decoder_output.data.topk(1)
-            decoder_input = topi.squeeze(1)
+            decoder_input = Variable(topi.squeeze(1))
 
     # Loss calculation and backpropagation
     loss = masked_cross_entropy(

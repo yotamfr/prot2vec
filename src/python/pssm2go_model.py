@@ -96,32 +96,35 @@ class CNN(nn.Module):
 
         self.features = nn.Sequential(
 
-            nn.Conv2d(1, 10, kernel_size=(KERN_SIZE, inp_size)),
-            nn.BatchNorm2d(10),
+            nn.Conv2d(1, 64, kernel_size=(KERN_SIZE, inp_size)),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(10, 10, kernel_size=(KERN_SIZE, 1)),
-            nn.BatchNorm2d(10),
+            nn.Conv2d(64, 64, kernel_size=(1, 1)),
             nn.ReLU(inplace=True),
 
-            nn.MaxPool2d((2, 1)),
-
-            nn.Conv2d(10, 20, kernel_size=(KERN_SIZE, 1)),
-            nn.BatchNorm2d(20),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(20, 20, kernel_size=(KERN_SIZE, 1)),
-            nn.BatchNorm2d(20),
+            nn.Conv2d(64, 64, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(20, 40, kernel_size=(KERN_SIZE, 1)),
-            nn.BatchNorm2d(40),
+            nn.Conv2d(64, 128, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(40, 40, kernel_size=(KERN_SIZE, 1)),
-            nn.BatchNorm2d(40),
+            nn.Conv2d(128, 128, kernel_size=(1, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(128, 128, kernel_size=(KERN_SIZE, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.MaxPool2d((2, 1)),
+
+            nn.Conv2d(128, 256, kernel_size=(KERN_SIZE, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(256, 256, kernel_size=(1, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(256, 256, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
@@ -144,7 +147,7 @@ class EncoderCNN(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
         self.cnn = CNN(input_size)
-        self.gru = nn.GRU(input_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
+        self.gru = nn.GRU(256, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
