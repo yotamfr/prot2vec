@@ -350,7 +350,7 @@ def test_models():
 
 def train(input_batches, input_lengths, target_batches, target_lengths, input_prior,
           encoder, decoder, encoder_optimizer, decoder_optimizer,
-          batch_size, grad_clip, gamma):
+          batch_size, grad_clip, gamma, teacher_forcing):
 
     # Zero gradients of both optimizers
     encoder_optimizer.zero_grad()
@@ -378,7 +378,12 @@ def train(input_batches, input_lengths, target_batches, target_lengths, input_pr
         )
 
         all_decoder_outputs[t] = decoder_output
-        decoder_input = target_batches[t]  # Next input is current target
+        if teacher_forcing == 1:
+            decoder_input = target_batches[t]  # Next input is current target
+        else:
+            # Choose top word from output
+            _, topi = decoder_output.data.topk(1)
+            decoder_input = topi.squeeze(1)
 
     # Loss calculation and backpropagation
     loss = masked_cross_entropy(
@@ -674,7 +679,8 @@ def main_loop(
             input_batches, input_lengths, target_batches, target_lengths, input_prior,
             encoder, decoder,
             encoder_optimizer, decoder_optimizer,
-            batch_size, clip, gamma
+            batch_size, clip, gamma,
+            np.random.binomial(1, teacher_forcing_ratio)
         )
 
         # Keep track of loss
