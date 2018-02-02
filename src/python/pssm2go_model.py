@@ -96,38 +96,38 @@ class CNN(nn.Module):
 
         self.features = nn.Sequential(
 
-            nn.Conv2d(1, 64, kernel_size=(KERN_SIZE, inp_size)),
+            nn.Conv2d(1, 125, kernel_size=(KERN_SIZE, inp_size)),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(64, 64, kernel_size=(1, 1)),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(125, 125, kernel_size=(1, 1)),
+            nn.BatchNorm2d(125),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(64, 64, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
-
-            nn.MaxPool2d((2, 1)),
-
-            nn.Conv2d(64, 128, kernel_size=(KERN_SIZE, 1)),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(128, 128, kernel_size=(1, 1)),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(128, 128, kernel_size=(KERN_SIZE, 1)),
+            nn.Conv2d(125, 125, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(128, 256, kernel_size=(KERN_SIZE, 1)),
+            nn.Conv2d(125, 250, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(256, 256, kernel_size=(1, 1)),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(250, 250, kernel_size=(1, 1)),
+            nn.BatchNorm2d(250),
             nn.ReLU(inplace=True),
 
-            nn.Conv2d(256, 256, kernel_size=(KERN_SIZE, 1)),
+            nn.Conv2d(250, 250, kernel_size=(KERN_SIZE, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.MaxPool2d((2, 1)),
+
+            nn.Conv2d(250, 500, kernel_size=(KERN_SIZE, 1)),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(500, 500, kernel_size=(1, 1)),
+            nn.BatchNorm2d(500),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(500, 500, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
             nn.MaxPool2d((2, 1)),
@@ -150,7 +150,7 @@ class EncoderCNN(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
         self.cnn = CNN(input_size)
-        self.gru = nn.GRU(256, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
+        self.gru = nn.GRU(500, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
