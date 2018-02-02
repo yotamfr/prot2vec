@@ -558,9 +558,9 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-p", "--print_every", type=int, default=1,
+    parser.add_argument("-p", "--print_every", type=int, default=10,
                         help="How often should main_loop print training stats.")
-    parser.add_argument("-e", "--eval_every", type=int, default=10,
+    parser.add_argument("-e", "--eval_every", type=int, default=100,
                         help="How often should main_loop evaluate the model.")
     parser.add_argument("-l", "--max_length", type=int, default=200,
                         help="Max sequence length (both input and output).")
@@ -600,7 +600,7 @@ def main_loop(
 
     # Configure training/optimization
     clip=50.0,
-    gamma=2.0,
+    gamma=1.0,
     teacher_forcing_ratio=0.5,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
@@ -627,7 +627,7 @@ def main_loop(
 
     # Initialize optimizers and criterion
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -695,13 +695,13 @@ def main_loop(
         if epoch % evaluate_every == 0:
             evaluate_randomly(encoder, decoder)
 
-        save_checkpoint({
-            'epoch': epoch,
-            'encoder': encoder.state_dict(),
-            'decoder': decoder.state_dict(),
-            'encoder_optimizer': encoder_optimizer.state_dict(),
-            'decoder_optimizer': decoder_optimizer.state_dict()
-            })
+            save_checkpoint({
+                'epoch': epoch,
+                'encoder': encoder.state_dict(),
+                'decoder': decoder.state_dict(),
+                'encoder_optimizer': encoder_optimizer.state_dict(),
+                'decoder_optimizer': decoder_optimizer.state_dict()
+                })
 
         if not SHOW_PLOT:
             continue
