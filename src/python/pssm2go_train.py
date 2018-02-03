@@ -673,7 +673,7 @@ def main_loop(
 
         # Get training data for this cycle
         i = 0
-        while i * (batch_size + 1) < len(trn_records):
+        while i * batch_size < len(trn_records):
 
             input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = \
                 get_batch(batch_size, i * batch_size)
@@ -695,7 +695,8 @@ def main_loop(
                 print_loss_avg = print_loss_total / print_every
                 print_loss_total = 0
                 ratio = i * batch_size / len(trn_records)
-                print_summary = '%s (%d %d%%) %.4f' % (time_since(start, ratio), i, ratio, print_loss_avg)
+                print_summary = '%s (%d/%d %d%%) %.4f' % (
+                    time_since(start, ratio), epoch, n_epochs, ratio, print_loss_avg)
                 print(print_summary)
 
             if i % evaluate_every == 0:
