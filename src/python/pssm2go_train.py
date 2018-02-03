@@ -152,14 +152,14 @@ def load_training_and_validation(db, limit=None):
     return sequences_train, annotations_train, sequences_valid, annotations_valid
 
 
-def filter_pairs(pairs_gen):
-    filtered_pairs = []
-    original_pairs = []
-    for _, inp, prior, out in pairs_gen:
-        original_pairs.append((inp, prior, out))
+def filter_records(records_gen):
+    filtered_records = []
+    original_records = []
+    for _, inp, pssm, prior, out in records_gen:
+        original_records.append((inp, pssm, prior, out))
         if MIN_LENGTH <= len(inp) <= MAX_LENGTH:
-            filtered_pairs.append((inp, prior, out))
-    return original_pairs, filtered_pairs
+            filtered_records.append((inp, pssm, prior, out))
+    return original_records, filtered_records
 
 
 class DataGenerator(object):
@@ -181,8 +181,9 @@ class DataGenerator(object):
                 print("WARN: wrong PSSM! (%s)" % seqid)
                 continue
 
-            matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
-                      for i, aa in enumerate(seq)]
+            matrix = [[pssm[i][AA.index2aa[k]] for k in range(20)] for i, _ in enumerate(seq)]
+
+            seq = [aa for _, aa in enumerate(seq)]
 
             if self.blast2go:
                 prior = self.blast2go[seqid]
@@ -198,33 +199,34 @@ class DataGenerator(object):
             else:
                 annots = onto.propagate(seqid2goid[seqid], include_root=False)
 
-            yield (seqid, matrix, prior, annots)
+            yield (seqid, seq, matrix, prior, annots)
 
 
-def prepare_data(pairs_gen):
+def prepare_data(records_gen):
 
-    pairs1, pairs2 = filter_pairs(pairs_gen)
-    print("Filtered %d to %d pairs" % (len(pairs1), len(pairs2)))
+    records1, records2 = filter_records(records_gen)
+    print("Filtered %d to %d records" % (len(records1), len(records2)))
 
     print("Indexing words...")
-    for pair in pairs2:
-        output_lang.index_words(pair[2])
+    for record in records2:
+        input_lang.index_words(record[0])
+        output_lang.index_words(record[3])
 
-    print('Indexed %d words in GO' % output_lang.n_words)
-    return pairs2
+    print('Indexed %d words in input language, %d words in output' % (input_lang.n_words, output_lang.n_words))
+    return records2
 
 
-def trim_pairs(pairs):
-    keep_pairs, trimmed_pairs = [], []
+def trim_records(records):
+    keep_records, trimmed_records = [], []
 
-    for i, pair in enumerate(pairs):
+    for i, record in enumerate(records):
 
-        n = len(pairs)
+        n = len(records)
 
         if verbose:
             sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
-        input_seq, prior_annots, output_annots = pair
+        _, _, _, output_annots = record
         keep_input = True
         keep_output = True
 
@@ -233,14 +235,14 @@ def trim_pairs(pairs):
                 keep_output = False
                 break
 
-        # Remove if pair doesn't match input and output conditions
+        # Remove if record doesn't match input and output conditions
         if keep_input and keep_output:
-            keep_pairs.append(pair)
+            keep_records.append(record)
         else:
-            trimmed_pairs.append(pair)
+            trimmed_records.append(record)
 
-    print("\nTrimmed from %d pairs to %d, %.4f of total" % (len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
-    return keep_pairs, trimmed_pairs
+    print("\nTrimmed from %d records to %d, %.4f of total" % (len(records), len(keep_records), len(keep_records) / len(records)))
+    return keep_records, trimmed_records
 
 
 # Return a list of indexes, one for each word in the sequence, plus EOS
@@ -249,63 +251,69 @@ def indexes_from_sequence(lang, seq):
 
 
 # Pad a with zeros
-def pad_inp(seq, max_length):
-    seq = [(seq[i] if i < len(seq) else ([0.] * input_size)) for i in range(max_length)]
+def pad_pssm(seq, max_length):
+    seq = [(seq[i] if i < len(seq) else ([0.] * 20)) for i in range(max_length)]
     return seq
 
 
 # Pad a with the PAD symbol
-def pad_out(seq, max_length):
-    seq += [PAD_token for i in range(max_length - len(seq))]
+def pad_seq(seq, max_length):
+    seq += [PAD_token for _ in range(max_length - len(seq))]
     return seq
 
 
 def random_batch(batch_size):
 
-    # Choose random pairs
-    ix = random.choice(list(range(len(trn_pairs) - batch_size)))
-    sample = sorted([x for x in trn_pairs[ix:ix + batch_size]], key=lambda x: -len(x[0]))
-    input_seqs = [inp for (inp, _, _) in sample]
+    # Choose random records
+    ix = random.choice(list(range(len(trn_records) - batch_size)))
+    sample = sorted([x for x in trn_records[ix:ix + batch_size]], key=lambda x: -len(x[0]))
+    input_seqs = [indexes_from_sequence(input_lang, inp) for (inp, _, _, _) in sample]
+    target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, _, out) in sample]
+
+    input_pssms = [pssm for (_, pssm, _, _) in sample]
     if USE_PRIOR:
-        input_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()] for (_, prior, _) in sample]
-        prior_var = Variable(torch.FloatTensor(input_prior))
+        blast_prior = [[prior[go] if go in prior else 0. for go in output_lang.word2index.keys()] for (_, _, prior, _) in sample]
+        prior_var = Variable(torch.FloatTensor(blast_prior))
     else:
         prior_var = None
 
-    target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, out) in sample]
 
     # For input and target sequences, get array of lengths and pad with 0s to max length
     input_lengths = [len(s) for s in input_seqs]
-    input_padded = [pad_inp(s, max(input_lengths)) for s in input_seqs]
+    seq_padded = [pad_seq(s, max(input_lengths)) for s in input_seqs]
+    pssm_padded = [pad_pssm(s, max(input_lengths)) for s in input_pssms]
+
     target_lengths = [len(s) for s in target_seqs]
-    target_padded = [pad_out(s, max(target_lengths)) for s in target_seqs]
+    target_padded = [pad_seq(s, max(target_lengths)) for s in target_seqs]
 
     # Turn padded arrays into (batch_size x max_len) tensors, transpose into (max_len x batch_size)
-    input_var = Variable(torch.FloatTensor(input_padded)).transpose(0, 1)
+    seq_var = Variable(torch.LongTensor(seq_padded)).transpose(0, 1)
+    pssm_var = Variable(torch.FloatTensor(pssm_padded)).transpose(0, 1)
     target_var = Variable(torch.LongTensor(target_padded)).transpose(0, 1)
 
     if USE_CUDA:
-        input_var = input_var.cuda()
+        seq_var = seq_var.cuda()
+        pssm_var = pssm_var.cuda()
         target_var = target_var.cuda()
     if USE_CUDA and USE_PRIOR:
         prior_var = prior_var.cuda()
 
-    return input_var, input_lengths, target_var, target_lengths, prior_var
+    return seq_var, pssm_var, input_lengths, target_var, target_lengths, prior_var
 
 
 def test_models():
 
     small_batch_size = 3
-    input_batches, input_lengths, target_batches, target_lengths, input_prior = \
+    input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = \
         random_batch(small_batch_size)
 
-    print('input_batches', input_batches.size())  # (max_len x batch_size)
+    print('input_batches', input_seqs.size())  # (max_len x batch_size)
     print('target_batches', target_batches.size())  # (max_len x batch_size)
 
     small_hidden_size = 8
     small_n_layers = 2
 
-    encoder_test = EncoderRNN(input_size, small_hidden_size, small_n_layers)
+    encoder_test = EncoderRCNN(small_hidden_size, input_lang.n_words, small_n_layers)
     if USE_PRIOR:
         decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers, output_lang.n_words - 3)
     else:
@@ -315,7 +323,7 @@ def test_models():
         encoder_test.cuda()
         decoder_test.cuda()
 
-    encoder_outputs, encoder_hidden = encoder_test(input_batches, input_lengths, None)
+    encoder_outputs, encoder_hidden = encoder_test(input_seqs, input_pssms, input_lengths, None)
 
     print('encoder_outputs', encoder_outputs.size())  # max_len x batch_size x hidden_size
     print('encoder_hidden', encoder_hidden.size())  # n_layers * 2 x batch_size x hidden_size
@@ -348,7 +356,7 @@ def test_models():
     print('loss', loss.data[0])
 
 
-def train(input_batches, input_lengths, target_batches, target_lengths, input_prior,
+def train(input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior,
           encoder, decoder, encoder_optimizer, decoder_optimizer,
           batch_size, grad_clip, gamma, teacher_forcing):
 
@@ -357,7 +365,7 @@ def train(input_batches, input_lengths, target_batches, target_lengths, input_pr
     decoder_optimizer.zero_grad()
 
     # Run words through encoder
-    encoder_outputs, encoder_hidden = encoder(input_batches, input_lengths, None)
+    encoder_outputs, encoder_hidden = encoder(input_seqs, input_pssms, input_lengths, None)
 
     # Prepare input and output variables
     decoder_input = Variable(torch.LongTensor([SOS_token] * batch_size))
@@ -418,9 +426,11 @@ def time_since(since, percent):
     return '%s (- %s)' % (as_minutes(s), as_minutes(rs))
 
 
-def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
-    input_lengths = [len(input_seq)]
-    input_batches = Variable(torch.FloatTensor([input_seq]), volatile=True).transpose(0, 1)
+def evaluate(encoder, decoder, input_words, input_pssm, prior=None, max_length=MAX_LENGTH):
+    input_lengths = [len(input_words)]
+    input_seq = indexes_from_sequence(input_lang, input_words)
+    input_seqs = Variable(torch.LongTensor([input_seq]), volatile=True).transpose(0, 1)
+    input_pssms = Variable(torch.FloatTensor([input_pssm]), volatile=True).transpose(0, 1)
     if USE_PRIOR:
         input_prior = [prior[go] if go in prior else 0. for go in output_lang.word2index.keys()]
         input_prior = Variable(torch.FloatTensor([input_prior]))
@@ -428,7 +438,9 @@ def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
         input_prior = None
 
     if USE_CUDA:
-        input_batches = input_batches.cuda()
+        input_seqs = input_seqs.cuda()
+        input_pssms = input_pssms.cuda()
+
     if USE_CUDA and USE_PRIOR:
         input_prior = input_prior.cuda()
 
@@ -437,7 +449,7 @@ def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
     decoder.train(False)
 
     # Run through encoder
-    encoder_outputs, encoder_hidden = encoder(input_batches, input_lengths, None)
+    encoder_outputs, encoder_hidden = encoder(input_seqs, input_pssms, input_lengths, None)
 
     # Create starting vectors for decoder
     decoder_input = Variable(torch.LongTensor([SOS_token]), volatile=True)  # SOS
@@ -478,8 +490,8 @@ def evaluate(encoder, decoder, input_seq, prior=None, max_length=MAX_LENGTH):
 
 
 def evaluate_randomly(encoder, decoder):
-    [input_seq, prior, target_seq] = random.choice(tst_pairs)
-    evaluate_and_show_attention(encoder, decoder, input_seq, target_seq, prior)
+    [input_seq, input_pssm, prior, target_seq] = random.choice(tst_records)
+    evaluate_and_show_attention(encoder, decoder, input_seq, input_pssm, target_seq, prior)
 
 
 def show_attention(input_sequence, output_words, attentions):
@@ -511,10 +523,8 @@ def show_plot_visdom():
     vis.image(torchvision.transforms.ToTensor()(im), win=attn_win, opts={'title': attn_win})
 
 
-def evaluate_and_show_attention(encoder, decoder, input_seq, target_words=None, input_prior=None):
-    output_words, attentions = evaluate(encoder, decoder, input_seq, input_prior)
-    input_words = [AA.index2aa[vec[:len(AA)].index(1) if 1 in vec[:len(AA)] else 20]
-                   for vec in input_seq]
+def evaluate_and_show_attention(encoder, decoder, input_words, input_pssm, target_words=None, input_prior=None):
+    output_words, attentions = evaluate(encoder, decoder, input_words, input_pssm, input_prior)
     output_sequence = ' '.join(output_words)
     input_sequence = ' '.join(input_words)
     target_sequence = ' '.join(target_words)
@@ -545,8 +555,6 @@ def show_plot(points):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
-    parser.add_argument('--cnn', action='store_true', default=False,
-                        help="Use CNN to extract features from input sequence.")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
                         required=True, help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
@@ -555,8 +563,6 @@ def add_arguments(parser):
                         default="pssm2go", help="Specify the model name.")
     parser.add_argument("-q", '--quiet', action='store_true', default=False,
                         help="Run in quiet mode.")
-    parser.add_argument('--pretrained', action='store_true', default=False,
-                        help="Specify whether to use pretrained embeddings.")
     parser.add_argument('--blast2go', action='store_true', default=False,
                         help="Specify whether to use blast2go predictions.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
@@ -600,7 +606,7 @@ def main_loop(
     encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
-    batch_size=6,
+    batch_size=18,
     # batch_size=50,
 
     # Configure training/optimization
@@ -618,10 +624,7 @@ def main_loop(
     assert encoder_hidden_size == decoder_hidden_size
 
     # Initialize models
-    if not args.cnn:
-        encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
-    else:
-        encoder = EncoderCNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+    encoder = EncoderRCNN(encoder_hidden_size, input_lang.n_words, n_layers, dropout=dropout)
 
     if USE_PRIOR:
         decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
@@ -671,12 +674,12 @@ def main_loop(
         epoch += 1
 
         # Get training data for this cycle
-        input_batches, input_lengths, target_batches, target_lengths, input_prior =\
+        input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior =\
             random_batch(batch_size)
 
         # Run the train function
         loss, ec, dc = train(
-            input_batches, input_lengths, target_batches, target_lengths, input_prior,
+            input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior,
             encoder, decoder,
             encoder_optimizer, decoder_optimizer,
             batch_size, clip, gamma,
@@ -731,6 +734,11 @@ def main_loop(
 def set_output_lang(lang):
     global output_lang
     output_lang = lang
+    
+    
+def set_input_lang(lang):
+    global input_lang
+    input_lang = lang
 
 
 def set_ontology(ontology):
@@ -795,31 +803,25 @@ if __name__ == "__main__":
     else:
         USE_PRIOR = False
         blast2go = None
-
-    input_size = len(AA) * 2
-
+    
+    input_lang = Lang("AA")
     output_lang = Lang("GO")
-    trn_pairs = prepare_data(DataGenerator(trn_seq2pssm, trn_seq2go, blast2go))
-    tst_pairs = prepare_data(DataGenerator(tst_seq2pssm, tst_seq2go, blast2go))
+    trn_records = prepare_data(DataGenerator(trn_seq2pssm, trn_seq2go, blast2go))
+    tst_records = prepare_data(DataGenerator(tst_seq2pssm, tst_seq2go, blast2go))
 
+    input_lang.trim(MIN_COUNT)
     output_lang.trim(MIN_COUNT)
 
+    save_object(input_lang, os.path.join(ckptpath, "aa-lang-%s.pkl" % GoAspect(args.aspect)))
     save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
 
-    trn_pairs, _ = trim_pairs(trn_pairs)
-    tst_pairs, _ = trim_pairs(tst_pairs)
+    trn_records, _ = trim_records(trn_records)
+    tst_records, _ = trim_records(tst_records)
 
     test_models()
 
-    if args.pretrained:
-        output_embedding = np.array([onto.todense(go) for go
-                                     in sorted(output_lang.word2index.keys(),
-                                               key=lambda k: output_lang.word2index[k])])
-        dummy_embedding = np.random.rand(3, output_embedding.shape[1])
-        output_embedding = np.concatenate((dummy_embedding, output_embedding))
-    else:
-        input_embedding = None
-        output_embedding = None
+    input_embedding = None
+    output_embedding = None
 
     main_loop(
         print_every=args.print_every,

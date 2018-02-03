@@ -69,25 +69,6 @@ def masked_cross_entropy(logits, target, length, gamma=0, eps=1e-7):
     return loss
 
 
-class EncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1):
-        super(EncoderRNN, self).__init__()
-
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.n_layers = n_layers
-        self.dropout = dropout
-        self.gru = nn.GRU(input_size, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
-
-    def forward(self, input_seqs, input_lengths, hidden=None):
-        # Note: we run this all at once (over multiple batches of multiple sequences)
-        packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lengths)
-        outputs, hidden = self.gru(packed, hidden)
-        outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
-        outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]  # Sum bidirectional outputs
-        return outputs, hidden
-
-
 class CNN(nn.Module):
     def __init__(self, input_size):
         super(CNN, self).__init__()
@@ -96,12 +77,14 @@ class CNN(nn.Module):
 
         self.features = nn.Sequential(
 
-            nn.Conv2d(1, 125, kernel_size=(KERN_SIZE, inp_size)),
+            nn.Conv2d(1, 125, kernel_size=(1, inp_size)),
+
+            nn.Conv2d(125, 125, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
 
             nn.Conv2d(125, 125, kernel_size=(1, 1)),
             nn.BatchNorm2d(125),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(125, 125, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
@@ -113,7 +96,7 @@ class CNN(nn.Module):
 
             nn.Conv2d(250, 250, kernel_size=(1, 1)),
             nn.BatchNorm2d(250),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(250, 250, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
@@ -125,7 +108,7 @@ class CNN(nn.Module):
 
             nn.Conv2d(500, 500, kernel_size=(1, 1)),
             nn.BatchNorm2d(500),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
 
             nn.Conv2d(500, 500, kernel_size=(KERN_SIZE, 1)),
             nn.ReLU(inplace=True),
@@ -141,23 +124,24 @@ class CNN(nn.Module):
         return out
 
 
-class EncoderCNN(nn.Module):
-    def __init__(self, input_size, hidden_size, n_layers=1, dropout=0.1):
-        super(EncoderCNN, self).__init__()
+class EncoderRCNN(nn.Module):
+    def __init__(self, hidden_size, embedding_size, n_layers=1, dropout=0.1):
+        super(EncoderRCNN, self).__init__()
 
-        self.input_size = input_size
+        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.n_layers = n_layers
         self.dropout = dropout
-        self.cnn = CNN(input_size)
+
+        self.embedding = nn.Embedding(embedding_size, embedding_size)
+        self.cnn = CNN(embedding_size + 20)
         self.gru = nn.GRU(500, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
-    def forward(self, input_seqs, input_lengths, hidden=None):
+    def forward(self, input_seqs, input_pssms, input_lengths, hidden=None):
+        embedded = self.embedding(input_seqs)
+        input_seqs = torch.cat((embedded, input_pssms), 2)
         input_features = self.cnn(input_seqs.transpose(0, 1).unsqueeze(1))
         features_length = [(l//(2 ** self.cnn.n_pool_layers)) for l in input_lengths]
-        # features_length = input_lengths
-        # print(input_features.size())
-        # print(features_length)
         # Note: we run this all at once (over multiple batches of multiple sequences)
         packed = torch.nn.utils.rnn.pack_padded_sequence(input_features, features_length)
         outputs, hidden = self.gru(packed, hidden)
