@@ -269,7 +269,8 @@ def get_batch(batch_size, ix=None):
 
     # Choose random records
     if not ix: ix = random.choice(list(range(len(trn_records) - batch_size)))
-    sample = sorted([x for x in trn_records[ix:ix + batch_size]], key=lambda x: -len(x[0]))
+    start, end = ix, min(ix + batch_size, len(trn_records))
+    sample = sorted([x for x in trn_records[start:end]], key=lambda x: -len(x[0]))
     input_seqs = [indexes_from_sequence(input_lang, inp, eos=0) for (inp, _, _, _) in sample]
     target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, _, out) in sample]
 
