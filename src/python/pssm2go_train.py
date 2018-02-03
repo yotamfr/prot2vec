@@ -246,8 +246,11 @@ def trim_records(records):
 
 
 # Return a list of indexes, one for each word in the sequence, plus EOS
-def indexes_from_sequence(lang, seq):
-    return [lang.word2index[word] for word in seq] + [EOS_token]
+def indexes_from_sequence(lang, seq, eos=1):
+    if eos == 1:
+        return [lang.word2index[word] for word in seq] + [EOS_token]
+    else:
+        return [lang.word2index[word] for word in seq]
 
 
 # Pad a with zeros
@@ -267,7 +270,7 @@ def random_batch(batch_size):
     # Choose random records
     ix = random.choice(list(range(len(trn_records) - batch_size)))
     sample = sorted([x for x in trn_records[ix:ix + batch_size]], key=lambda x: -len(x[0]))
-    input_seqs = [indexes_from_sequence(input_lang, inp) for (inp, _, _, _) in sample]
+    input_seqs = [indexes_from_sequence(input_lang, inp, eos=0) for (inp, _, _, _) in sample]
     target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, _, out) in sample]
 
     input_pssms = [pssm for (_, pssm, _, _) in sample]
@@ -428,7 +431,7 @@ def time_since(since, percent):
 
 def evaluate(encoder, decoder, input_words, input_pssm, prior=None, max_length=MAX_LENGTH):
     input_lengths = [len(input_words)]
-    input_seq = indexes_from_sequence(input_lang, input_words)
+    input_seq = indexes_from_sequence(input_lang, input_words, eos=0)
     input_seqs = Variable(torch.LongTensor([input_seq]), volatile=True).transpose(0, 1)
     input_pssms = Variable(torch.FloatTensor([input_pssm]), volatile=True).transpose(0, 1)
     if USE_PRIOR:
@@ -447,6 +450,9 @@ def evaluate(encoder, decoder, input_words, input_pssm, prior=None, max_length=M
     # Set to not-training mode to disable dropout
     encoder.train(False)
     decoder.train(False)
+
+    print(input_seqs.size())
+    print(input_pssms.size())
 
     # Run through encoder
     encoder_outputs, encoder_hidden = encoder(input_seqs, input_pssms, input_lengths, None)
@@ -569,7 +575,7 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-p", "--print_every", type=int, default=10,
+    parser.add_argument("-p", "--print_every", type=int, default=1,
                         help="How often should main_loop print training stats.")
     parser.add_argument("-e", "--eval_every", type=int, default=100,
                         help="How often should main_loop evaluate the model.")
@@ -606,7 +612,7 @@ def main_loop(
     encoder_hidden_size=500,
     n_layers=2,
     dropout=0.1,
-    batch_size=18,
+    batch_size=12,
     # batch_size=50,
 
     # Configure training/optimization
