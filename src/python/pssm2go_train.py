@@ -695,7 +695,7 @@ def main_loop(
             if i % print_every == 0:
                 print_loss_avg = print_loss_total / print_every
                 print_loss_total = 0
-                ratio = i * batch_size / len(trn_records)
+                ratio = (i + 1) * batch_size / len(trn_records)
                 print_summary = '%s (%d/%d %d%%) %.4f' % (
                     time_since(start, ratio), epoch, n_epochs, ratio, print_loss_avg)
                 print(print_summary)
