@@ -133,7 +133,7 @@ class EncoderRCNN(nn.Module):
         self.n_layers = n_layers
         self.dropout = dropout
 
-        self.embedding = nn.Embedding(embedding_size, embedding_size)
+        self.embedding = nn.Embedding(embedding_size, 5)
         self.cnn = CNN(embedding_size + 20)
         self.gru = nn.GRU(500, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
