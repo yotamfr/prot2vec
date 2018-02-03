@@ -620,7 +620,7 @@ def main_loop(
     teacher_forcing_ratio=0.8,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
-    n_epochs=50,
+    n_epochs=500,
     epoch=0,
     print_every=20,
     evaluate_every=1000
@@ -694,8 +694,8 @@ def main_loop(
             if i % print_every == 0:
                 print_loss_avg = print_loss_total / print_every
                 print_loss_total = 0
-                print_summary = '%s (%d %d%%) %.4f' % (
-                time_since(start, epoch / n_epochs), epoch, epoch / n_epochs * 100, print_loss_avg)
+                ratio = i * batch_size / len(trn_records)
+                print_summary = '%s (%d %d%%) %.4f' % (time_since(start, ratio), i, ratio, print_loss_avg)
                 print(print_summary)
 
             if i % evaluate_every == 0:
