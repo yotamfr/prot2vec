@@ -265,10 +265,10 @@ def pad_seq(seq, max_length):
     return seq
 
 
-def random_batch(batch_size):
+def get_batch(batch_size, ix=None):
 
     # Choose random records
-    ix = random.choice(list(range(len(trn_records) - batch_size)))
+    if not ix: ix = random.choice(list(range(len(trn_records) - batch_size)))
     sample = sorted([x for x in trn_records[ix:ix + batch_size]], key=lambda x: -len(x[0]))
     input_seqs = [indexes_from_sequence(input_lang, inp, eos=0) for (inp, _, _, _) in sample]
     target_seqs = [indexes_from_sequence(output_lang, out) for (_, _, _, out) in sample]
@@ -307,8 +307,7 @@ def random_batch(batch_size):
 def test_models():
 
     small_batch_size = 3
-    input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = \
-        random_batch(small_batch_size)
+    input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = get_batch(small_batch_size)
 
     print('input_batches', input_seqs.size())  # (max_len x batch_size)
     print('target_batches', target_batches.size())  # (max_len x batch_size)
@@ -575,7 +574,7 @@ def add_arguments(parser):
                         help='path to latest checkpoint (default: none)')
     parser.add_argument("-d", "--device", type=str, default='cpu',
                         help="Specify what device you'd like to use e.g. 'cpu', 'gpu0' etc.")
-    parser.add_argument("-p", "--print_every", type=int, default=1,
+    parser.add_argument("-p", "--print_every", type=int, default=10,
                         help="How often should main_loop print training stats.")
     parser.add_argument("-e", "--eval_every", type=int, default=100,
                         help="How often should main_loop evaluate the model.")
@@ -621,9 +620,8 @@ def main_loop(
     teacher_forcing_ratio=0.8,
     learning_rate=0.0001,
     decoder_learning_ratio=5.0,
-    n_epochs=50000,
+    n_epochs=50,
     epoch=0,
-    plot_every=20,
     print_every=20,
     evaluate_every=1000
 ):
@@ -670,71 +668,48 @@ def main_loop(
     print_loss_total = 0  # Reset every print_every
     plot_loss_total = 0  # Reset every plot_every
 
-    # Begin!
-    ecs = []
-    dcs = []
-    eca = 0
-    dca = 0
-
     while epoch < n_epochs:
         epoch += 1
 
         # Get training data for this cycle
-        input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior =\
-            random_batch(batch_size)
+        i = 0
+        while i * (batch_size + 1) < len(trn_records):
 
-        # Run the train function
-        loss, ec, dc = train(
-            input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior,
-            encoder, decoder,
-            encoder_optimizer, decoder_optimizer,
-            batch_size, clip, gamma,
-            np.random.binomial(1, teacher_forcing_ratio)
-        )
+            input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = \
+                get_batch(batch_size, i * batch_size)
 
-        # Keep track of loss
-        print_loss_total += loss
-        plot_loss_total += loss
-        eca += ec
-        dca += dc
+            # Run the train function
+            loss, ec, dc = train(
+                input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior,
+                encoder, decoder,
+                encoder_optimizer, decoder_optimizer,
+                batch_size, clip, gamma,
+                np.random.binomial(1, teacher_forcing_ratio)
+            )
 
-        # job.record(epoch, loss)
+            # Keep track of loss
+            print_loss_total += loss
+            plot_loss_total += loss
 
-        if epoch % print_every == 0:
-            print_loss_avg = print_loss_total / print_every
-            print_loss_total = 0
-            print_summary = '%s (%d %d%%) %.4f' % (
-            time_since(start, epoch / n_epochs), epoch, epoch / n_epochs * 100, print_loss_avg)
-            print(print_summary)
+            if i % print_every == 0:
+                print_loss_avg = print_loss_total / print_every
+                print_loss_total = 0
+                print_summary = '%s (%d %d%%) %.4f' % (
+                time_since(start, epoch / n_epochs), epoch, epoch / n_epochs * 100, print_loss_avg)
+                print(print_summary)
 
-        if epoch % evaluate_every == 0:
-            evaluate_randomly(encoder, decoder)
+            if i % evaluate_every == 0:
+                evaluate_randomly(encoder, decoder)
 
-            save_checkpoint({
-                'epoch': epoch,
-                'encoder': encoder.state_dict(),
-                'decoder': decoder.state_dict(),
-                'encoder_optimizer': encoder_optimizer.state_dict(),
-                'decoder_optimizer': decoder_optimizer.state_dict()
-                })
+                save_checkpoint({
+                    'epoch': epoch,
+                    'encoder': encoder.state_dict(),
+                    'decoder': decoder.state_dict(),
+                    'encoder_optimizer': encoder_optimizer.state_dict(),
+                    'decoder_optimizer': decoder_optimizer.state_dict()
+                    })
 
-        if not SHOW_PLOT:
-            continue
-
-        if epoch % plot_every == 0:
-            plot_loss_avg = plot_loss_total / plot_every
-            plot_losses.append(plot_loss_avg)
-            plot_loss_total = 0
-
-            # TODO: Running average helper
-            ecs.append(eca / plot_every)
-            dcs.append(dca / plot_every)
-            ecs_win = 'encoder grad (%s)' % hostname
-            dcs_win = 'decoder grad (%s)' % hostname
-            vis.line(np.array(ecs), win=ecs_win, opts={'title': ecs_win})
-            vis.line(np.array(dcs), win=dcs_win, opts={'title': dcs_win})
-            eca = 0
-            dca = 0
+            i += 1
 
 
 def set_output_lang(lang):
