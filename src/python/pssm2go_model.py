@@ -225,8 +225,8 @@ class LuongAttnDecoderRNN(nn.Module):
 
         self.embedding_dropout = nn.Dropout(dropout)
         self.gru = nn.GRU(embedding_size, hidden_size, n_layers, dropout=dropout)
-        self.concat = nn.Linear(hidden_size * 2 + prior_size, hidden_size)
-        self.out = nn.Linear(hidden_size, output_size)
+        self.concat = nn.Linear(hidden_size * 2, hidden_size)
+        self.out = nn.Linear(hidden_size + prior_size, output_size)
 
         # Choose attention model
         if attn_model != 'none':
@@ -253,20 +253,14 @@ class LuongAttnDecoderRNN(nn.Module):
         # concatenated together (Luong eq. 5)
         rnn_output = rnn_output.squeeze(0)  # S=1 x B x N -> B x N
         context = context.squeeze(1)  # B x S=1 x N -> B x N
-        if prior is None:
-            concat_input = torch.cat((rnn_output, context), 1)
-        else:
-            concat_input = torch.cat((rnn_output, context, prior), 1)
-
-        # print(prior.size())
-        # print(context.size())
-        # print(rnn_output.size())
-        # print(concat_input.size())
-
+        concat_input = torch.cat((rnn_output, context), 1)
         concat_output = F.tanh(self.concat(concat_input))
 
         # Finally predict next token (Luong eq. 6, without softmax)
-        output = self.out(concat_output)
+        if prior is None:
+            output = self.out(concat_output)
+        else:
+            output = self.out(torch.cat((concat_output, prior), 1))
 
         # Return final output, hidden state, and attention weights (for visualization)
         return output, hidden, attn_weights
