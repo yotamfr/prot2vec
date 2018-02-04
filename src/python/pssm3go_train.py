@@ -20,7 +20,7 @@ import matplotlib.ticker as ticker
 import socket
 hostname = socket.gethostname()
 
-from .pssm2go_model import *
+from .pssm3go_model import *
 
 from .baselines import *
 
