@@ -613,7 +613,7 @@ def main_loop(
     decoder_hidden_size=500,
     encoder_hidden_size=500,
     n_layers=2,
-    dropout=0.1,
+    dropout=0.01,
     batch_size=12,
     # batch_size=50,
 
