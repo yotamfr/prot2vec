@@ -181,7 +181,8 @@ class DataGenerator(object):
                 print("WARN: wrong PSSM! (%s)" % seqid)
                 continue
 
-            matrix = [[pssm[i][AA.index2aa[k]] for k in range(20)] for i, _ in enumerate(seq)]
+            matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
+                      for i, aa in enumerate(seq)]
 
             seq = [aa for _, aa in enumerate(seq)]
 
@@ -620,7 +621,7 @@ def main_loop(
     clip=50.0,
     gamma=2.0,
     teacher_forcing_ratio=0.8,
-    learning_rate=0.0001,
+    learning_rate=0.1,
     decoder_learning_ratio=5.0,
     n_epochs=500,
     epoch=0,
@@ -677,8 +678,7 @@ def main_loop(
         i = 0
         while i * batch_size < len(trn_records):
 
-            input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = \
-                get_batch(batch_size, i * batch_size)
+            input_seqs, input_pssms, input_lengths, target_batches, target_lengths, input_prior = get_batch(batch_size)
 
             # Run the train function
             loss, ec, dc = train(
@@ -696,9 +696,11 @@ def main_loop(
             if i % print_every == 0:
                 print_loss_avg = print_loss_total / print_every
                 print_loss_total = 0
-                ratio = (i + 1) * batch_size / len(trn_records)
-                print_summary = '%s (%d/%d %d%%) %.4f' % (
-                    time_since(start, ratio), epoch, n_epochs, ratio, print_loss_avg)
+                j = (i + 1) * batch_size
+                n = len(trn_records)
+                ratio = j / n
+                print_summary = '%s [%d/%d] (%d/%d %d%%) %.4f' % (
+                    time_since(start, ratio), epoch, n_epochs, j, n, ratio, print_loss_avg)
                 print(print_summary)
 
             if i % evaluate_every == 0:

@@ -134,7 +134,7 @@ class EncoderRCNN(nn.Module):
         self.dropout = dropout
 
         self.embedding = nn.Embedding(embedding_size, 5)
-        self.cnn = CNN(input_size=25)
+        self.cnn = CNN(input_size=45)
         self.gru = nn.GRU(500, hidden_size, n_layers, dropout=self.dropout, bidirectional=True)
 
     def forward(self, input_seqs, input_pssms, input_lengths, hidden=None):
