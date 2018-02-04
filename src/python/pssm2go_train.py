@@ -261,7 +261,7 @@ def indexes_from_sequence(lang, seq, eos=1):
 
 # Pad a with zeros
 def pad_pssm(seq, max_length):
-    seq = [(seq[i] if i < len(seq) else ([0.] * 20)) for i in range(max_length)]
+    seq = [(seq[i] if i < len(seq) else ([0.] * 40)) for i in range(max_length)]
     return seq
 
 
