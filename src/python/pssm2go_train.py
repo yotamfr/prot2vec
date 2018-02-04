@@ -226,9 +226,14 @@ def trim_records(records):
         if verbose:
             sys.stdout.write("\r{0:.0f}%".format(100.0 * i / n))
 
-        _, _, _, output_annots = record
+            input_seq, _, _, output_annots = record
         keep_input = True
         keep_output = True
+
+        for word in input_seq:
+            if word not in input_lang.word2index:
+                keep_input = False
+                break
 
         for word in output_annots:
             if word not in output_lang.word2index:
@@ -280,7 +285,6 @@ def get_batch(batch_size, ix=None):
         prior_var = Variable(torch.FloatTensor(blast_prior))
     else:
         prior_var = None
-
 
     # For input and target sequences, get array of lengths and pad with 0s to max length
     input_lengths = [len(s) for s in input_seqs]
@@ -450,9 +454,6 @@ def evaluate(encoder, decoder, input_words, input_pssm, prior=None, max_length=M
     # Set to not-training mode to disable dropout
     encoder.train(False)
     decoder.train(False)
-
-    print(input_seqs.size())
-    print(input_pssms.size())
 
     # Run through encoder
     encoder_outputs, encoder_hidden = encoder(input_seqs, input_pssms, input_lengths, None)

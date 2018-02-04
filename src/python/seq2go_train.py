@@ -276,7 +276,7 @@ def test_models():
 
     # Prepare decoder input and outputs
     decoder_input = Variable(torch.LongTensor([SOS_token] * small_batch_size))
-    decoder_hidden = encoder_hidden[:decoder_test.n_layers] # Use last (forward) hidden state from encoder
+    decoder_hidden = encoder_hidden[:decoder_test.n_layers]  # Use last (forward) hidden state from encoder
     all_decoder_outputs = Variable(torch.zeros(max_target_length, small_batch_size, decoder_test.output_size))
 
     if USE_CUDA:
