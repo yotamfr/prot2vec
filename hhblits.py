@@ -118,8 +118,8 @@ def _set_unique_ids(input_file, output_file):
 def _run_hhblits_batched(sequences):
 
     is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-               # if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
+               if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
@@ -206,19 +206,21 @@ def _run_hhblits_parallel(sequences):
     pwd = os.getcwd()
     os.chdir(out_dir)
     is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-               # if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
+               if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
 
     n = len(records)
     pbar = tqdm(range(n), desc="sequences processed")
-    print(n)
-
     e = ThreadPoolExecutor(num_cpu)
 
-    for (seqid, seq, pssm, _) in e.map(_hhblits, records):
+    for (seq, pssm, aln) in e.map(_hhblits, records):
         db.pssm.update_one({
-            "_id": seqid}, {
-            '$set': {"pssm": pssm, "seq": seq}
+            "_id": seq.id}, {
+            '$set': {"pssm": pssm,
+                     "alignment": aln,
+                     "seq": str(seq.seq),
+                     "length": len(seq.seq),
+                     "updated_at": datetime.utcnow()}
         }, upsert=True)
 
     if cleanup: os.system("rm ./*")
@@ -232,29 +234,22 @@ def _hhblits(seq_record):
 
     seqid, seq = seq_record.id, str(seq_record.seq)
     database = "../dbs/uniprot20_2016_02/uniprot20_2016_02"
+    SeqIO.write([seq_record], open("%s.seq" % seqid, 'w+'), "fasta")
 
-    cline = "%s/bin/hhblits -i 'stdin' -d %s -n 2 -oa3m %s.a3m"\
-            % (prefix_hhsuite, database, seqid)
-    child = subprocess.Popen(cline,
-                             stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE,
-                             universal_newlines=True,
-                             shell=(sys.platform != "win32"))
-    _, stdout = child.communicate(input=">%s\n%s" % (seqid, seq))
-    assert child.returncode == 0
-
-    if output_fasta:
-        cline = "%s/scripts/reformat.pl -r a3m fas %s.a3m %s.fas" % (prefix_hhsuite, seqid, seqid)
-        assert os.WEXITSTATUS(os.system(cline)) == 0
-
-    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi" % (prefix_hhsuite, seqid, seqid)
+    cline = "%s/bin/hhblits -i %s.seq -d %s -n 2 -oa3m %s.a3m 1>/dev/null 2>&1" % (prefix_hhsuite, seqid, database, seqid)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
-    _set_unique_ids("%s.psi" % seq.id, "%s.msa" % seq.id)
+    if output_fasta:
+        cline = "%s/scripts/reformat.pl -r a3m fas %s.a3m %s.fas 1>/dev/null 2>&1" % (prefix_hhsuite, seqid, seqid)
+        assert os.WEXITSTATUS(os.system(cline)) == 0
+
+    cline = "%s/scripts/reformat.pl -r a3m psi %s.a3m %s.psi 1>/dev/null 2>&1" % (prefix_hhsuite, seqid, seqid)
+    assert os.WEXITSTATUS(os.system(cline)) == 0
+
+    _set_unique_ids("%s.psi" % seqid, "%s.msa" % seqid)
 
     aln = []
-    with open("%s.psi" % seq.id, 'rt') as f:
+    with open("%s.psi" % seqid, 'rt') as f:
         for line in f.readlines():
             r = line.strip().split()
             if len(r) < 2:
@@ -262,56 +257,16 @@ def _hhblits(seq_record):
             aln.append(r)
 
     cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>/dev/null 2>&1" \
-            % (prefix_blast, seq.id, seq.id, seq.id)
+            % (prefix_blast, seqid, seqid, seqid)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
     # aln = list(AlignIO.parse(open("%s.fas" % seq.id, 'r'), "fasta"))
     # pssm = SummaryInfo(aln[0]).pos_specific_score_matrix(chars_to_ignore=IGNORE)
-    aa, pssm = read_pssm("%s.pssm" % seq.id)
+    aa, pssm = read_pssm("%s.pssm" % seqid)
 
     if cleanup: os.remove("%s.*" % seqid)
 
-    return seqid, seq, pssm, aln
-
-
-# def _run_hhblits(sequences):
-#     seq_records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()
-#                    if not os.path.exists("%s/%s.out" % (out_dir, id))]
-#
-#     fasta = 'SEQ.fasta'
-#     SeqIO.write(seq_records, open(os.path.join(out_dir, fasta), 'w+'), "fasta")
-#     pwd = os.getcwd()
-#
-#     os.chdir(out_dir)
-#     cline = "%s/scripts/splitfasta.pl %s" % (prefix_hhsuite, fasta)
-#     child = subprocess.Popen(cline,
-#                              stdout=subprocess.PIPE,
-#                              stderr=subprocess.PIPE,
-#                              universal_newlines=True,
-#                              shell=(sys.platform != "win32"))
-#
-#     handle, _ = child.communicate()
-#     assert child.returncode == 0
-#     os.chdir(pwd)
-#
-#     pbar = tqdm(range(len(seq_records)), desc="sequences processed")
-#     for seq in seq_records:
-#         os.chdir(out_dir)
-#         cline = "%s/bin/hhblits -i %s.seq -d ../dbs/%s/%s -opsi %s.out -n 2"\
-#                 % (prefix_hhsuite, seq.id, uniprot20name, uniprot20name, seq.id)
-#         child = subprocess.Popen(cline,
-#                                  stdout=subprocess.PIPE,
-#                                  stderr=subprocess.PIPE,
-#                                  universal_newlines=True,
-#                                  shell=(sys.platform != "win32"))
-#
-#         handle, _ = child.communicate()
-#         assert child.returncode == 0
-#         os.chdir(pwd)
-#
-#         pbar.update(1)
-#
-#     pbar.close()
+    return seq_record, pssm, aln
 
 
 # MUST BE RUN AFTER HHBLITS FINISHED
