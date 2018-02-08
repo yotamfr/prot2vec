@@ -321,7 +321,7 @@ def add_arguments(parser):
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
     parser.add_argument('--keep_files', action='store_true', default=False,
                         help="Whether to keep intermediate files.")
-    parser.add_argument('--batched', action='store_true', default=False,
+    parser.add_argument('--parallel', action='store_true', default=False,
                         help="Specify whether to use batch computing.")
 
 
@@ -353,7 +353,8 @@ if __name__ == "__main__":
     db.pssm.create_index("updated_at")
 
     seqs = _get_annotated_uniprot(db, lim)
-    if args.batched:
-        _run_hhblits_batched(seqs)
-    else:
+
+    if args.parallel:
         _run_hhblits_parallel(seqs)
+    else:
+        _run_hhblits_batched(seqs)
