@@ -128,6 +128,8 @@ def _run_hhblits_batched(sequences):
         while len(batch) < batch_size:
             if len(records) > 0:
                 seq = records.pop()
+                pbar.update(1)
+                i += 1
             else:
                 break
             if db.pssm.find_one({"_id": seq.id, "updated_at": is_new, "pssm": {"$exists": True}}):
@@ -139,7 +141,6 @@ def _run_hhblits_batched(sequences):
             }, upsert=True)
 
             batch.append(seq)
-
 
         pwd = os.getcwd()
         os.chdir(out_dir)
@@ -195,8 +196,6 @@ def _run_hhblits_batched(sequences):
         if cleanup: os.system("rm ./*")
 
         os.chdir(pwd)
-
-        pbar.update(batch_size)
 
     pbar.close()
 
