@@ -112,6 +112,15 @@ class Ontology(object):
         self._graph = G = get_ontology_graph(ns)
         classes = list(reversed(list(nx.topological_sort(G))))
 
+        self.root = root = classes[0]
+
+        self._levels = levels = dict()
+        for node, lvl in nx.shortest_path_length(G, target=root).items():
+            if lvl in levels:
+                levels[lvl].append(node)
+            else:
+                levels[lvl] = [node]
+
         self._mlb = MultiLabelBinarizer().fit([classes])
 
         key_val = [(go, i) for i, go in enumerate(classes)]
@@ -120,7 +129,6 @@ class Ontology(object):
 
         emb_fname = os.path.join('%s/%s-poincare-dim%d-epochs%d.emb'
                                  % (DATA_ROOT, aspect, dim, num_epochs)) \
-
 
         if os.path.exists(emb_fname):
             self._kv = PoincareKeyedVectors.load(emb_fname)
@@ -146,6 +154,8 @@ class Ontology(object):
             anc = map(lambda go: self.sort(nx.descendants(G, go))[1:] + [go], lbl)
         return reduce(lambda x, y: x + y, anc, [])
 
+    def get_level(self, lvl):
+        return self._levels[lvl]
 
     def binarize(self, go_labels):
         return self._mlb.transform(go_labels)

@@ -213,7 +213,7 @@ def _run_hhblits_parallel(sequences):
     pbar = tqdm(range(n), desc="sequences processed")
     e = ThreadPoolExecutor(num_cpu)
 
-    for (seq, pssm, aln) in e.map(_hhblits, records):
+    for (seq, pssm, aln) in e.map(_hhblits, [seq for seq in records if os.path.exists("%s.a3m" % seq.id)]):
         db.pssm.update_one({
             "_id": seq.id}, {
             '$set': {"pssm": pssm,
