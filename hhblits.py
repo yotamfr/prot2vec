@@ -118,8 +118,7 @@ def _set_unique_ids(input_file, output_file):
 def _run_hhblits_batched(sequences):
 
     is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
-               if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
 
     i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
@@ -131,9 +130,16 @@ def _run_hhblits_batched(sequences):
                 seq = records.pop()
             else:
                 break
-            if db.pssm.find_one({"_id": seq.id, "updated_at": is_new}):
+            if db.pssm.find_one({"_id": seq.id, "updated_at": is_new, "pssm": {"$exists": True}}):
                 continue
+
+            db.pssm.update_one({
+                "_id": seq.id}, {
+                '$set': {"updated_at": datetime.utcnow()}
+            }, upsert=True)
+
             batch.append(seq)
+
 
         pwd = os.getcwd()
         os.chdir(out_dir)
@@ -206,8 +212,7 @@ def _run_hhblits_parallel(sequences):
     pwd = os.getcwd()
     os.chdir(out_dir)
     is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences
-               if not db.pssm.find_one({"_id": seqid, "updated_at": is_new})]
+    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
 
     n = len(records)
     pbar = tqdm(range(n), desc="sequences processed")
@@ -321,8 +326,6 @@ def add_arguments(parser):
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
     parser.add_argument('--keep_files', action='store_true', default=False,
                         help="Whether to keep intermediate files.")
-    parser.add_argument('--parallel', action='store_true', default=False,
-                        help="Specify whether to use batch computing.")
 
 
 if __name__ == "__main__":
@@ -354,7 +357,4 @@ if __name__ == "__main__":
 
     seqs = _get_annotated_uniprot(db, lim)
 
-    if args.parallel:
-        _run_hhblits_parallel(seqs)
-    else:
-        _run_hhblits_batched(seqs)
+    _run_hhblits_batched(seqs)
