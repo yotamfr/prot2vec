@@ -17,6 +17,9 @@ from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
 from keras.layers import Concatenate, Flatten
 
+import argparse
+
+
 
 def _get_labeled_data(db, query, limit, pssm=True):
 
@@ -148,11 +151,20 @@ def get_xy(gen, normalize=False):
     return xByShapes, yByShapes
 
 
+def add_arguments(parser):
+    parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                        help="Supply the URL of MongoDB")
+
+
 if __name__=="__main__":
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args()
 
     ASPECT = 'F'  # Molecular Function
 
-    client = MongoClient("mongodb://127.0.0.1:27017")
+    client = MongoClient(args.mongo_url)
 
     db = client['prot2vec']
 
