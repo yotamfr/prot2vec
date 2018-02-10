@@ -1,4 +1,6 @@
 import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
 from src.python.consts import *
 
@@ -156,7 +158,7 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB")
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     add_arguments(parser)
