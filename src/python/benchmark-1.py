@@ -110,9 +110,10 @@ def Motifs(inpt):
     initial = Conv2D(192, (1, 20), padding='same', activation='relu')(inpt)
     motif03 = Conv2D(64, (3, 1), padding='same', activation='relu')(initial)
     motif09 = Conv2D(64, (9, 1), padding='same', activation='relu')(initial)
+    motif18 = Conv2D(64, (18, 1), padding='same', activation='relu')(initial)
     motif36 = Conv2D(64, (36, 1), padding='same', activation='relu')(initial)
 
-    return Concatenate(axis=1)([motif03, motif09, motif36])
+    return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
 
 
 def Features(inpt):
