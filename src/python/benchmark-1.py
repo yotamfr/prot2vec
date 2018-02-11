@@ -85,7 +85,6 @@ def load_training_and_validation(db, limit=None):
 
 
 def data_generator(seq2pssm, seq2go, classes):
-    n = len(classes)
     s_cls = set(classes)
     for i, (k, v) in enumerate(seq2go.items()):
 
@@ -100,34 +99,29 @@ def data_generator(seq2pssm, seq2go, classes):
             y[classes.index(go)] = 1
 
         seq, pssm, msa = seq2pssm[k]
-        x1 = [[AA.aa2onehot[aa], [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
+        x1 = [[AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
         x2 = msa
 
         yield k, x1, x2, y
 
 
 def Motifs(inpt):
-    initial = Conv2D(192, (1, 20), padding='same', activation='relu')(inpt)
-    motif03 = Conv2D(64, (3, 1), padding='same', activation='relu')(initial)
-    motif09 = Conv2D(64, (9, 1), padding='same', activation='relu')(initial)
-    motif18 = Conv2D(64, (18, 1), padding='same', activation='relu')(initial)
-    motif36 = Conv2D(64, (36, 1), padding='same', activation='relu')(initial)
+    initial = Conv2D(2048, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
+    motif03 = Conv2D(768, (3, 1), data_format='channels_first', padding='same', activation='relu')(initial)
+    motif09 = Conv2D(256, (9, 1), data_format='channels_first', padding='same', activation='relu')(initial)
+    motif18 = Conv2D(128, (18, 1), data_format='channels_first', padding='same', activation='relu')(initial)
+    motif36 = Conv2D(64, (36, 1), data_format='channels_first', padding='same', activation='relu')(initial)
 
     return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
 
 
-def Features(inpt):
-    out = inpt
-    out = Conv2D(64, (3, 1), activation='relu', padding='same')(out)
-    out = Conv2D(64, (3, 1), activation='relu', padding='same')(out)
-    out = MaxPooling2D((2, 1))(out)
-    out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
-    out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
-    out = MaxPooling2D((2, 1))(out)
+def Features(motifs):
+    feats = motifs
+    feats = Conv2D(256, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = MaxPooling2D((2, 1))(feats)
+    feats = Conv2D(512, (3, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
-    out = GlobalMaxPooling2D(data_format='channels_first')(out)
-    # return Flatten()(out)
-    return out
+    return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
 
 def Classifier(inpt, hidden_size, classes):
@@ -141,8 +135,8 @@ def Classifier(inpt, hidden_size, classes):
 
 
 def ModelCNN(classes):
-    inp = Input(shape=(2, None, 20))
-    out = Classifier(Features(Motifs(inp)), 64, classes)
+    inp = Input(shape=(1, None, 40))
+    out = Classifier(Features(Motifs(inp)), 128, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
@@ -153,7 +147,7 @@ def ModelCNN(classes):
 def get_xy(gen, normalize=False):
     xByShapes, yByShapes = dict(), dict()
     for _, x, _, y in gen:
-        x, y = np.array(x).reshape(2, len(x), 20), zeroone2oneminusone(y)
+        x, y = np.array(x).reshape(1, len(x), 40), zeroone2oneminusone(y)
         if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
         if x.shape in xByShapes:
             xByShapes[x.shape].append(x)
@@ -252,6 +246,7 @@ if __name__ == "__main__":
     tst_X, tst_Y = get_xy(data_generator(tst_seq2pssm, tst_seq2go, classes))
 
     model = ModelCNN(classes)
+    print(model.summary())
 
     model_path = 'checkpoints/1st-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
 
@@ -263,9 +258,8 @@ if __name__ == "__main__":
     #
     # ]
 
-    pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=1, plot=0)
-
-    print("\nBLAST Validation F_max: %.3f\n" % max(perf_blast["blast"][2]))
+    # pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=1, plot=0)
+    # print("\nBLAST Validation F_max: %.3f\n" % max(perf_blast["blast"][2]))
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
