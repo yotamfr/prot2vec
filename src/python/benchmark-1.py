@@ -117,9 +117,9 @@ def Motifs(inpt):
 
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(256, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(512, (3, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(512, (7, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = MaxPooling2D((2, 1))(feats)
+    feats = Conv2D(1024, (8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -136,7 +136,7 @@ def Classifier(inpt, hidden_size, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
-    out = Classifier(Features(Motifs(inp)), 128, classes)
+    out = Classifier(Features(Motifs(inp)), 192, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
