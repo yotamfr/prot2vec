@@ -121,19 +121,19 @@ def step_decay(epoch):
 
 def Motifs(inpt):
     motif01 = Conv2D(2048, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
-    motif03 = Conv2D(768, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    motif09 = Conv2D(256, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    motif18 = Conv2D(128, (18, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    motif36 = Conv2D(64, (36, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif03 = Conv2D(192, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif09 = Conv2D(64, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif18 = Conv2D(32, (18, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif36 = Conv2D(16, (36, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
 
     return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
 
 
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(512, (7, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(256, (7, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     # feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(1024, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
