@@ -39,6 +39,9 @@ import math
 import argparse
 
 
+LR = 0.032
+
+
 def _get_labeled_data(db, query, limit, pssm=True):
 
     c = limit if limit else db.goa_uniprot.count(query)
@@ -108,9 +111,9 @@ def data_generator(seq2pssm, seq2go, classes):
 
 
 def step_decay(epoch):
-   initial_lrate = 0.1
+   initial_lrate = LR
    drop = 0.5
-   epochs_drop = 10.0
+   epochs_drop = 1.0
    lrate = initial_lrate * math.pow(drop,
            math.floor((1+epoch)/epochs_drop))
    return lrate
@@ -151,7 +154,7 @@ def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
     out = Classifier(Features(Motifs(inp)), 192, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
 
     return model
