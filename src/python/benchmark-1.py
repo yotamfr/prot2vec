@@ -262,11 +262,9 @@ if __name__ == "__main__":
     #
     # ]
 
-    pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=0, plot=0)
+    pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=1, plot=0)
 
-    print("$$$$$$$$$$$$$$$$$$$$$$$$$44")
-    print(max(perf_blast["blast"][2]))
-    print("$$$$$$$$$$$$$$$$$$$$$$$$$44")
+    print("\nBLAST Validation F_max: %.3f\n" % max(perf_blast["blast"][2]))
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
