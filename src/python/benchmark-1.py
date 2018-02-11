@@ -25,14 +25,16 @@ from keras.models import Model
 from keras.layers import Input, Dense, Embedding
 from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
-from keras.layers import Concatenate, Flatten
-from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback
+from keras.layers import Concatenate, Flatten, Dropout
+from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 
 from keras.losses import hinge
 
 from keras import backend as K
 
 K.set_session(sess)
+
+import math
 
 import argparse
 
@@ -105,6 +107,15 @@ def data_generator(seq2pssm, seq2go, classes):
         yield k, x1, x2, y
 
 
+def step_decay(epoch):
+   initial_lrate = 0.1
+   drop = 0.5
+   epochs_drop = 10.0
+   lrate = initial_lrate * math.pow(drop,
+           math.floor((1+epoch)/epochs_drop))
+   return lrate
+
+
 def Motifs(inpt):
     initial = Conv2D(2048, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
     motif03 = Conv2D(768, (3, 1), data_format='channels_first', padding='same', activation='relu')(initial)
@@ -117,9 +128,9 @@ def Motifs(inpt):
 
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(512, (7, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(512, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     # feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(1024, (8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(1024, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -128,7 +139,9 @@ def Classifier(inpt, hidden_size, classes):
     x = inpt
     # We stack a deep densely-connected network on top
     x = Dense(hidden_size * 2, activation='relu')(x)
+    # x = Dropout(0.1)(x)
     x = Dense(hidden_size, activation='relu')(x)
+    # x = Dropout(0.1)(x)
 
     # And finally we add the main logistic regression layer
     return Dense(len(classes), activation='tanh')(x)
@@ -138,7 +151,7 @@ def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
     out = Classifier(Features(Motifs(inp)), 192, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = optimizers.SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
 
     return model
@@ -181,15 +194,16 @@ class LossHistory(Callback):
         self.losses.append(logs.get('loss'))
 
 
-def train(model, X, Y, epoch, history=LossHistory()):
+def train(model, X, Y, epoch, num_epochs, history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
     m = sum(map(lambda k: len(Y[k]), Y.keys()))
     pbar = tqdm(total=m)
     for x_shp, y_shp in zip(X.keys(), Y.keys()):
         model.fit(x=trn_X[x_shp], y=trn_Y[y_shp],
-                  batch_size=8, epochs=1,
+                  batch_size=8, epochs=num_epochs,
                   verbose=0,
                   validation_data=None,
-                  callbacks=[history])
+                  initial_epoch=epoch,
+                  callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y[y_shp]))
 
@@ -263,7 +277,7 @@ if __name__ == "__main__":
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
-        train(model, trn_X, trn_Y, epoch)
+        train(model, trn_X, trn_Y, epoch, args.num_epochs)
         _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
         # tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
