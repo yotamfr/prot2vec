@@ -104,7 +104,7 @@ def data_generator(seq2pssm, seq2go, classes):
             y[classes.index(go)] = 1
 
         seq, pssm, msa = seq2pssm[k]
-        x1 = [[AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
+        x1 = [[AA.aa2onehot[aa], [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
         x2 = msa
 
         yield k, x1, x2, y
@@ -120,7 +120,7 @@ def step_decay(epoch):
 
 
 def Motifs(inpt):
-    initial = Conv2D(1024, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
+    initial = Conv2D(1024, (2, 20), data_format='channels_first', padding='valid', activation='relu')(inpt)
     motif03 = Conv2D(384, (3, 1), data_format='channels_first', padding='same', activation='relu')(initial)
     motif09 = Conv2D(128, (9, 1), data_format='channels_first', padding='same', activation='relu')(initial)
     motif18 = Conv2D(64, (18, 1), data_format='channels_first', padding='same', activation='relu')(initial)
@@ -131,9 +131,9 @@ def Motifs(inpt):
 
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(256, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(256, (3, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     # feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(512, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(512, (3, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -151,10 +151,11 @@ def Classifier(inpt, hidden_size, classes):
 
 
 def ModelCNN(classes):
-    inp = Input(shape=(1, None, 40))
+    inp = Input(shape=(2, None, 20))
     out = Classifier(Features(Motifs(inp)), 192, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
+    # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
 
     return model
@@ -163,7 +164,7 @@ def ModelCNN(classes):
 def get_xy(gen, normalize=False):
     xByShapes, yByShapes = dict(), dict()
     for _, x, _, y in gen:
-        x, y = np.array(x).reshape(1, len(x), 40), zeroone2oneminusone(y)
+        x, y = np.array(x).reshape(2, len(x), 20), zeroone2oneminusone(y)
         if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
         if x.shape in xByShapes:
             xByShapes[x.shape].append(x)
