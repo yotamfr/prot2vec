@@ -58,6 +58,7 @@ def _get_labeled_data(db, query, limit, pssm=True):
 
     seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
     seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seq}
+    seqid2seq = {k: v for k, v in seqid2seq.items() if k in seqid2goid}
 
     return seqid2seq, seqid2goid
 
