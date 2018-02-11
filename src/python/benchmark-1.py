@@ -268,7 +268,6 @@ if __name__ == "__main__":
     print(max(perf_blast["blast"][2]))
     print("$$$$$$$$$$$$$$$$$$$$$$$$$44")
 
-
     sess = tf.Session()
     for epoch in range(args.num_epochs):
         train(model, trn_X, trn_Y, epoch)
