@@ -117,7 +117,7 @@ def _set_unique_ids(input_file, output_file):
 
 def _run_hhblits_batched(sequences):
 
-    is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
+    is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
 
     i, n = 0, len(records)
@@ -210,7 +210,7 @@ def _run_hhblits_parallel(sequences):
 
     pwd = os.getcwd()
     os.chdir(out_dir)
-    is_new = {"$gte": datetime.utcnow() - timedelta(days=7)}
+    is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
 
     n = len(records)
@@ -316,7 +316,7 @@ def add_arguments(parser):
     parser.add_argument("--max_filter", type=int, default=20000,
                         help="How many sequences to include in the MSA for PSSM computation.")
     parser.add_argument("--num_cpu", type=int, default=2,
-                        help="How many cpus for computing PSSM (when running in parallel mode).")
+                        help="How many cpus for computing PSSM (when running in batched mode).")
     parser.add_argument("--batch_size", type=int, default=2,
                         help="How many sequences in batch (when running in parallel mode).")
     parser.add_argument("--coverage", type=int, default=0,
