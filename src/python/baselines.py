@@ -311,7 +311,7 @@ def get_P_and_T(tau, predictions, targets, classes=None):
                                           map(lambda t: bin2dict(t, classes), targets)):
 
             seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
-            seq_targets = [go for go, prob in seq_preds.items() if prob >= tau]
+            seq_targets = [go for go, prob in seq_targets.items() if prob >= tau]
 
             if len(seq_annots) == 0:
                 continue
