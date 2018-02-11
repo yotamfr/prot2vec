@@ -311,6 +311,8 @@ def get_P_and_T(tau, predictions, targets, classes=None):
                                           map(lambda t: bin2dict(t, classes), targets)):
 
             seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
+            seq_targets = [go for go, prob in seq_preds.items() if prob >= tau]
+
             if len(seq_annots) == 0:
                 continue
             P.append(set(seq_annots))
@@ -358,8 +360,8 @@ def F_beta(pr, rc, beta=1):
     return (1 + beta ** 2) * ((pr * rc) / (((beta ** 2) * pr) + rc))
 
 
-def F_max(P, T, classes=None, thresholds=THRESHOLDS):
-    return np.max([F_beta(precision(th, P, T, classes), recall(th, P, T, classes)) for th in thresholds])
+def F_max(prd, tgt, classes=None, thresholds=THRESHOLDS):
+    return np.max([F_beta(precision(th, prd, tgt, classes), recall(th, prd, tgt, classes)) for th in thresholds])
 
 
 def predict(reference_seqs, reference_annots, target_seqs, method, load_file=True):

@@ -185,6 +185,7 @@ def train(model, X, Y):
                   callbacks=[history])
         pbar.set_description("Training Loss:%.3f" % np.mean(history.losses))
         pbar.update(len(Y[y_shp]))
+
     pbar.close()
 
 
