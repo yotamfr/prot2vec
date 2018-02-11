@@ -304,22 +304,35 @@ def bin2dict(distribution, classes):
     return {classes[i]: prob for i, prob in enumerate(distribution)}
 
 
-def precision(tau, predictions, targets, classes=None):
-
+def get_P_and_T(tau, predictions, targets, classes=None):
     P, T = [], []
-    for seqid, annotations in predictions.items():
-        if classes:
-            seq_annots = bin2dict(annotations, classes)
-            seq_targets = bin2dict(targets[seqid], classes)
-        else:
-            seq_annots, seq_targets = annotations, targets[seqid]
-        preds = [go for go, prob in seq_annots.items() if prob >= tau]
-        if len(preds) == 0:
-            continue
-        P.append(set(preds))
-        T.append(set(seq_targets))
+    if classes:
+        for seq_preds, seq_targets in zip(map(lambda p: bin2dict(p, classes), predictions),
+                                          map(lambda t: bin2dict(t, classes), targets)):
+
+            seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
+            if len(seq_annots) == 0:
+                continue
+            P.append(set(seq_annots))
+            T.append(set(seq_targets))
+    else:
+
+        for seqid, seq_preds in predictions.items():
+            seq_targets = targets[seqid]
+            seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
+            if len(seq_annots) == 0:
+                continue
+            P.append(set(seq_annots))
+            T.append(set(seq_targets))
 
     assert len(P) == len(T)
+
+    return P, T
+
+
+def precision(tau, predictions, targets, classes=None):
+
+    P, T = get_P_and_T(tau, predictions, targets, classes)
 
     if len(P) == 0: return 1.0
 
@@ -329,19 +342,7 @@ def precision(tau, predictions, targets, classes=None):
 
 def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
 
-    P, T = [], []
-    for seqid, annotations in predictions.items():
-        if classes:
-            annotations = bin2dict(annotations, classes)
-            seq_targets = bin2dict(targets[seqid], classes)
-        else:
-            seq_annots, seq_targets = annotations, targets[seqid]
-        preds = [go for go, prob in annotations.items() if prob >= tau]
-        if not partial_evaluation and len(annotations) == 0: continue
-        P.append(set(preds))
-        T.append(set(seq_targets))
-
-    assert len(P) == len(T)
+    P, T = get_P_and_T(tau, predictions, targets, classes)
 
     if len(P) == 0: return 0.0
 
