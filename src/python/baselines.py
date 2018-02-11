@@ -344,6 +344,8 @@ def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
 
     P, T = get_P_and_T(tau, predictions, targets, classes)
 
+    # TODO: deal with partial_evaluation
+
     if len(P) == 0: return 0.0
 
     total = sum([len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)])
@@ -356,8 +358,8 @@ def F_beta(pr, rc, beta=1):
     return (1 + beta ** 2) * ((pr * rc) / (((beta ** 2) * pr) + rc))
 
 
-def F_max(P, T, thresholds=THRESHOLDS):
-    return np.max([F_beta(precision(th, P, T), recall(th, P, T)) for th in thresholds])
+def F_max(P, T, classes=None, thresholds=THRESHOLDS):
+    return np.max([F_beta(precision(th, P, T, classes), recall(th, P, T, classes)) for th in thresholds])
 
 
 def predict(reference_seqs, reference_annots, target_seqs, method, load_file=True):

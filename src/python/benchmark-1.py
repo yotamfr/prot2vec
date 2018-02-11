@@ -207,7 +207,7 @@ def evaluate(model, X, Y, classes):
     loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
     y_pred = oneminusone2zeroone(y_pred)
     y_true = oneminusone2zeroone(y_true)
-    f_max = F_max(y_pred, y_true)
+    f_max = F_max(y_pred, y_true, classes)
 
     return y_true, y_pred, loss, f_max
 
