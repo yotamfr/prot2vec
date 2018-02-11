@@ -173,8 +173,7 @@ def add_arguments(parser):
                         help="How many epochs to train the model?.")
 
 
-def train(model, X, Y):
-    history = LossHistory()
+def train(model, X, Y, history):
     m = sum(map(lambda k: len(Y[k]), Y.keys()))
     pbar = tqdm(total=m)
     for x_shp, y_shp in zip(X.keys(), Y.keys()):
@@ -214,8 +213,12 @@ def evaluate(model, X, Y, classes):
 
 
 class LossHistory(Callback):
-    def on_train_begin(self, logs={}):
+
+    def __init__(self):
         self.losses = []
+
+    # def on_train_begin(self, logs={}):
+    #     self.losses = []
 
     def on_batch_end(self, batch, logs={}):
         self.losses.append(logs.get('loss'))
@@ -246,8 +249,6 @@ if __name__ == "__main__":
 
     model = ModelCNN(classes)
 
-
-
     model_path = 'checkpoints/1st-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
 
     # callbacks = [
@@ -260,7 +261,7 @@ if __name__ == "__main__":
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
-        train(model, trn_X, trn_Y)
+        train(model, trn_X, trn_Y, LossHistory())
         _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
         print("[Epoch %d] (Validation Loss: %.3f, F_max: %.3f)" % (epoch + 1, loss, f_max))
         # tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
