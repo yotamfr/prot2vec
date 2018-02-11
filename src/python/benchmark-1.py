@@ -8,8 +8,16 @@ from src.python.preprocess import *
 
 from src.python.geneontology import *
 
+from src.python.baselines import *
+
+from sklearn.metrics import hinge_loss
+
 from pymongo import MongoClient
 
+from tqdm import tqdm
+
+import tensorflow as tf
+sess = tf.Session()
 
 ### Keras
 from keras import optimizers
@@ -18,9 +26,15 @@ from keras.layers import Input, Dense
 from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
 from keras.layers import Concatenate, Flatten
+from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback
+
+from keras.losses import hinge
+
+from keras import backend as K
+
+K.set_session(sess)
 
 import argparse
-
 
 
 def _get_labeled_data(db, query, limit, pssm=True):
@@ -31,7 +45,7 @@ def _get_labeled_data(db, query, limit, pssm=True):
 
     seqid2goid, _ = GoAnnotationCollectionLoader(s, c, ASPECT).load()
 
-    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}, "pssm": {"$exists": True}}
 
     if pssm:
         num_seq = db.pssm.count(query)
@@ -137,8 +151,7 @@ def ModelCNN(classes):
 def get_xy(gen, normalize=False):
     xByShapes, yByShapes = dict(), dict()
     for _, x, _, y in gen:
-        x = np.array(x).reshape(2, len(x), 20)
-        y = np.add(np.multiply(np.array(y), 2), -1)
+        x, y = np.array(x).reshape(2, len(x), 20), zeroone2oneminusone(y)
         if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
         if x.shape in xByShapes:
             xByShapes[x.shape].append(x)
@@ -156,6 +169,55 @@ def get_xy(gen, normalize=False):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
+    parser.add_argument("--num_epochs", type=int, default=20,
+                        help="How many epochs to train the model?.")
+
+
+def train(model, X, Y):
+    history = LossHistory()
+    m = sum(map(lambda k: len(Y[k]), Y.keys()))
+    pbar = tqdm(total=m)
+    for x_shp, y_shp in zip(X.keys(), Y.keys()):
+        model.fit(x=trn_X[x_shp], y=trn_Y[y_shp],
+                  batch_size=8, epochs=1,
+                  verbose=0,
+                  validation_data=None,
+                  callbacks=[history])
+        pbar.set_description("Training Loss:%.3f" % np.mean(history.losses))
+        pbar.update(len(Y[y_shp]))
+    pbar.close()
+
+
+def zeroone2oneminusone(vec):
+    return np.add(np.multiply(np.array(vec), 2), -1)
+
+
+def oneminusone2zeroone(vec):
+    return np.divide(np.add(np.array(vec), 1), 2)
+
+
+def evaluate(model, X, Y, classes):
+    i, m, n = 0, sum(map(lambda k: len(Y[k]), Y.keys())), len(classes)
+    y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
+    for x_shp, y_shp in zip(X.keys(), Y.keys()):
+        k = len(Y[y_shp])
+        y_hat, y = model.predict(X[x_shp]), Y[y_shp]
+        y_pred[i:i+k, ], y_true[i:i+k, ] = y_hat, y
+        i += k
+    loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
+    y_pred = oneminusone2zeroone(y_pred)
+    y_true = oneminusone2zeroone(y_true)
+    f_max = F_max(y_pred, y_true)
+
+    return y_true, y_pred, loss, f_max
+
+
+class LossHistory(Callback):
+    def on_train_begin(self, logs={}):
+        self.losses = []
+
+    def on_batch_end(self, batch, logs={}):
+        self.losses.append(logs.get('loss'))
 
 
 if __name__ == "__main__":
@@ -183,9 +245,29 @@ if __name__ == "__main__":
 
     model = ModelCNN(classes)
 
-    tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
-    for trnXshape, trnYshape in zip(trn_X.keys(), trn_Y.keys()):
-        print(trn_X[trnXshape].shape, trn_Y[trnYshape].shape)
-        tstXshape, tstYshape = tst_shapes[np.random.choice(len(tst_shapes))]
-        model.fit(x=trn_X[trnXshape], y=trn_Y[trnYshape], batch_size=8, epochs=1, verbose=1,
-                  callbacks=None, validation_data=[tst_X[tstXshape], tst_Y[tstYshape]])
+
+
+    model_path = 'checkpoints/1st-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
+
+    # callbacks = [
+    #
+    #     EarlyStopping(monitor='val_loss', patience=3, verbose=0),
+    #
+    #     ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min'),
+    #
+    # ]
+
+    sess = tf.Session()
+    for epoch in range(args.num_epochs):
+        train(model, trn_X, trn_Y)
+        _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
+        print("[Epoch %d] (Validation Loss: %.3f, F_max: %.3f)" % (epoch + 1, loss, f_max))
+        # tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
+        # for trnXshape, trnYshape in zip(trn_X.keys(), trn_Y.keys()):
+        #     print(trn_X[trnXshape].shape, trn_Y[trnYshape].shape)
+        #     tstXshape, tstYshape = tst_shapes[np.random.choice(len(tst_shapes))]
+        #     model.fit(x=trn_X[trnXshape],
+        #               y=trn_Y[trnYshape],
+        #               batch_size=8, epochs=1,
+        #               verbose=0,
+        #               validation_data=[tst_X[tstXshape], tst_Y[tstYshape]])

@@ -54,9 +54,9 @@ conda install -p virtualenv visdom -c conda-forge
 source activate virtualenv
 
 ### use pip to install remaining packages
-#pip install --upgrade tensorflow$GPU_FLAG
+pip install --upgrade tensorflow$GPU_FLAG==1.4
 #pip install tf-nightly$GPU_FLAG
-#pip install keras
+pip install keras
 
 pip  install scikit-learn
 
