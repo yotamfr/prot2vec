@@ -22,7 +22,7 @@ sess = tf.Session()
 ### Keras
 from keras import optimizers
 from keras.models import Model
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, Embedding
 from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
 from keras.layers import Concatenate, Flatten
@@ -170,10 +170,22 @@ def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
     parser.add_argument("--num_epochs", type=int, default=20,
-                        help="How many epochs to train the model?.")
+                        help="How many epochs to train the model?")
 
 
-def train(model, X, Y, history):
+class LossHistory(Callback):
+
+    def __init__(self):
+        self.losses = []
+
+    # def on_train_begin(self, logs={}):
+    #     self.losses = []
+
+    def on_batch_end(self, batch, logs={}):
+        self.losses.append(logs.get('loss'))
+
+
+def train(model, X, Y, epoch, history=LossHistory()):
     m = sum(map(lambda k: len(Y[k]), Y.keys()))
     pbar = tqdm(total=m)
     for x_shp, y_shp in zip(X.keys(), Y.keys()):
@@ -182,7 +194,7 @@ def train(model, X, Y, history):
                   verbose=0,
                   validation_data=None,
                   callbacks=[history])
-        pbar.set_description("Training Loss:%.3f" % np.mean(history.losses))
+        pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y[y_shp]))
 
     pbar.close()
@@ -212,18 +224,6 @@ def evaluate(model, X, Y, classes):
     return y_true, y_pred, loss, f_max
 
 
-class LossHistory(Callback):
-
-    def __init__(self):
-        self.losses = []
-
-    # def on_train_begin(self, logs={}):
-    #     self.losses = []
-
-    def on_batch_end(self, batch, logs={}):
-        self.losses.append(logs.get('loss'))
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -239,8 +239,9 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = \
-        load_training_and_validation(db, limit=None)
+    train_and_validation_data = load_training_and_validation(db, limit=None)
+
+    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = train_and_validation_data
 
     classes = onto.get_level(1)
 
@@ -259,11 +260,13 @@ if __name__ == "__main__":
     #
     # ]
 
+    pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=0, plot=0)
+
     sess = tf.Session()
     for epoch in range(args.num_epochs):
-        train(model, trn_X, trn_Y, LossHistory())
+        train(model, trn_X, trn_Y, epoch)
         _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
-        print("[Epoch %d] (Validation Loss: %.3f, F_max: %.3f)" % (epoch + 1, loss, f_max))
+        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
         # tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
         # for trnXshape, trnYshape in zip(trn_X.keys(), trn_Y.keys()):
         #     print(trn_X[trnXshape].shape, trn_Y[trnYshape].shape)

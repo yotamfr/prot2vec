@@ -364,10 +364,10 @@ def F_max(prd, tgt, classes=None, thresholds=THRESHOLDS):
     return np.max([F_beta(precision(th, prd, tgt, classes), recall(th, prd, tgt, classes)) for th in thresholds])
 
 
-def predict(reference_seqs, reference_annots, target_seqs, method, load_file=True):
+def predict(reference_seqs, reference_annots, target_seqs, method, load_file=1):
     if method == "blast":
         pred_path = os.path.join(tmp_dir, 'pred-blast-%s.npy' % GoAspect(ASPECT))
-        if load_file and os.path.exists(pred_path):
+        if load_file == 1 and os.path.exists(pred_path):
             return np.load(pred_path).item()
         _prepare_blast(reference_seqs)
         predictions = _predict(reference_annots, target_seqs, _blast)
@@ -422,16 +422,19 @@ def plot_precision_recall(perf):
     plt.show()
 
 
-def evaluate_performance(db, methods, asp):
+def evaluate_performance(db, methods, asp='F', train_and_validation_data=None, load_file=1, plot=1):
     init_GO(asp)
-    lim = None
-    seqs_train, annots_train, seqs_valid, annots_valid = \
-        load_training_and_validation(db, lim)
+    if train_and_validation_data:
+        seqs_train, annots_train, seqs_valid, annots_valid = train_and_validation_data
+    else:
+        seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, None)
     perf = {}
     for meth in methods:
-        pred = predict(seqs_train, annots_train, seqs_valid, meth)
+        pred = predict(seqs_train, annots_train, seqs_valid, meth, load_file)
         perf[meth] = performance(pred, annots_valid)
-    plot_precision_recall(perf)
+    if plot == 1:
+        plot_precision_recall(perf)
+    return pred, perf
 
 
 if __name__ == "__main__":
