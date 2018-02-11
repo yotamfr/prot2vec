@@ -57,7 +57,8 @@ def _get_labeled_data(db, query, limit, pssm=True):
         seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
 
     seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
-    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seq.keys()}
+    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seq}
+    seqid2seq = {k: v for k, v in seqid2seq.items() if k in seqid2goid}
 
     return seqid2seq, seqid2goid
 
@@ -142,7 +143,7 @@ def ModelCNN(classes):
     inp = Input(shape=(2, None, 20))
     out = Classifier(Features(Motifs(inp)), 64, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = optimizers.SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='hinge', optimizer=sgd)
 
     return model
@@ -239,9 +240,10 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    train_and_validation_data = load_training_and_validation(db, limit=None)
+    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=None)
 
-    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = train_and_validation_data
+    train_and_validation_data = ({k: v[0] for k, v in trn_seq2pssm.items()}, trn_seq2go,
+                                 {k: v[0] for k, v in tst_seq2pssm.items()}, tst_seq2go)
 
     classes = onto.get_level(1)
 
@@ -261,6 +263,7 @@ if __name__ == "__main__":
     # ]
 
     pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=0, plot=0)
+    print(max(perf_blast[2]))
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):

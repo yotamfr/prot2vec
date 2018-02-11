@@ -197,9 +197,9 @@ def _naive(target, reference):
     return PRIOR
 
 
-def _prepare_blast(sequences):
+def _prepare_blast(sequences, load_file=0):
     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
-    if os.path.exists(blastdb_pth): return
+    if load_file == 1 and os.path.exists(blastdb_pth): return
     records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
@@ -255,6 +255,7 @@ def _blast(target_fasta, reference, topn=None, choose_max_prob=True):
             continue
 
         ident = hsp.ident_num / hsp.hit_span
+
         for go in reference[hsp.hit.id]:
             if go in annotations:
                 annotations[go].append(ident)
