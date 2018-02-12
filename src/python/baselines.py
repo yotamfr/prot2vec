@@ -346,8 +346,8 @@ def precision(tau, predictions, targets, classes=None):
 def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
 
     P, T = get_P_and_T(tau, predictions, targets, classes)
-
-    # TODO: deal with partial_evaluation
+    if partial_evaluation:
+        P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
 
     if len(P) == 0: return 0.0
 
