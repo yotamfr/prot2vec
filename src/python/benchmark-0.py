@@ -104,6 +104,8 @@ def data_generator(seq2pssm, seq2go, classes):
             y[classes.index(go)] = 1
 
         seq, pssm, msa = seq2pssm[k]
+        if not pssm: continue
+
         x1 = [[AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
         x2 = msa
 
