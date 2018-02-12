@@ -246,7 +246,7 @@ def train(model, X, Y, epoch, num_epochs, history=LossHistory(), lrate=LearningR
     pbar = tqdm(total=m)
     for x_shp, y_shp in zip(X.keys(), Y.keys()):
         model.fit(x=X[x_shp], y=Y[y_shp],
-                  batch_size=8, epochs=num_epochs,
+                  batch_size=16, epochs=num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,

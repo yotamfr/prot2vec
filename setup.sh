@@ -58,6 +58,8 @@ pip install --upgrade tensorflow$GPU_FLAG==1.4
 #pip install tf-nightly$GPU_FLAG
 pip install keras
 
+pip install h5py
+
 pip  install scikit-learn
 
 pip install matplotlib
