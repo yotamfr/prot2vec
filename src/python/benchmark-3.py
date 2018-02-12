@@ -166,9 +166,9 @@ def Motifs(inpt):
 
 def Features(inpt):
     out = inpt
-    out = Conv2D(384, (1, 1248), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = Conv2D(256, (1, 1248), data_format='channels_first', activation='relu', padding='valid')(out)
     # out = MaxPooling2D((2, 1))(out)
-    out = Conv2D(192, (7, 1), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = Conv2D(192, (5, 1), data_format='channels_first', activation='relu', padding='valid')(out)
     # out = MaxPooling2D((2, 1))(out)
     # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
     # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
