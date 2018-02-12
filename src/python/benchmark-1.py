@@ -113,14 +113,14 @@ def data_generator(seq2pssm, seq2go, classes):
 def step_decay(epoch):
    initial_lrate = LR
    drop = 0.5
-   epochs_drop = 1.0
+   epochs_drop = 5.0
    lrate = initial_lrate * math.pow(drop,
            math.floor((1+epoch)/epochs_drop))
    return lrate
 
 
 def Motifs(inpt):
-    motif01 = Conv2D(1024, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
+    motif01 = Conv2D(192, (18, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
     # motif03 = Conv2D(192, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
     # motif09 = Conv2D(64, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
     # motif18 = Conv2D(32, (18, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
@@ -129,11 +129,12 @@ def Motifs(inpt):
     # return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
     return motif01
 
+
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     # feats = MaxPooling2D((2, 1))(feats)
-    # feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = Conv2D(64, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -141,9 +142,9 @@ def Features(motifs):
 def Classifier(inpt, hidden_size, classes):
     x = inpt
     # We stack a deep densely-connected network on top
-    x = Dense(hidden_size * 2, activation='relu')(x)
-    # x = Dropout(0.1)(x)
     x = Dense(hidden_size, activation='relu')(x)
+    # x = Dropout(0.1)(x)
+    # x = Dense(hidden_size, activation='relu')(x)
     # x = Dropout(0.1)(x)
 
     # And finally we add the main logistic regression layer
