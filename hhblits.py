@@ -59,7 +59,8 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
     if limit: s = s.limit(limit)
     uniprot_ids = list(map(lambda doc: doc["DB_Object_ID"], s))
 
-    q = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": {"$gte": min_length, "$lte": max_length}}
+    is_corret_length = {"$gte": min_length, "$lte": max_length}
+    q = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": is_corret_length}
     s = db.uniprot.find(q)
     seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
 
@@ -132,12 +133,14 @@ def _run_hhblits_batched(sequences):
                 i += 1
             else:
                 break
-            if db.pssm.find_one({"_id": seq.id, "updated_at": is_new, "pssm": {"$exists": True}}):
+
+            if db.pssm.find_one({"_id": seq.id, "updated_at": is_new}):
+            # if db.pssm.find_one({"_id": seq.id, "updated_at": is_new, "pssm": {"$exists": True}}):
                 continue
 
             db.pssm.update_one({
                 "_id": seq.id}, {
-                '$set': {"updated_at": datetime.utcnow()}
+                '$set': {"updated_at": datetime.utcnow(), "pssm": None}
             }, upsert=True)
 
             batch.append(seq)
