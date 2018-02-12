@@ -152,7 +152,7 @@ def _run_hhblits_batched(sequences):
 
         sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
-        cline = "%s/scripts/splitfasta.pl %s" \
+        cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, sequences_fasta)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
