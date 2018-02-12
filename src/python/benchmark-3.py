@@ -145,30 +145,30 @@ def step_decay(epoch):
 
 def Motifs(inpt):
 
-    embed = Embedding(input_dim=25, output_dim=20)(inpt)
-    embed = Reshape((1, -1, 20))(embed)
+    embed = Embedding(input_dim=25, output_dim=3, embeddings_initializer='uniform')(inpt)
+    embed = Reshape((1, -1, 3))(embed)
 
-    motif01 = Conv2D(1024, (1, 20), data_format='channels_first', padding='valid', activation='relu')(embed)
+    motif01 = Conv2D(20, (1, 3), data_format='channels_first', padding='valid', activation='relu')(embed)
 
-    motif03 = Conv2D(384, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    motif03 = Reshape((1, -1, 384))(motif03)
+    motif03 = Conv2D(768, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif03 = Reshape((1, -1, 768))(motif03)
 
-    motif09 = Conv2D(128, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    motif09 = Reshape((1, -1, 128))(motif09)
+    motif09 = Conv2D(256, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif09 = Reshape((1, -1, 256))(motif09)
 
-    motif18 = Conv2D(64, (18, 1), data_format='channels_first',  padding='same', activation='relu')(motif01)
-    motif18 = Reshape((1, -1, 64))(motif18)
+    motif18 = Conv2D(128, (18, 1), data_format='channels_first',  padding='same', activation='relu')(motif01)
+    motif18 = Reshape((1, -1, 128))(motif18)
 
-    # motif36 = Conv2D(32, (36, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    # motif36 = Reshape((1, -1, 32))(motif36)
-    return Concatenate(axis=3)([motif03, motif09, motif18])
+    motif36 = Conv2D(96, (36, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif36 = Reshape((1, -1, 96))(motif36)
+    return Concatenate(axis=3)([motif03, motif09, motif18, motif36])
 
 
 def Features(inpt):
     out = inpt
-    out = Conv2D(192, (10, 576), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = Conv2D(384, (1, 1248), data_format='channels_first', activation='relu', padding='valid')(out)
     # out = MaxPooling2D((2, 1))(out)
-    out = Conv2D(256, (10, 1), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = Conv2D(192, (7, 1), data_format='channels_first', activation='relu', padding='valid')(out)
     # out = MaxPooling2D((2, 1))(out)
     # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
     # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
