@@ -122,7 +122,7 @@ def step_decay(epoch):
 
 
 def Motifs(inpt):
-    motif01 = Conv2D(1024, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
+    motif01 = Conv2D(2048, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
     # motif03 = Conv2D(192, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
     # motif09 = Conv2D(64, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
     # motif18 = Conv2D(32, (18, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
@@ -133,7 +133,7 @@ def Motifs(inpt):
 
 def Features(motifs):
     feats = motifs
-    feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(512, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     # feats = MaxPooling2D((2, 1))(feats)
     # feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
@@ -154,7 +154,7 @@ def Classifier(inpt, hidden_size, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
-    out = Classifier(Features(Motifs(inp)), 192, classes)
+    out = Classifier(Features(Motifs(inp)), 512, classes)
     model = Model(inputs=[inp], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
