@@ -137,7 +137,7 @@ class Ontology(object):
 
     @property
     def classes(self):
-        return self._mlb.classes_
+        return [c for c in self._mlb.classes_]
 
     def sort(self, go_terms):
         return sorted(go_terms, key=lambda go: self[go])
