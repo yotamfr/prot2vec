@@ -22,10 +22,10 @@ sess = tf.Session()
 ### Keras
 from keras import optimizers
 from keras.models import Model
-from keras.layers import Input, Dense, Embedding
+from keras.layers import Input, Dense, Embedding, Dropout
 from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
-from keras.layers import Concatenate, Flatten, Dropout
+from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 
 from keras.losses import hinge
@@ -120,32 +120,33 @@ def step_decay(epoch):
 
 
 def Motifs(inpt):
-    motif01 = Conv2D(192, (18, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
-    # motif03 = Conv2D(192, (3, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    # motif09 = Conv2D(64, (9, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    # motif18 = Conv2D(32, (18, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
-    # motif36 = Conv2D(16, (36, 1), data_format='channels_first', padding='same', activation='relu')(motif01)
+    motif01 = Conv2D(192, (1, 40), padding='valid', activation='relu')(inpt)
+    motif03 = Conv2D(64, (3, 1), padding='same', activation='relu')(motif01)
+    motif09 = Conv2D(64, (9, 1), padding='same', activation='relu')(motif01)
+    motif18 = Conv2D(64, (18, 1), padding='same', activation='relu')(motif01)
+    motif36 = Conv2D(64, (36, 1), padding='same', activation='relu')(motif01)
 
-    # return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
-    return motif01
+    return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
 
 
-def Features(motifs):
-    feats = motifs
-    feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    # feats = MaxPooling2D((2, 1))(feats)
-    # feats = Conv2D(64, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+def Features(inpt):
+    out = inpt
+    out = Conv2D(64, (3, 1), activation='relu', padding='same')(out)
+    out = Conv2D(64, (3, 1), activation='relu', padding='same')(out)
+    out = MaxPooling2D((2, 1))(out)
+    out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
+    out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
 
-    return GlobalMaxPooling2D(data_format='channels_first')(feats)
+    out = GlobalMaxPooling2D(data_format='channels_first')(out)
+    # return Flatten()(out)
+    return out
 
 
 def Classifier(inpt, hidden_size, classes):
     x = inpt
     # We stack a deep densely-connected network on top
+    x = Dense(hidden_size * 2, activation='relu')(x)
     x = Dense(hidden_size, activation='relu')(x)
-    # x = Dropout(0.1)(x)
-    # x = Dense(hidden_size, activation='relu')(x)
-    # x = Dropout(0.1)(x)
 
     # And finally we add the main logistic regression layer
     return Dense(len(classes), activation='tanh')(x)
