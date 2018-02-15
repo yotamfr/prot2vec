@@ -58,6 +58,11 @@ class SequenceLoader(object):
 
         return seq_id2seq
 
+    def __iter__(self):
+        for _, seq in enumerate(self.sequence_source):
+            seq_id, seq_seq = self.parse_sequence(seq)
+            yield seq_id, seq_seq
+
     def parse_sequence(self, seq):
         return None, None
 

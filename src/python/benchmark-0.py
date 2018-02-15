@@ -273,5 +273,5 @@ if __name__ == "__main__":
         train(model, trn_X, trn_Y, epoch, args.num_epochs)
         _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
-        model_path = 'checkpoints/all-levels-cnn-%3d-%.3f-%.2f.hdf5' % (epoch, loss, f_max)
+        model_path = 'checkpoints/all-levels-cnn-%d-%.3f-%.2f.hdf5' % (epoch + 1, loss, f_max)
         model.save_weights(model_path)

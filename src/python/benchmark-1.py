@@ -89,11 +89,70 @@ def load_training_and_validation(db, limit=None):
     return sequences_train, annotations_train, sequences_valid, annotations_valid
 
 
-def data_generator(seq2pssm, seq2go, classes):
+def get_training_and_validation_streams(db, classes):
+    q_train = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date':  {"$lte": t0},
+               'Aspect': ASPECT}
+    seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
+    query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}, "pssm": {"$exists": True}}
+    stream_trn = DataStream(db.pssm.find(query), db.pssm.count(query), seq2go_trn, classes)
+
+    q_valid = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date':  {"$gt": t0, "$lte": t1},
+               'Aspect': ASPECT}
+
+    seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
+    query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}, "pssm": {"$exists": True}}
+    stream_tst = DataStream(db.pssm.find(query), db.pssm.count(query), seq2go_tst, classes)
+    
+    return stream_trn, stream_tst
+
+
+class DataStream(object):
+    
+    def __init__(self, source, count, seq2go, classes):
+        
+        self._classes = classes
+        self._count = count
+        self._source = source
+        self._seq2go = seq2go
+
+    def __iter__(self):
+
+        classes = self._classes
+        count = self._count
+        source = self._source
+        seq2go = self._seq2go
+        
+        s_cls = set(classes)
+        
+        for k, (seq, pssm, msa) in PssmCollectionLoader(source, count):
+            if len(seq) < 30: continue
+            y = np.zeros(len(classes))
+            for go in onto.propagate(seq2go[k]):
+                if go not in s_cls:
+                    continue
+                y[classes.index(go)] = 1
+    
+            if not pssm: continue
+    
+            x1 = [[AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
+            x2 = msa
+    
+            yield k, x1, x2, y
+
+    def __len__(self):
+        return self._count
+
+
+def data_generator(seq2pssm, seq2go, classes, verbose=1):
     s_cls = set(classes)
     for i, (k, v) in enumerate(seq2go.items()):
 
-        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+        if verbose == 1:
+            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
 
         if k not in seq2pssm:
             continue
@@ -104,6 +163,8 @@ def data_generator(seq2pssm, seq2go, classes):
             y[classes.index(go)] = 1
 
         seq, pssm, msa = seq2pssm[k]
+        if not pssm: continue
+
         x1 = [[AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]] for i, aa in enumerate(seq)]
         x2 = msa
 
@@ -179,6 +240,28 @@ def get_xy(gen, normalize=False):
     return xByShapes, yByShapes
 
 
+def batch_generator(gen, normalize=False, batch_size=8):
+    xByShapes, yByShapes = dict(), dict()
+    for _, x, _, y in gen:
+        x, y = np.array(x).reshape(1, len(x), 40), zeroone2oneminusone(y)
+        if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
+        if x.shape in xByShapes:
+            xByShapes[x.shape].append(x)
+            yByShapes[x.shape].append(y)
+            X, Y = xByShapes[x.shape], yByShapes[x.shape]
+            if len(X) == batch_size:
+                yield np.array(X), np.array(Y)
+                del xByShapes[x.shape]
+                del yByShapes[x.shape]
+
+        else:
+            xByShapes[x.shape] = [x]  # initially a list, because we're going to append items
+            yByShapes[x.shape] = [y]
+
+    for X, Y in zip(xByShapes.values(), yByShapes.values()):
+        yield np.array(X), np.array(Y)
+
+
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
@@ -199,10 +282,11 @@ class LossHistory(Callback):
 
 
 def train(model, X, Y, epoch, num_epochs, history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
+
     m = sum(map(lambda k: len(Y[k]), Y.keys()))
     pbar = tqdm(total=m)
     for x_shp, y_shp in zip(X.keys(), Y.keys()):
-        model.fit(x=trn_X[x_shp], y=trn_Y[y_shp],
+        model.fit(x=X[x_shp], y=Y[y_shp],
                   batch_size=8, epochs=num_epochs,
                   verbose=0,
                   validation_data=None,
@@ -210,6 +294,25 @@ def train(model, X, Y, epoch, num_epochs, history=LossHistory(), lrate=LearningR
                   callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y[y_shp]))
+
+    pbar.close()
+
+
+def train_generator(model, gen_xy, length_xy, epoch, num_epochs, history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
+
+    pbar = tqdm(total=length_xy)
+
+    for X, Y in gen_xy:
+        assert len(X) == len(Y)
+
+        model.fit(x=X, y=Y,
+                  batch_size=8, epochs=num_epochs,
+                  verbose=0,
+                  validation_data=None,
+                  initial_epoch=epoch,
+                  callbacks=[history, lrate])
+        pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
+        pbar.update(len(Y))
 
     pbar.close()
 
@@ -238,6 +341,31 @@ def evaluate(model, X, Y, classes):
     return y_true, y_pred, loss, f_max
 
 
+def eval_generator(model, gen_xy, length_xy, classes):
+
+    pbar = tqdm(total=length_xy)
+
+    y_pred, y_true = [], []
+    for i, (X, Y) in enumerate(gen_xy):
+        assert len(X) == len(Y)
+        y_hat, y = model.predict(X), Y
+        y_pred.extend(y_hat)
+        y_true.extend(y)
+        if (i + 1) % 20 == 0:
+            loss = np.mean(hinge(np.asarray(y_true), np.asarray(y_pred)).eval(session=sess))
+            pbar.set_description("Validation Loss:%.5f" % loss)
+        pbar.update(len(Y))
+
+    pbar.close()
+
+    loss = np.mean(hinge(np.asarray(y_true), np.asarray(y_pred)).eval(session=sess))
+    y_pred = oneminusone2zeroone(y_pred)
+    y_true = oneminusone2zeroone(y_true)
+    f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
+
+    return y_true, y_pred, loss, f_max
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -253,43 +381,38 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=None)
-
-    train_and_validation_data = ({k: v[0] for k, v in trn_seq2pssm.items()}, trn_seq2go,
-                                 {k: v[0] for k, v in tst_seq2pssm.items()}, tst_seq2go)
+    # trn_seq2pssm, trn_seq2go, tst_seq2pssm, tst_seq2go = load_training_and_validation(db, limit=None)
+    # 
+    # train_and_validation_data = ({k: v[0] for k, v in trn_seq2pssm.items()}, trn_seq2go,
+    #                              {k: v[0] for k, v in tst_seq2pssm.items()}, tst_seq2go)
 
     classes = onto.get_level(1)
 
-    trn_X, trn_Y = get_xy(data_generator(trn_seq2pssm, trn_seq2go, classes))
-    tst_X, tst_Y = get_xy(data_generator(tst_seq2pssm, tst_seq2go, classes))
+    # trn_X, trn_Y = get_xy(data_generator(trn_seq2pssm, trn_seq2go, classes))
+    # tst_X, tst_Y = get_xy(data_generator(tst_seq2pssm, tst_seq2go, classes))
 
     model = ModelCNN(classes)
     print(model.summary())
 
     model_path = 'checkpoints/1st-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
 
-    # callbacks = [
-    #
-    #     EarlyStopping(monitor='val_loss', patience=3, verbose=0),
-    #
-    #     ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min'),
-    #
-    # ]
-
     # pred_blast, perf_blast = evaluate_performance(db, ["blast"], ASPECT, train_and_validation_data, load_file=1, plot=0)
     # print("\nBLAST Validation F_max: %.3f\n" % max(perf_blast["blast"][2]))
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
-        train(model, trn_X, trn_Y, epoch, args.num_epochs)
-        _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
+        # train(model, trn_X, trn_Y, epoch, args.num_epochs)
+        # _, _, loss, f_max = evaluate(model, tst_X, tst_Y, classes)
+        
+        # train_gen = batch_generator(data_generator(trn_seq2pssm, trn_seq2go, classes, verbose=0))
+        # valid_gen = batch_generator(data_generator(tst_seq2pssm, tst_seq2go, classes, verbose=0))
+
+        trn_stream, tst_stream = get_training_and_validation_streams(db, classes)
+
+        train_generator(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
+        _, _, loss, f_max = eval_generator(model, batch_generator(tst_stream), len(tst_stream), classes)
+
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
-        # tst_shapes = list(zip(tst_X.keys(), tst_Y.keys()))
-        # for trnXshape, trnYshape in zip(trn_X.keys(), trn_Y.keys()):
-        #     print(trn_X[trnXshape].shape, trn_Y[trnYshape].shape)
-        #     tstXshape, tstYshape = tst_shapes[np.random.choice(len(tst_shapes))]
-        #     model.fit(x=trn_X[trnXshape],
-        #               y=trn_Y[trnYshape],
-        #               batch_size=8, epochs=1,
-        #               verbose=0,
-        #               validation_data=[tst_X[tstXshape], tst_Y[tstYshape]])
+
+        model_path = 'checkpoints/1st-level-cnn-%d-%.3f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model.save_weights(model_path)

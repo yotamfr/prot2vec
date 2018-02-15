@@ -30,7 +30,7 @@ import argparse
 ASPECT = 'F'
 ONTO = None
 PRIOR = None
-THRESHOLDS = np.arange(0.1, 1, 0.02)
+THRESHOLDS = np.arange(0.1, 1, 0.1)
 
 cleanup = True
 
