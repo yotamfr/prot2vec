@@ -237,7 +237,7 @@ def eval_generator(model, gen_xy, length_xy, clss):
 
     for i, (X, Ys) in enumerate(gen_xy):
         k = len(X)
-        for j, Y in enumerate(Ys):
+        for j, Y in enumerate(zip(*Ys)):
             assert len(X) == len(Y)
             y_hat, y = model.predict(X), Y
             s = sum([len(cls) for cls in clss[:j]])
