@@ -1,7 +1,3 @@
-import os
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 from src.python.consts import *
 
 from src.python.preprocess import *
@@ -237,12 +233,12 @@ def eval_generator(model, gen_xy, length_xy, clss):
 
     for i, (X, Ys) in enumerate(gen_xy):
         k = len(X)
-        for j, Y in enumerate(zip(*Ys)):
-            assert len(X) == len(Y)
-            y_hat, y = model.predict(X), Y
+        y_hat = model.predict(X)
+        for j, y in enumerate(zip(*Ys)):
+            assert len(X) == len(y)
             s = sum([len(cls) for cls in clss[:j]])
             e = s+len(clss[j])
-            y_pred[i:i+k, s:e], y_true[i:i+k, s:e] = y_hat, y
+            y_pred[i:i+k, s:e], y_true[i:i+k, s:e] = y_hat[j], y
 
         if (i + 1) % 100 == 0:
             loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
@@ -282,7 +278,7 @@ if __name__ == "__main__":
     model = ModelCNN(clss)
     print(model.summary())
 
-    model_path = 'checkpoints/1st-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
+    model_path = 'checkpoints/1-2-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
@@ -290,6 +286,7 @@ if __name__ == "__main__":
         trn_stream, tst_stream = get_training_and_validation_streams(db, clss)
 
         train_generator(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
+
         _, _, loss, f_max = eval_generator(model, batch_generator(tst_stream), len(tst_stream), clss)
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
