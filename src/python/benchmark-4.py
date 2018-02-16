@@ -278,8 +278,6 @@ if __name__ == "__main__":
     model = ModelCNN(clss)
     print(model.summary())
 
-    model_path = 'checkpoints/1-2-level-cnn-{epoch:03d}-{val_loss:.3f}.hdf5'
-
     sess = tf.Session()
     for epoch in range(args.num_epochs):
 
@@ -291,5 +289,5 @@ if __name__ == "__main__":
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 
-        model_path = 'checkpoints/1st-level-cnn-%d-%.3f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model_path = 'checkpoints/1-2-levels-cnn-%d-%.3f-%.2f.hdf5' % (epoch + 1, loss, f_max)
         model.save_weights(model_path)
