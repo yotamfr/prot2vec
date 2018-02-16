@@ -360,7 +360,7 @@ def eval_generator(model, gen_xy, length_xy, classes):
     pbar.close()
 
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
-    y_true = y_true[~np.all(y_pred == 0, axis=1)]
+    y_true = y_true[~np.all(y_true == 0, axis=1)]
 
     loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
     y_pred = oneminusone2zeroone(y_pred)
