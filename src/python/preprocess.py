@@ -88,7 +88,10 @@ class PssmCollectionLoader(SequenceLoader):
         super(PssmCollectionLoader, self).__init__(src_sequence, num_sequences)
 
     def parse_sequence(self, doc):
-        return doc["_id"], (doc["seq"], doc["pssm"], doc["alignment"])
+        if "seq" in doc and "pssm" in doc and "alignment" in doc:
+            return doc["_id"], (doc["seq"], doc["pssm"], doc["alignment"])
+        else:
+            return None, None
 
 
 class MappingLoader(object):
