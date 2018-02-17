@@ -194,7 +194,9 @@ def Features(motifs):
     feats = motifs
     feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = MaxPooling2D((2, 1))(feats)
+    feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -202,7 +204,7 @@ def Features(motifs):
 def Classifier(inpt, hidden_size, classes):
     x = inpt
     # We stack a deep densely-connected network on top
-    x = Dense(hidden_size * 2, activation='relu')(x)
+    x = Dense(hidden_size, activation='relu')(x)
     # x = Dropout(0.1)(x)
     x = Dense(hidden_size, activation='relu')(x)
     # x = Dropout(0.1)(x)
@@ -213,7 +215,7 @@ def Classifier(inpt, hidden_size, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
-    out = Classifier(Features(Motifs(inp)), 64, classes)
+    out = Classifier(Features(Motifs(inp)), 128, classes)
     model = Model(inputs=[inp], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
