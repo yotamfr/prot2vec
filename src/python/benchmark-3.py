@@ -163,13 +163,16 @@ def Motifs(inpt):
 
 
 def Features(inpt):
-    out = inpt
-    out = Conv2D(256, (1, 1248), data_format='channels_first', activation='relu', padding='valid')(out)
-    # out = MaxPooling2D((2, 1))(out)
-    out = Conv2D(192, (5, 1), data_format='channels_first', activation='relu', padding='valid')(out)
-    # out = MaxPooling2D((2, 1))(out)
-    # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
-    # out = Conv2D(128, (3, 1), activation='relu', padding='same')(out)
+
+    embed = Embedding(input_dim=25, output_dim=3, embeddings_initializer='uniform')(inpt)
+    embed = Reshape((1, -1, 3))(embed)
+    out = embed
+
+    out = Conv2D(256, (9, 3), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = MaxPooling2D((2, 1))(out)
+    out = Conv2D(512, (5, 1), data_format='channels_first', activation='relu', padding='valid')(out)
+    out = MaxPooling2D((2, 1))(out)
+    out = Conv2D(512, (5, 1), data_format='channels_first', activation='relu', padding='valid')(out)
 
     out = GlobalMaxPooling2D(data_format='channels_first')(out)
     # return Flatten()(out)
@@ -190,7 +193,7 @@ def Classifier(inpt, hidden_size, classes):
 def ModelCNN(classes):
     inp1 = Input(shape=(None,))
     # inp2 = Input(shape=(2, None, 20))
-    out = Classifier(Features(Motifs(inp1)), 128, classes)
+    out = Classifier(Features(inp1), 512, classes)
     model = Model(inputs=[inp1], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
