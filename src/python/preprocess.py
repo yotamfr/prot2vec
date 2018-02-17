@@ -61,6 +61,8 @@ class SequenceLoader(object):
     def __iter__(self):
         for _, seq in enumerate(self.sequence_source):
             seq_id, seq_seq = self.parse_sequence(seq)
+            if seq_seq is None or seq_id is None:
+                continue
             yield seq_id, seq_seq
 
     def parse_sequence(self, seq):
