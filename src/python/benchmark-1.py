@@ -193,8 +193,8 @@ def Motifs(inpt):
 def Features(motifs):
     feats = motifs
     feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    # feats = MaxPooling2D((2, 1))(feats)
-    # feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = MaxPooling2D((2, 1))(feats)
+    feats = Conv2D(128, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
