@@ -121,21 +121,16 @@ def _run_hhblits_batched(sequences):
     is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
 
-    i, n = 0, len(records)
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
-    while i < n:
+    while records:
         batch = []
-        while len(batch) < batch_size:
-            if len(records) > 0:
-                seq = records.pop()
-                pbar.update(1)
-                i += 1
-            else:
-                break
+        while (len(batch) < batch_size) and (len(records) > 0):
+            seq = records.pop()
+            pbar.update(1)
 
-            if db.pssm.find_one({"_id": seq.id, "updated_at": is_new}):
-            # if db.pssm.find_one({"_id": seq.id, "updated_at": is_new, "pssm": {"$exists": True}}):
+            doc = db.pssm.find_one({"_id": seq.id, "updated_at": is_new})
+            if doc and ("pssm" in doc) and doc["pssm"]:
                 continue
 
             db.pssm.update_one({
@@ -150,7 +145,7 @@ def _run_hhblits_batched(sequences):
 
         if len(glob.glob('*.seq')): os.system("rm *.seq")
 
-        sequences_fasta = 'batch-%d.fasta' % (i//batch_size)
+        sequences_fasta = 'batch.fasta'
         SeqIO.write(batch, open(sequences_fasta, 'w+'), "fasta")
         cline = "%s/scripts/splitfasta.pl %s 1>/dev/null 2>&1" \
                 % (prefix_hhsuite, sequences_fasta)
