@@ -50,7 +50,7 @@ IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore del
 def prepare_uniprot20():
     if not os.path.exists("dbs/uniprot20_2016_02"):
         # os.system("wget %s --directory-prefix dbs " % UNIPROT20_URL)
-        os.system("tar -xvzf dbs/uniprot20_2016_02.tgz")
+        os.system("tar -xvzf dbs/uniprot20_2016_02.tgz -C dbs")
 
 
 def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
