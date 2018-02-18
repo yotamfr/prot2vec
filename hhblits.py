@@ -43,6 +43,7 @@ max_filter = 20000
 coverage = 0
 mact = 0.9
 
+NOW = datetime.utcnow()
 
 IGNORE = [aa for aa in map(str.lower, AA.aa2index.keys())] + ['-']  # ignore deletions + insertions
 
@@ -130,7 +131,7 @@ def _run_hhblits_batched(sequences):
 
             doc = db.pssm.find_one({"_id": seq.id})
             if doc and ("pssm" in doc) and doc["pssm"]:
-                if datetime.utcnow() - doc["updated_at"] < timedelta(days=5):
+                if NOW - doc["updated_at"] < timedelta(days=7):
                     continue
 
             db.pssm.update_one({
