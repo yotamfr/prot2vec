@@ -32,6 +32,8 @@ from keras.losses import hinge, binary_crossentropy
 
 from keras import backend as K
 
+from sklearn.metrics import log_loss
+
 K.set_session(sess)
 
 import math
@@ -221,8 +223,7 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred):
-    y_true, y_pred = tf.convert_to_tensor(y_true, np.float32), tf.convert_to_tensor(y_pred, np.float32)
-    return np.mean(binary_crossentropy(y_true, y_pred).eval(session=sess))
+    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def eval_generator(model, gen_xy, length_xy, classes):
@@ -235,8 +236,7 @@ def eval_generator(model, gen_xy, length_xy, classes):
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
 
-        if (i + 1) % 20 == 0:
-            pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
+        pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
         pbar.update(k)
 
     pbar.close()
