@@ -204,11 +204,11 @@ def Features(inpt):
     feats = Conv2D(192, (3, 1), dilation_rate=(1, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = Conv2D(192, (3, 1), dilation_rate=(2, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = Conv2D(192, (3, 1), dilation_rate=(4, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    feats = Conv2D(192, (3, 1), dilation_rate=(8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = Conv2D(192, (3, 1), dilation_rate=(8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = Conv2D(192, (3, 1), dilation_rate=(1, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = Conv2D(192, (3, 1), dilation_rate=(2, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
     feats = Conv2D(192, (3, 1), dilation_rate=(4, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    feats = Conv2D(192, (3, 1), dilation_rate=(8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = Conv2D(192, (3, 1), dilation_rate=(8, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
