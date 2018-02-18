@@ -223,7 +223,7 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred):
-    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    return sum([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def eval_generator(model, gen_xy, length_xy, classes):
@@ -235,17 +235,15 @@ def eval_generator(model, gen_xy, length_xy, classes):
         k = len(Y)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
-
-        pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
         pbar.update(k)
+        if i % 10: continue
+        pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
 
     pbar.close()
 
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
 
-    # y_pred = oneminusone2zeroone(y_pred)
-    # y_true = oneminusone2zeroone(y_true)
     f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
 
     return y_true, y_pred, calc_loss(y_true, y_pred), f_max
@@ -266,8 +264,6 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    # mf_binding = "GO:0005488"
-    # classes = onto.get_level(1, mf_binding) + onto.get_level(2, mf_binding) + onto.get_level(3, mf_binding)
     classes = onto.classes
 
     model = ModelCNN(classes)
