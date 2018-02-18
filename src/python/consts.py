@@ -9,7 +9,12 @@ t1 = datetime(2014, 9, 1, 0, 0)
 cafa2_cutoff = datetime(2014, 1, 1, 0, 0)
 cafa3_cutoff = datetime(2017, 2, 2, 0, 0)
 
-today_cutoff = datetime.now()
+TODAY = today_cutoff = datetime.now()
+
+NOW = datetime.utcnow()
+
+PAD = 25
+
 
 
 class AminoAcids(object):

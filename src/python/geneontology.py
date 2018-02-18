@@ -113,6 +113,7 @@ class Ontology(object):
         classes = list(reversed(list(nx.topological_sort(G))))
 
         self.root = root = classes[0]
+        self._levels = self.bfs(root)
 
         self._levels = levels = dict()
         for node, lvl in nx.shortest_path_length(G, target=root).items():
@@ -127,8 +128,7 @@ class Ontology(object):
         self.go2ix = {k: v for k, v in key_val}
         self.ix2go = {v: k for k, v in key_val}
 
-        emb_fname = os.path.join('%s/%s-poincare-dim%d-epochs%d.emb'
-                                 % (DATA_ROOT, aspect, dim, num_epochs)) \
+        emb_fname = os.path.join('%s/%s-poincare-dim%d-epochs%d.emb' % (DATA_ROOT, aspect, dim, num_epochs))
 
         if os.path.exists(emb_fname):
             self._kv = PoincareKeyedVectors.load(emb_fname)
@@ -154,8 +154,18 @@ class Ontology(object):
             anc = map(lambda go: self.sort(nx.descendants(G, go))[1:] + [go], lbl)
         return reduce(lambda x, y: x + y, anc, [])
 
-    def get_level(self, lvl):
-        return self._levels[lvl]
+    def bfs(self, root):
+        levels, G = dict(), self._graph
+        for node, lvl in nx.shortest_path_length(G, target=root).items():
+            if lvl in levels:
+                levels[lvl].append(node)
+            else:
+                levels[lvl] = [node]
+        return levels
+
+    def get_level(self, lvl, root=None):
+        if not root: return self._levels[lvl]
+        else: return self.bfs(root)[lvl]
 
     def binarize(self, go_labels):
         return self._mlb.transform(go_labels)
