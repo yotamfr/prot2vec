@@ -40,7 +40,7 @@ import argparse
 
 LR = 0.001
 
-BATCH_SIZE = 500
+BATCH_SIZE = 32
 
 t0 = datetime(2016, 2, 1, 0, 0)
 t1 = TODAY
