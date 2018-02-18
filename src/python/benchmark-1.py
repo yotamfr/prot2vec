@@ -22,7 +22,7 @@ sess = tf.Session()
 ### Keras
 from keras import optimizers
 from keras.models import Model
-from keras.layers import Input, Dense, Embedding
+from keras.layers import Input, Dense, Embedding, Reshape
 from keras.layers import Conv2D, Conv1D
 from keras.layers import MaxPooling2D, GlobalMaxPooling2D
 from keras.layers import Concatenate, Flatten, Dropout
@@ -190,13 +190,20 @@ def Motifs(inpt):
     # return Concatenate(axis=1)([motif03, motif09, motif18, motif36])
     return motif01
 
-def Features(motifs):
-    feats = motifs
-    feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
-    feats = MaxPooling2D((2, 1))(feats)
-    feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+
+def Features(inpt):
+
+    feats = Conv2D(1024, (1, 40), data_format='channels_first', padding='valid', activation='relu')(inpt)
+    feats = Reshape((1024, -1, 1))(feats)
+
+    # feats = Conv2D(192, (9, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = MaxPooling2D((2, 1))(feats)
+    # feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    # feats = MaxPooling2D((2, 1))(feats)
+    # feats = Conv2D(384, (5, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(192, (3, 1), dilation_rate=(1, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(192, (3, 1), dilation_rate=(2, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
+    feats = Conv2D(192, (3, 1), dilation_rate=(4, 1), data_format='channels_first', activation='relu', padding='valid')(feats)
 
     return GlobalMaxPooling2D(data_format='channels_first')(feats)
 
@@ -215,7 +222,7 @@ def Classifier(inpt, hidden_size, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(1, None, 40))
-    out = Classifier(Features(Motifs(inp)), 128, classes)
+    out = Classifier(Features(inp), 128, classes)
     model = Model(inputs=[inp], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
