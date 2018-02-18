@@ -118,20 +118,20 @@ def _set_unique_ids(input_file, output_file):
 
 def _run_hhblits_batched(sequences):
 
-    is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
     while records:
         batch = []
         while (len(batch) < batch_size) and (len(records) > 0):
+
             seq = records.pop()
             pbar.update(1)
 
-            doc = db.pssm.find_one({"_id": seq.id, "updated_at": is_new})
+            doc = db.pssm.find_one({"_id": seq.id})
             if doc and ("pssm" in doc) and doc["pssm"]:
-                continue
+                if datetime.utcnow() - doc["updated_at"] < timedelta(days=5):
+                    continue
 
             db.pssm.update_one({
                 "_id": seq.id}, {
