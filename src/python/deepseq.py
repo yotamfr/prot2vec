@@ -49,31 +49,6 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-def _get_labeled_data(db, query, limit, pssm=True):
-    c = limit if limit else db.goa_uniprot.count(query)
-    s = db.goa_uniprot.find(query)
-    if limit: s = s.limit(limit)
-
-    seqid2goid, _ = GoAnnotationCollectionLoader(s, c, ASPECT).load()
-
-    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}, "pssm": {"$exists": True}}
-
-    if pssm:
-        num_seq = db.pssm.count(query)
-        src_seq = db.pssm.find(query)
-        seqid2seq = PssmCollectionLoader(src_seq, num_seq).load()
-    else:
-        num_seq = db.uniprot.count(query)
-        src_seq = db.uniprot.find(query)
-        seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
-
-    seqid2goid = {k: v for k, v in seqid2goid.items() if len(v) > 1 or 'GO:0005515' not in v}
-    seqid2seq = {k: v for k, v in seqid2seq.items() if k in seqid2goid and len(v[0]) > 30}
-    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seq}
-
-    return seqid2seq, seqid2goid
-
-
 def get_training_and_validation_streams(db, classes):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -81,7 +56,7 @@ def get_training_and_validation_streams(db, classes):
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
-    stream_trn = DataStream(db.uniprot.find(query), db.uniprot.count(query), seq2go_trn, classes)
+    stream_trn = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_trn, classes)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -90,7 +65,7 @@ def get_training_and_validation_streams(db, classes):
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}}
-    stream_tst = DataStream(db.uniprot.find(query), db.uniprot.count(query), seq2go_tst, classes)
+    stream_tst = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_tst, classes)
 
     return stream_trn, stream_tst
 
