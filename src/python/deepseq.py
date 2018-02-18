@@ -266,8 +266,8 @@ def eval_generator(model, gen_xy, length_xy, classes):
     y_true = y_true[~np.all(y_true == 0, axis=1)]
 
     loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
-    y_pred = oneminusone2zeroone(y_pred)
-    y_true = oneminusone2zeroone(y_true)
+    # y_pred = oneminusone2zeroone(y_pred)
+    # y_true = oneminusone2zeroone(y_true)
     f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
 
     return y_true, y_pred, loss, f_max
