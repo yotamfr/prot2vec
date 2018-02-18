@@ -220,6 +220,11 @@ def oneminusone2zeroone(vec):
     return np.divide(np.add(np.array(vec), 1), 2)
 
 
+def calc_loss(y_true, y_pred):
+    y_true, y_pred = tf.convert_to_tensor(y_true, np.float32), tf.convert_to_tensor(y_pred, np.float32)
+    return np.mean(binary_crossentropy(y_true, y_pred).eval(session=sess))
+
+
 def eval_generator(model, gen_xy, length_xy, classes):
     pbar = tqdm(total=length_xy)
     i, m, n = 0, length_xy, len(classes)
@@ -231,8 +236,7 @@ def eval_generator(model, gen_xy, length_xy, classes):
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
 
         if (i + 1) % 20 == 0:
-            loss = np.mean(binary_crossentropy(y, y_hat).eval(session=sess))
-            pbar.set_description("Validation Loss:%.5f" % loss)
+            pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
         pbar.update(k)
 
     pbar.close()
@@ -240,12 +244,11 @@ def eval_generator(model, gen_xy, length_xy, classes):
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
 
-    loss = np.mean(hinge(y_true, y_pred).eval(session=sess))
     # y_pred = oneminusone2zeroone(y_pred)
     # y_true = oneminusone2zeroone(y_true)
     f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
 
-    return y_true, y_pred, loss, f_max
+    return y_true, y_pred, calc_loss(y_true, y_pred), f_max
 
 
 if __name__ == "__main__":
