@@ -223,7 +223,7 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred):
-    return sum([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def eval_generator(model, gen_xy, length_xy, classes):
@@ -235,9 +235,8 @@ def eval_generator(model, gen_xy, length_xy, classes):
         k = len(Y)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
+        pbar.set_description("Validation Loss:%.5f" % log_loss(y, y_hat))
         pbar.update(k)
-        if i % 10: continue
-        pbar.set_description("Validation Loss:%.5f" % calc_loss(y_true, y_pred))
 
     pbar.close()
 
