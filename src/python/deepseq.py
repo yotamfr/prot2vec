@@ -16,8 +16,6 @@ from tqdm import tqdm
 
 import tensorflow as tf
 
-sess = tf.Session()
-
 ### Keras
 from keras import optimizers
 from keras.models import Model
@@ -34,11 +32,12 @@ from keras import backend as K
 
 from sklearn.metrics import log_loss
 
-K.set_session(sess)
-
 import math
 
 import argparse
+
+sess = tf.Session()
+K.set_session(sess)
 
 LR = 0.001
 
@@ -267,7 +266,6 @@ if __name__ == "__main__":
     model = ModelCNN(classes)
     model.summary()
 
-    sess = tf.Session()
     for epoch in range(args.num_epochs):
 
         trn_stream, tst_stream = get_training_and_validation_streams(db, classes)
