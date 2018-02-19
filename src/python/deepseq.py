@@ -187,15 +187,13 @@ class LossHistory(Callback):
     def __init__(self):
         self.losses = []
 
-    # def on_train_begin(self, logs={}):
-    #     self.losses = []
-
     def on_batch_end(self, batch, logs={}):
         self.losses.append(logs.get('loss'))
 
 
-def train_generator(model, gen_xy, length_xy, epoch, num_epochs, history=LossHistory(),
-                    lrate=LearningRateScheduler(step_decay)):
+def train_model(model, gen_xy, length_xy, epoch, num_epochs,
+                history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
+
     pbar = tqdm(total=length_xy)
 
     for X, Y in gen_xy:
@@ -226,7 +224,7 @@ def calc_loss(y_true, y_pred):
     return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
-def eval_generator(model, gen_xy, length_xy, classes):
+def eval_model(model, gen_xy, length_xy, classes):
     pbar = tqdm(total=length_xy, desc="Evaluating Loss")
     i, m, n = 0, length_xy, len(classes)
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
@@ -262,7 +260,9 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes[1:]
+    classes = onto.classes
+    classes.remove(onto.root)
+    assert onto.root not in classes
 
     model = ModelCNN(classes)
     model.summary()
@@ -272,8 +272,8 @@ if __name__ == "__main__":
 
         trn_stream, tst_stream = get_training_and_validation_streams(db, classes)
 
-        train_generator(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        _, _, loss, f_max = eval_generator(model, batch_generator(tst_stream), len(tst_stream), classes)
+        train_model(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
+        _, _, loss, f_max = eval_model(model, batch_generator(tst_stream), len(tst_stream), classes)
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 
