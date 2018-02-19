@@ -16,7 +16,6 @@ NOW = datetime.utcnow()
 PAD = 25
 
 
-
 class AminoAcids(object):
 
     def __len__(self):
