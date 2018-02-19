@@ -25,8 +25,7 @@ from keras.layers import Dropout, BatchNormalization
 from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
-
-from keras.losses import hinge, binary_crossentropy
+# from keras.losses import hinge, binary_crossentropy
 
 from keras import backend as K
 
@@ -116,8 +115,7 @@ def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
     epochs_drop = 1.0
-    lrate = initial_lrate * math.pow(drop,
-                                     math.floor((1 + epoch) / epochs_drop))
+    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
     return lrate
 
 
@@ -129,11 +127,11 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = GlobalAveragePooling1D()(feats)
+    # feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    # feats = Dropout(0.3)(feats)
+    # feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    # feats = Dropout(0.3)(feats)
+    feats = GlobalMaxPooling1D()(feats)
     return feats
 
 
