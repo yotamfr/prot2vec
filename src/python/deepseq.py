@@ -265,7 +265,7 @@ if __name__ == "__main__":
     classes = onto.classes[1:]
 
     model = ModelCNN(classes)
-    print(model.summary())
+    model.summary()
 
     sess = tf.Session()
     for epoch in range(args.num_epochs):
