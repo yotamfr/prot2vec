@@ -388,10 +388,10 @@ def predict(reference_seqs, reference_annots, target_seqs, method, load_file=1):
         print("Unknown method")
 
 
-def performance(predictions, ground_truth, thresholds=THRESHOLDS):
+def performance(predictions, ground_truth, classes=None, thresholds=THRESHOLDS):
     P, T = predictions, ground_truth
-    prs = [precision(th, P, T) for th in thresholds]
-    rcs = [recall(th, P, T) for th in thresholds]
+    prs = [precision(th, P, T, classes) for th in thresholds]
+    rcs = [recall(th, P, T, classes) for th in thresholds]
     f1s = [F_beta(pr, rc) for pr, rc in zip(prs, rcs)]
     return prs, rcs, f1s
 

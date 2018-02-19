@@ -25,8 +25,7 @@ from keras.layers import Dropout, BatchNormalization
 from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
-
-from keras.losses import hinge, binary_crossentropy
+# from keras.losses import hinge, binary_crossentropy
 
 from keras import backend as K
 
@@ -211,7 +210,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history, lrate])
+                  callbacks=[history])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
