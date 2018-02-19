@@ -182,6 +182,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB"),
     parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
+    parser.add_argument("--init_epoch", type=int, default=0,
+                        help="Which epoch to start training the model?")
     parser.add_argument("--num_epochs", type=int, default=20,
                         help="How many epochs to train the model?")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
@@ -278,7 +280,7 @@ if __name__ == "__main__":
         print("Loaded model from disk")
     model.summary()
 
-    for epoch in range(args.num_epochs):
+    for epoch in range(args.init_epoch, args.num_epochs):
 
         trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
