@@ -32,6 +32,9 @@ ONTO = None
 PRIOR = None
 THRESHOLDS = np.arange(0.1, 1, 0.1)
 
+t0 = datetime(2016, 2, 1, 0, 0)
+t1 = TODAY
+
 cleanup = True
 
 # unparseables = ["Cross_product_review", "Involved_in",
@@ -378,6 +381,9 @@ def predict(reference_seqs, reference_annots, target_seqs, method, load_file=1):
         _prepare_naive(reference_annots)
         predictions = _predict(reference_annots, target_seqs, _naive)
         return predictions
+    elif method == "deepseq":
+        pred_path = os.path.join(tmp_dir, 'pred-deepseq-%s.npy' % GoAspect(ASPECT))
+        return np.load(pred_path).item()
     elif method == "seq2go":
         pred_path = os.path.join(tmp_dir, 'pred-seq2go-%s.npy' % GoAspect(ASPECT))
         return np.load(pred_path).item()
@@ -442,8 +448,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
-
-    # load_evaluation_data()
 
     client = MongoClient(args.mongo_url)
     db = client['prot2vec']

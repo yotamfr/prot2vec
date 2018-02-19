@@ -49,14 +49,17 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-def get_training_and_validation_streams(db, onto, classes):
+def get_training_and_validation_streams(db, onto, classes, limit=None):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$lte": t0},
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
-    stream_trn = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_trn, onto, classes)
+    count = limit if limit else db.uniprot.count(query)
+    source = db.uniprot.find(query).batch_size(10)
+    if limit: source = source.limit(limit)
+    stream_trn = DataStream(source, count, seq2go_trn, onto, classes)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -65,7 +68,10 @@ def get_training_and_validation_streams(db, onto, classes):
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}}
-    stream_tst = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_tst, onto, classes)
+    count = limit if limit else db.uniprot.count(query)
+    source = db.uniprot.find(query).batch_size(10)
+    if limit: source = source.limit(limit)
+    stream_tst = DataStream(source, count, seq2go_tst, onto, classes)
 
     return stream_trn, stream_tst
 
