@@ -219,8 +219,8 @@ def oneminusone2zeroone(vec):
     return np.divide(np.add(np.array(vec), 1), 2)
 
 
-def calc_loss(y_true, y_pred):
-    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
+    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def eval_model(model, gen_xy, length_xy, classes):
