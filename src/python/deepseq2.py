@@ -22,7 +22,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
-from keras.layers import MaxPooling2D, GlobalMaxPooling2D, GlobalAveragePooling1D
+from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 
@@ -131,7 +131,7 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = GlobalMaxPooling2D()(feats)
+    feats = GlobalMaxPooling1D()(feats)
     return feats
 
 
