@@ -98,7 +98,7 @@ class DataStream(object):
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
             y = np.zeros(len(classes))
-            for go in onto.propagate(seq2go[k]):
+            for go in onto.propagate(seq2go[k], include_root=False):
                 if go not in s_cls:
                     continue
                 y[classes.index(go)] = 1
@@ -227,7 +227,7 @@ def calc_loss(y_true, y_pred):
 
 
 def eval_generator(model, gen_xy, length_xy, classes):
-    pbar = tqdm(total=length_xy)
+    pbar = tqdm(total=length_xy, desc="Evaluating Loss")
     i, m, n = 0, length_xy, len(classes)
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
     for i, (X, Y) in enumerate(gen_xy):
@@ -235,7 +235,6 @@ def eval_generator(model, gen_xy, length_xy, classes):
         k = len(Y)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
-        pbar.set_description("Validation Loss:%.5f" % log_loss(y, y_hat))
         pbar.update(k)
 
     pbar.close()
@@ -263,7 +262,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes
+    classes = onto.classes[1:]
 
     model = ModelCNN(classes)
     print(model.summary())
