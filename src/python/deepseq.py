@@ -116,8 +116,7 @@ def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
     epochs_drop = 1.0
-    lrate = initial_lrate * math.pow(drop,
-                                     math.floor((1 + epoch) / epochs_drop))
+    lrate = initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
     return lrate
 
 
@@ -212,7 +211,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history])
+                  callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
