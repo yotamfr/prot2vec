@@ -22,7 +22,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
-from keras.layers import MaxPooling2D, GlobalMaxPooling2D, GlobalAveragePooling1D
+from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 
@@ -50,14 +50,14 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-def get_training_and_validation_streams(db, classes):
+def get_training_and_validation_streams(db, onto, classes):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$lte": t0},
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
-    stream_trn = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_trn, classes)
+    stream_trn = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_trn, onto, classes)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -66,7 +66,7 @@ def get_training_and_validation_streams(db, classes):
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}}
-    stream_tst = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_tst, classes)
+    stream_tst = DataStream(db.uniprot.find(query).batch_size(10), db.uniprot.count(query), seq2go_tst, onto, classes)
 
     return stream_trn, stream_tst
 
@@ -77,12 +77,13 @@ def pad_seq(seq):
 
 
 class DataStream(object):
-    def __init__(self, source, count, seq2go, classes):
+    def __init__(self, source, count, seq2go, onto, classes):
 
         self._classes = classes
         self._count = count
         self._source = source
         self._seq2go = seq2go
+        self._onto = onto
 
     def __iter__(self):
 
@@ -90,6 +91,7 @@ class DataStream(object):
         count = self._count
         source = self._source
         seq2go = self._seq2go
+        onto = self._onto
 
         s_cls = set(classes)
 
@@ -131,7 +133,7 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = GlobalAveragePooling1D()(feats)
+    feats = GlobalMaxPooling1D()(feats)
     return feats
 
 
@@ -177,9 +179,13 @@ def batch_generator(gen, normalize=False):
 
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
-                        help="Supply the URL of MongoDB")
+                        help="Supply the URL of MongoDB"),
+    parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
+                        default="F", help="Specify the ontology aspect.")
     parser.add_argument("--num_epochs", type=int, default=20,
                         help="How many epochs to train the model?")
+    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
 
 
 class LossHistory(Callback):
@@ -190,8 +196,8 @@ class LossHistory(Callback):
         self.losses.append(logs.get('loss'))
 
 
-def train_model(model, gen_xy, length_xy, epoch, num_epochs,
-                history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
+def train(model, gen_xy, length_xy, epoch, num_epochs,
+          history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
 
     pbar = tqdm(total=length_xy)
 
@@ -223,8 +229,8 @@ def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
     return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
-def eval_model(model, gen_xy, length_xy, classes):
-    pbar = tqdm(total=length_xy, desc="Evaluating Loss")
+def predict(model, gen_xy, length_xy, classes):
+    pbar = tqdm(total=length_xy, desc="Predicting...")
     i, m, n = 0, length_xy, len(classes)
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
     for i, (X, Y) in enumerate(gen_xy):
@@ -233,15 +239,18 @@ def eval_model(model, gen_xy, length_xy, classes):
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
         pbar.update(k)
-
     pbar.close()
+    return y_true, y_pred
+
+
+def evaluate(y_true, y_pred, classes):
 
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
 
     f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
 
-    return y_true, y_pred, calc_loss(y_true, y_pred), f_max
+    return calc_loss(y_true, y_pred), f_max
 
 
 if __name__ == "__main__":
@@ -250,7 +259,7 @@ if __name__ == "__main__":
     add_arguments(parser)
     args = parser.parse_args()
 
-    ASPECT = 'F'  # Molecular Function
+    ASPECT = args.aspect  # default: Molecular Function
 
     client = MongoClient(args.mongo_url)
 
@@ -264,14 +273,18 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     model = ModelCNN(classes)
+    if args.resume:
+        model.load_weights(args.resume)
+        print("Loaded model from disk")
     model.summary()
 
     for epoch in range(args.num_epochs):
 
-        trn_stream, tst_stream = get_training_and_validation_streams(db, classes)
+        trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
-        train_model(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        _, _, loss, f_max = eval_model(model, batch_generator(tst_stream), len(tst_stream), classes)
+        train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
+        y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
+        loss, f_max = evaluate(y_true, y_pred, classes)
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 

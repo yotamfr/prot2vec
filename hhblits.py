@@ -136,7 +136,7 @@ def _run_hhblits_batched(sequences):
 
             db.pssm.update_one({
                 "_id": seq.id}, {
-                '$set': {"updated_at": datetime.utcnow(), "pssm": None}
+                '$set': {"updated_at": datetime.utcnow()}
             }, upsert=True)
 
             batch.append(seq)
