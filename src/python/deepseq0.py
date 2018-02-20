@@ -42,8 +42,8 @@ LR = 0.001
 
 BATCH_SIZE = 32
 
-t0 = datetime(2016, 2, 1, 0, 0)
-t1 = TODAY
+t0 = datetime(2014, 1, 1, 0, 0)
+t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
@@ -129,14 +129,14 @@ def Features(inpt):
 
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
-    feats = Conv1D(500, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.5)(feats)
-    feats = Conv1D(200, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.5)(feats)
-    feats = Conv1D(200, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.5)(feats)
-    feats = Conv1D(500, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.5)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
     feats = GlobalMaxPooling1D()(feats)
     return feats
 
