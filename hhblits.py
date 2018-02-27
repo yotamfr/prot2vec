@@ -131,7 +131,7 @@ def _run_hhblits_batched(sequences):
 
             doc = db.pssm.find_one({"_id": seq.id})
             if doc and ("pssm" in doc) and doc["pssm"]:
-                if NOW - doc["updated_at"] < timedelta(days=7):
+                if NOW - doc["updated_at"] < timedelta(days=10):
                     continue
 
             db.pssm.update_one({
