@@ -63,7 +63,12 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
     is_corret_length = {"$gte": min_length, "$lte": max_length}
     q = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": is_corret_length}
     s = db.uniprot.find(q)
-    seqid2seq = {doc["_id"]: doc["sequence"] for doc in s}
+
+    seqid2seq = {
+        doc["_id"]: doc["sequence"] for doc in s
+        if (("pssm" not in doc) or (not doc["pssm"])
+            or (NOW - doc["updated_at"] > timedelta(days=10)))
+    }
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
 
@@ -126,25 +131,13 @@ def _run_hhblits_batched(sequences):
         batch = []
         while (len(batch) < batch_size) and (len(records) > 0):
 
-            print('1111111111111111111111111111111')
-
             seq = records.pop()
             pbar.update(1)
 
-            print('2222222222222222222222222222222')
-
-            doc = db.pssm.find_one({"_id": seq.id})
-            if doc and ("pssm" in doc) and doc["pssm"]:
-
-                print('33333333333333333333333333333333333333333')
-
-                if NOW - doc["updated_at"] < timedelta(days=10):
-
-                    print('444444444444444444444444444444444444444')
-
-                    continue
-
-            print('5555555555555555555555555555555555555')
+            # doc = db.pssm.find_one({"_id": seq.id})
+            # if doc and ("pssm" in doc) and doc["pssm"]:
+            #     if NOW - doc["updated_at"] < timedelta(days=10):
+            #         continue
 
             db.pssm.update_one({
                 "_id": seq.id}, {
