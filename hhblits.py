@@ -139,10 +139,10 @@ def _run_hhblits_batched(sequences):
             #     if NOW - doc["updated_at"] < timedelta(days=10):
             #         continue
 
-            db.pssm.update_one({
-                "_id": seq.id}, {
-                '$set': {"updated_at": datetime.utcnow()}
-            }, upsert=True)
+            # db.pssm.update_one({
+            #     "_id": seq.id}, {
+            #     '$set': {"updated_at": datetime.utcnow()}
+            # }, upsert=True)
 
             batch.append(seq)
 
