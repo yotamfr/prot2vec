@@ -122,9 +122,13 @@ def _run_hhblits_batched(sequences):
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
     pbar = tqdm(range(len(records)), desc="sequences processed")
 
+    print('1111111111111111111111111111111')
+
     while records:
         batch = []
         while (len(batch) < batch_size) and (len(records) > 0):
+
+            print('222222222222222222222222222222')
 
             seq = records.pop()
             pbar.update(1)
@@ -133,6 +137,8 @@ def _run_hhblits_batched(sequences):
             if doc and ("pssm" in doc) and doc["pssm"]:
                 if NOW - doc["updated_at"] < timedelta(days=10):
                     continue
+
+            print('333333333333333333333333333333')
 
             db.pssm.update_one({
                 "_id": seq.id}, {
@@ -144,6 +150,8 @@ def _run_hhblits_batched(sequences):
         pwd = os.getcwd()
         os.chdir(out_dir)
 
+        print('44444444444444444444444444444444444')
+
         if len(glob.glob('*.seq')): os.system("rm *.seq")
 
         sequences_fasta = 'batch.fasta'
@@ -153,6 +161,8 @@ def _run_hhblits_batched(sequences):
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
         if len(glob.glob('*.a3m')): os.system("rm *.a3m")
+
+        print('55555555555555555555555555555')
 
         hhblits_cmd = "%s/bin/hhblits -i $file -d ../dbs/%s/%s -oa3m $name.a3m -n 2 -maxfilt %d -mact %s"\
                       % (prefix_hhsuite, uniprot20name, uniprot20name, max_filter, mact)
@@ -168,6 +178,8 @@ def _run_hhblits_batched(sequences):
                     % (prefix_hhsuite, hhfilter_cmd, num_cpu)
             assert os.WEXITSTATUS(os.system(cline)) == 0
 
+        print('666666666666666666666666666666')
+
         suffix = 'fil' if coverage > 0 else 'a3m'
 
         if output_fasta:
@@ -181,6 +193,8 @@ def _run_hhblits_batched(sequences):
                 % (prefix_hhsuite, suffix, reformat_cmd, num_cpu)
         assert os.WEXITSTATUS(os.system(cline)) == 0
 
+        print('77777777777777777777777777777777')
+
         e = ThreadPoolExecutor(num_cpu)
         for (seq, pssm, aln) in e.map(_get_pssm, [seq for seq in batch if os.path.exists("%s.a3m" % seq.id)]):
             db.pssm.update_one({
@@ -192,9 +206,13 @@ def _run_hhblits_batched(sequences):
                          "updated_at": datetime.utcnow()}
             }, upsert=True)
 
+            print('888888888888888888888888888')
+
         if cleanup: os.system("rm ./*")
 
         os.chdir(pwd)
+
+    print('9999999999999999999999999999')
 
     pbar.close()
 
