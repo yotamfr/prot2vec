@@ -231,7 +231,7 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred):
-    return hinge_loss(y_true, y_pred)
+    return np.mean([hinge_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def predict(model, gen_xy, length_xy, classes):
