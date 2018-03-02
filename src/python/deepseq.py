@@ -42,8 +42,8 @@ LR = 0.001
 
 BATCH_SIZE = 32
 
-t0 = datetime(2016, 2, 1, 0, 0)
-t1 = TODAY
+t0 = datetime(2014, 1, 1, 0, 0)
+t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
