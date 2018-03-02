@@ -29,7 +29,7 @@ from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCall
 
 from keras import backend as K
 
-from sklearn.metrics import log_loss
+from sklearn.metrics import log_loss, hinge_loss
 
 import math
 
@@ -230,8 +230,8 @@ def oneminusone2zeroone(vec):
     return np.divide(np.add(np.array(vec), 1), 2)
 
 
-def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE, lossfn=hinge_loss):
+    return batch_size * np.mean([lossfn(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def predict(model, gen_xy, length_xy, classes):
