@@ -156,7 +156,7 @@ def LargeContext(inpt, C=21):
     feats = Dropout(0.2)(feats)
     feats = Conv1D(32 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
     feats = Dropout(0.2)(feats)
-    feats = Conv1D(C, 1, activation='linear', padding='valid')(feats)
+    feats = Conv1D(32 * C, 1, activation='linear', padding='valid', dilation_rate=1)(feats)
     feats = Dropout(0.2)(feats)
     return feats
 
