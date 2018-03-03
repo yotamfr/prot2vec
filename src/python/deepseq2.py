@@ -126,20 +126,21 @@ def step_decay(epoch):
     return lrate
 
 
-def Context(feats, C=100):
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity())(feats)
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity())(feats)
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity(), dilation_rate=2)(feats)
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity(), dilation_rate=4)(feats)
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity(), dilation_rate=8)(feats)
-    feats = Conv1D(C, 3, activation='relu', padding='valid', kernel_initializer=Identity())(feats)
-    feats = Conv1D(C, 1, activation='linear', padding='valid', kernel_initializer=Identity())(feats)
+def Context(feats, C=250):
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=4)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=8)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=16)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Conv1D(C, 1, activation='linear', padding='valid')(feats)
     return feats
 
 
 def Frontend(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=20, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
