@@ -71,7 +71,7 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
         doc["_id"]: doc["sequence"] for doc in s
         if ((doc["_id"] not in pssm_ids)
             or
-            (NOW - pssm_ids[doc["_id"]] > timedelta(days=10)))
+            (NOW - pssm_ids[doc["_id"]] > timedelta(days=15)))
     }
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
