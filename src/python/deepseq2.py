@@ -140,7 +140,7 @@ def Context(feats, C=250):
 
 def LargeContext(inpt, C=21):
 
-    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=20, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(2 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
     feats = Dropout(0.2)(feats)
