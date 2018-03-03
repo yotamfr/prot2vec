@@ -64,10 +64,14 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
     q = {"_id": {"$in": unique(uniprot_ids).tolist()}, "length": is_corret_length}
     s = db.uniprot.find(q)
 
+    pssm_ids = {doc["_id"]: doc["updated_at"] for doc in db.pssm.find({})
+                if (("updated_at" in doc) and ("pssm" in doc) and doc["pssm"])}
+
     seqid2seq = {
         doc["_id"]: doc["sequence"] for doc in s
-        if (("pssm" not in doc) or (not doc["pssm"])
-            or (NOW - doc["updated_at"] > timedelta(days=10)))
+        if ((doc["_id"] not in pssm_ids)
+            or
+            (NOW - pssm_ids[doc["_id"]] > timedelta(days=10)))
     }
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
