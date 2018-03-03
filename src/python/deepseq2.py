@@ -138,9 +138,53 @@ def Context(feats, C=250):
     return feats
 
 
+def Motifs(inpt, C=250):
+
+    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.3)(feats)
+
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=2)(feats)
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=4)(feats)
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=8)(feats)
+
+    feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(C, 1, activation='linear', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.3)(feats)
+
+    return feats
+
+
+def BasicContext(inpt, C=250):
+
+    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=2)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=4)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=8)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=16)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 1, activation='linear', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    return feats
+
+
 def LargeContext(inpt, C=21):
 
-    feats = Embedding(input_dim=26, output_dim=20, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(2 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
     feats = Dropout(0.2)(feats)
@@ -195,6 +239,7 @@ def Classifier(inpt, classes):
     out = GlobalMaxPooling1D()(inpt)
     out = Dense(len(classes), activation='linear')(out)
     out = BatchNormalization()(out)
+    out = Dropout(0.5)(out)
     out = Activation('sigmoid')(out)
     return out
 
@@ -202,7 +247,7 @@ def Classifier(inpt, classes):
 def ModelCNN(classes):
     inp = Input(shape=(None,))
     # out = Classifier(Context(Frontend(inp)), classes)
-    out = Classifier(LargeContext(inp), classes)
+    out = Classifier(Motifs(inp), classes)
     model = Model(inputs=[inp], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
