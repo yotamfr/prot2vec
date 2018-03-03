@@ -138,6 +138,29 @@ def Context(feats, C=250):
     return feats
 
 
+def LargeContext(inpt, C=21):
+
+    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+
+    feats = Conv1D(2 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(2 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(4 * C, 3, activation='relu', padding='valid', dilation_rate=2)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(8 * C, 3, activation='relu', padding='valid', dilation_rate=4)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(16 * C, 3, activation='relu', padding='valid', dilation_rate=8)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(32 * C, 3, activation='relu', padding='valid', dilation_rate=16)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(32 * C, 3, activation='relu', padding='valid', dilation_rate=1)(feats)
+    feats = Dropout(0.2)(feats)
+    feats = Conv1D(C, 1, activation='linear', padding='valid')(feats)
+    feats = Dropout(0.2)(feats)
+    return feats
+
+
 def Frontend(inpt):
 
     feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
@@ -178,7 +201,8 @@ def Classifier(inpt, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(None,))
-    out = Classifier(Context(Frontend(inp)), classes)
+    # out = Classifier(Context(Frontend(inp)), classes)
+    out = Classifier(LargeContext(inp), classes)
     model = Model(inputs=[inp], outputs=[out])
     # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
