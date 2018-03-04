@@ -140,7 +140,7 @@ def Context(feats, C=250):
 
 def Motifs(inpt, C=250):
 
-    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(C, 15, activation='relu', padding='valid', dilation_rate=1)(feats)
     feats = Dropout(0.3)(feats)
