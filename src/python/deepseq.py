@@ -127,14 +127,14 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=5, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
+    # feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    # feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     return feats
