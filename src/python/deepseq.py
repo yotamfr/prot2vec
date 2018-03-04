@@ -131,10 +131,10 @@ def Features(inpt):
 
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    # feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     return feats
@@ -162,7 +162,6 @@ def ModelCNN(classes):
 def batch_generator(gen, normalize=False):
     xByShapes, yByShapes = dict(), dict()
     for _, x, y in gen:
-        # x, y = np.array(x).reshape(1, len(x), 40), zeroone2oneminusone(y)
         if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
         if x.shape in xByShapes:
             xByShapes[x.shape].append(x)
