@@ -144,7 +144,7 @@ def Classifier(inpt, classes):
     out = GlobalMaxPooling1D()(inpt)
     out = Dense(len(classes), activation='linear')(out)
     out = BatchNormalization()(out)
-    out = Dropout(0.5)(out)
+    out = Dropout(0.1)(out)
     out = Activation('sigmoid')(out)
     return out
 
