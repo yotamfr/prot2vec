@@ -101,7 +101,7 @@ class DataStream(object):
         s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
-            if not len(seq) <= MAX_LENGTH:
+            if not MIN_LENGTH // 4 <= len(seq) <= MAX_LENGTH:
                 continue
             y = np.zeros(len(classes))
             for go in onto.propagate(seq2go[k], include_root=False):
