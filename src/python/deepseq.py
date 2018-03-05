@@ -165,7 +165,8 @@ def batch_generator(gen):
     def prepare(batch):
         X, Y = zip(*batch)
         b = max(MIN_LENGTH, max(map(len, X)))
-        return pad_seq(X, b), np.asarray(Y)
+        X = [pad_seq(seq, b) for seq in X]
+        return np.asarray(X), np.asarray(Y)
 
     batch = []
     for _, x, y in gen:
