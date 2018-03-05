@@ -46,7 +46,7 @@ t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
-MIN_LENGTH = 1
+MIN_LENGTH = 100
 
 
 def get_training_and_validation_streams(db, onto, classes, limit=None):
@@ -76,8 +76,8 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
     return stream_trn, stream_tst
 
 
-def pad_seq(seq):
-    seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
+def pad_seq(seq, max_length=MAX_LENGTH):
+    seq += [PAD for _ in range(max_length - len(seq))]
     return np.asarray(seq)
 
 
@@ -101,7 +101,7 @@ class DataStream(object):
         s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
-            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
+            if not len(seq) <= MAX_LENGTH:
                 continue
             y = np.zeros(len(classes))
             for go in onto.propagate(seq2go[k], include_root=False):
@@ -109,8 +109,7 @@ class DataStream(object):
                     continue
                 y[classes.index(go)] = 1
 
-                # x = pad_seq([AA.aa2index[aa] for aa in seq])
-                x = np.asarray([AA.aa2index[aa] for aa in seq])
+                x = [AA.aa2index[aa] for aa in seq]
 
             yield k, x, y
 
@@ -132,11 +131,11 @@ def Features(inpt):
 
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 5, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 5, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 5, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
 
     return feats
@@ -161,24 +160,21 @@ def ModelCNN(classes):
     return model
 
 
-def batch_generator(gen, normalize=False):
-    xByShapes, yByShapes = dict(), dict()
-    for _, x, y in gen:
-        if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
-        if x.shape in xByShapes:
-            xByShapes[x.shape].append(x)
-            yByShapes[x.shape].append(y)
-            X, Y = xByShapes[x.shape], yByShapes[x.shape]
-            if len(X) == BATCH_SIZE:
-                yield np.array(X), np.array(Y)
-                del xByShapes[x.shape]
-                del yByShapes[x.shape]
-        else:
-            xByShapes[x.shape] = [x]
-            yByShapes[x.shape] = [y]
+def batch_generator(gen):
 
-    for X, Y in zip(xByShapes.values(), yByShapes.values()):
-        yield np.array(X), np.array(Y)
+    def prepare(batch):
+        X, Y = zip(*batch)
+        b = max(MIN_LENGTH, max(map(len, X)))
+        return pad_seq(X, b), np.asarray(Y)
+
+    batch = []
+    for _, x, y in gen:
+        if len(batch) == BATCH_SIZE:
+            yield prepare(batch)
+            batch = []
+        batch.append([x, y])
+
+    yield prepare(batch)
 
 
 def add_arguments(parser):
