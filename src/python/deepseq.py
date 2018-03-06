@@ -49,6 +49,26 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 100
 
 
+def get_classes(db, onto):
+
+    q1 = {'DB': 'UniProtKB',
+         'Evidence': {'$in': exp_codes},
+         'Date': {"$lte": t0},
+         'Aspect': ASPECT}
+    q2 = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$gt": t0, "$lte": t1},
+               'Aspect': ASPECT}
+
+    def helper(q):
+        seq2go, _ = GoAnnotationCollectionLoader(
+            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
+        return reduce(lambda x, y: set(onto.propagate(x)) | set(onto.propagate(y)),
+                      seq2go.values(), set())
+
+    return list(helper(q1) | helper(q2))
+
+
 def get_training_and_validation_streams(db, onto, classes, limit=None):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -127,7 +147,7 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=30, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=25, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.2)(feats)
@@ -271,7 +291,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes
+    classes = get_classes(db, onto)
     classes.remove(onto.root)
     assert onto.root not in classes
 
