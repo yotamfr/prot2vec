@@ -127,17 +127,17 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=20, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=25, embeddings_initializer='uniform')(inpt)
 
-    feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 31, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 9, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 9, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 9, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Conv1D(250, 9, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
 
     return feats
@@ -162,7 +162,7 @@ def ModelCNN(classes):
     return model
 
 
-def batch_generator(gen):
+def batch_generator(stream):
 
     def prepare(batch):
         X, Y = zip(*batch)
@@ -171,7 +171,7 @@ def batch_generator(gen):
         return np.asarray(X), np.asarray(Y)
 
     batch = []
-    for _, x, y in gen:
+    for _, x, y in stream:
         if len(batch) == BATCH_SIZE:
             yield prepare(batch)
             batch = []
