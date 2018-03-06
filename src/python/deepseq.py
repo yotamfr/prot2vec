@@ -120,7 +120,7 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = 1.0
+    epochs_drop = 4.0
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
     return lrate
 
@@ -155,9 +155,9 @@ def ModelCNN(classes):
     inp = Input(shape=(None,))
     out = Classifier(Features(inp), classes)
     model = Model(inputs=[inp], outputs=[out])
-    # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='binary_crossentropy', optimizer=adam)
+    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
+    # adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    model.compile(loss='binary_crossentropy', optimizer=sgd)
 
     return model
 
@@ -215,7 +215,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history])
+                  callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
