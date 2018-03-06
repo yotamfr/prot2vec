@@ -135,8 +135,8 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
     # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     # feats = Dropout(0.3)(feats)
 
@@ -214,7 +214,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history, lrate])
+                  callbacks=[history, ])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
