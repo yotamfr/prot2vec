@@ -250,13 +250,10 @@ def predict(model, gen_xy, length_xy, classes):
 
 
 def evaluate(y_true, y_pred, classes):
-
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
-
-    f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
-
-    return calc_loss(y_true, y_pred), f_max
+    prs, rcs, f1s = performance(y_pred, y_true, classes)
+    return calc_loss(y_true, y_pred), prs, rcs, f1s
 
 
 if __name__ == "__main__":
@@ -291,11 +288,13 @@ if __name__ == "__main__":
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
         _, y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
-        loss, f_max = evaluate(y_true, y_pred, classes)
+        loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
+        i = np.argmax(f1s)
 
-        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
+        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
+              % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
 
-        model_str = 'deeperseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model_str = 'deeperseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
