@@ -130,7 +130,7 @@ def Features(inpt):
     feats = Embedding(input_dim=26, output_dim=30, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
+    feats = Dropout(0.1)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.1)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
