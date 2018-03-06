@@ -127,7 +127,7 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=40, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=25, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -137,8 +137,8 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
 
     return feats
 
@@ -280,6 +280,7 @@ if __name__ == "__main__":
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
+
     model.summary()
 
     for epoch in range(args.init_epoch, args.num_epochs):
@@ -292,5 +293,7 @@ if __name__ == "__main__":
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 
-        model_path = 'checkpoints/deeperseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
-        model.save_weights(model_path)
+        model_str = 'deeperseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model.save_weights("checkpoints/%s.hdf5" % model_str)
+        with open("checkpoints/%s.json" % model_str, "w+") as f:
+            f.write(model.to_json())
