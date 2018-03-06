@@ -63,8 +63,10 @@ def get_classes(db, onto):
     def helper(q):
         seq2go, _ = GoAnnotationCollectionLoader(
             db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
-        return reduce(lambda x, y: set(onto.propagate(x)) | set(onto.propagate(y)),
-                      seq2go.values(), set())
+        for i, (k, v) in enumerate(seq2go.items()):
+            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+            seq2go[k] = onto.propagate(v)
+        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
 
     return list(helper(q1) | helper(q2))
 
