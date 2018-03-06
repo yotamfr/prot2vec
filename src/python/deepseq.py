@@ -127,7 +127,7 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=20, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=40, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -155,9 +155,8 @@ def ModelCNN(classes):
     inp = Input(shape=(None,))
     out = Classifier(Features(inp), classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-    # adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='binary_crossentropy', optimizer=sgd)
+    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    model.compile(loss='binary_crossentropy', optimizer=adam)
 
     return model
 
