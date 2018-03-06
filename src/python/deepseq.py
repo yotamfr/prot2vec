@@ -137,8 +137,8 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
+    # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    # feats = Dropout(0.3)(feats)
 
     return feats
 
