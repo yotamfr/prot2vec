@@ -137,8 +137,8 @@ def Features(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
 
     return feats
 
@@ -164,17 +164,17 @@ def ModelCNN(classes):
 def batch_generator(stream):
 
     def prepare(batch):
-        X, Y = zip(*batch)
+        ids, X, Y = zip(*batch)
         b = max(MIN_LENGTH, max(map(len, X)))
         X = [pad_seq(seq, b) for seq in X]
-        return np.asarray(X), np.asarray(Y)
+        return ids, np.asarray(X), np.asarray(Y)
 
     batch = []
-    for _, x, y in stream:
+    for k, x, y in stream:
         if len(batch) == BATCH_SIZE:
             yield prepare(batch)
             batch = []
-        batch.append([x, y])
+        batch.append([k, x, y])
 
     yield prepare(batch)
 
@@ -205,7 +205,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
     pbar = tqdm(total=length_xy)
 
-    for X, Y in gen_xy:
+    for _, X, Y in gen_xy:
         assert len(X) == len(Y)
 
         model.fit(x=X, y=Y,
@@ -237,14 +237,16 @@ def predict(model, gen_xy, length_xy, classes):
     pbar = tqdm(total=length_xy, desc="Predicting...")
     i, m, n = 0, length_xy, len(classes)
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
-    for i, (X, Y) in enumerate(gen_xy):
+    ids = list()
+
+    for i, (k, X, Y) in enumerate(gen_xy):
         assert len(X) == len(Y)
         k = len(Y)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
         pbar.update(k)
     pbar.close()
-    return y_true, y_pred
+    return ids, y_true, y_pred
 
 
 def evaluate(y_true, y_pred, classes):
@@ -288,7 +290,7 @@ if __name__ == "__main__":
         trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
+        _, y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
         loss, f_max = evaluate(y_true, y_pred, classes)
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
