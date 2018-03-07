@@ -151,6 +151,7 @@ def Features(inpt):
 
     feats = Embedding(input_dim=26, output_dim=25, embeddings_initializer='uniform')(inpt)
 
+    feats = Dropout(0.5)(feats)
     feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.2)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
@@ -160,7 +161,6 @@ def Features(inpt):
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
     feats = Dropout(0.2)(feats)
     feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.2)(feats)
 
     return feats
 
@@ -295,6 +295,7 @@ if __name__ == "__main__":
 
     print("Listing Classes...")
     classes = get_classes(db, onto)
+    # classes = onto.classes
     classes.remove(onto.root)
     assert onto.root not in classes
 
@@ -317,7 +318,7 @@ if __name__ == "__main__":
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
 
-        model_str = 'deeperseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f1s[i])
+        model_str = 'deeperseq-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
