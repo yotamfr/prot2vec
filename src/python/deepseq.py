@@ -40,7 +40,7 @@ K.set_session(sess)
 
 LR = 0.001
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
@@ -153,11 +153,11 @@ def Features(inpt):
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(750, 15, activation='relu', padding='valid')(feats)
+    feats = Conv1D(750, 30, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 1, activation='linear', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
 
