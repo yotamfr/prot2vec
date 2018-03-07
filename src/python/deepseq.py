@@ -40,7 +40,7 @@ K.set_session(sess)
 
 LR = 0.001
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
@@ -99,7 +99,8 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
 
 
 def pad_seq(seq, max_length=MAX_LENGTH):
-    seq += [PAD for _ in range(max_length - len(seq))]
+    delta = max_length - len(seq)
+    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
     return np.asarray(seq)
 
 
@@ -149,18 +150,14 @@ def step_decay(epoch):
 
 def Features(inpt):
 
-    feats = Embedding(input_dim=26, output_dim=25, embeddings_initializer='uniform')(inpt)
+    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
-    feats = Dropout(0.5)(feats)
-    feats = Conv1D(250, 30, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.2)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.2)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.2)(feats)
-    feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.2)(feats)
-    # feats = Conv1D(250, 10, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
 
     return feats
 
