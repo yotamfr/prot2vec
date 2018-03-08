@@ -153,7 +153,7 @@ def Motifs(inpt, motif_size=15):
 
     feats = Conv1D(250, motif_size, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 3, activation='relu', padding='valid')(feats)
+    feats = Conv1D(100, 5, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
 
     return feats
@@ -180,10 +180,10 @@ def Classifier(feats, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(None,))
-    motifs09 = GlobalMaxPooling1D()(Motifs(inp, 9))
-    motifs15 = GlobalMaxPooling1D()(Motifs(inp, 15))
-    motifs30 = GlobalMaxPooling1D()(Motifs(inp, 30))
-    features = Concatenate()([motifs09, motifs15, motifs30])
+    # motifs09 = GlobalAveragePooling1D()(Motifs(inp, 9))
+    motifs15 = GlobalAveragePooling1D()(Motifs(inp, 15))
+    motifs30 = GlobalAveragePooling1D()(Motifs(inp, 30))
+    features = Concatenate()([motifs15, motifs30])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
@@ -261,7 +261,8 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    # return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    return log_loss(y_true, y_pred)
 
 
 def predict(model, gen_xy, length_xy, classes):
@@ -329,7 +330,7 @@ if __name__ == "__main__":
 
         if f1s[i] < 0.5: continue
 
-        model_str = 'deeperseq-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
+        model_str = 'motifnet-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
