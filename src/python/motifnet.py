@@ -143,7 +143,7 @@ def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
     epochs_drop = 2.0
-    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
+    lrate = max(0.001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
     # print("lrate <- %.4f" % lrate)
     return lrate
 
@@ -170,10 +170,10 @@ def Classifier(inp1d, classes):
 
 def MotifNet(classes):
     inp = Input(shape=(None,))
-    motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
+    # motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
     feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 5))
-    features = Concatenate()([motifs03, feats15])
-    out = Classifier(features, classes)
+    # features = Concatenate()([motifs03, feats15])
+    out = Classifier(feats15, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd)
