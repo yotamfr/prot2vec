@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.1
+LR = 0.5
 
 BATCH_SIZE = 32
 
@@ -143,9 +143,9 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = 1.0
+    epochs_drop = 2.0
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
-    print("lrate <- %.4f" % lrate)
+    # print("lrate <- %.4f" % lrate)
     return lrate
 
 
