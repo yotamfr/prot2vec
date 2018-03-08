@@ -168,12 +168,24 @@ def Classifier(inp1d, classes):
     return out
 
 
-def MotifNet(classes):
+def DeepSeq(classes):
     inp = Input(shape=(None,))
     # motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
     feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 3))
     # features = Concatenate()([motifs03, feats15])
     out = Classifier(feats15, classes)
+    model = Model(inputs=[inp], outputs=[out])
+    sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+    model.compile(loss='binary_crossentropy', optimizer=sgd)
+    return model
+
+
+def MotifNet(classes):
+    inp = Input(shape=(None,))
+    feats05 = GlobalMaxPooling1D()(Features(Motifs(inp, 5), 3))
+    feats10 = GlobalMaxPooling1D()(Features(Motifs(inp, 10), 3))
+    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 5))
+    out = Concatenate()([feats05, feats10, feats15])
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd)
@@ -214,12 +226,12 @@ def add_arguments(parser):
 class LossHistory(Callback):
     def __init__(self):
         self.losses = []
-        self.max_size = 1000
+        self.max_size = 200
 
     def on_batch_end(self, batch, logs={}):
         self.losses.insert(0, logs.get('loss'))
-        while len(self.losses) > self.max_size:
-            self.losses.pop()
+        # while len(self.losses) > self.max_size:
+        #     self.losses.pop()
 
 
 def train(model, gen_xy, length_xy, epoch, num_epochs,
