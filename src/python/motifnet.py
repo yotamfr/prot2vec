@@ -144,7 +144,7 @@ def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
     epochs_drop = 1.0
-    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
+    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
     print("lrate <- %.4f" % lrate)
     return lrate
 
