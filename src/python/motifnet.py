@@ -218,7 +218,7 @@ class LossHistory(Callback):
 
     def on_batch_end(self, batch, logs={}):
         self.losses.insert(0, logs.get('loss'))
-        if len(self.losses) >= self.max_size:
+        while len(self.losses) > self.max_size:
             self.losses.pop()
 
 
