@@ -37,7 +37,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.1
+LR = 0.03
 
 BATCH_SIZE = 32
 
