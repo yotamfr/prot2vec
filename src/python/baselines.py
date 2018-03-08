@@ -30,7 +30,7 @@ import argparse
 ASPECT = 'F'
 ONTO = None
 PRIOR = None
-THRESHOLDS = np.arange(0.1, 1, 0.1)
+THRESHOLDS = np.arange(.05, 1, .05)
 
 t0 = datetime(2016, 2, 1, 0, 0)
 t1 = TODAY
