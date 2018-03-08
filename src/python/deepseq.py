@@ -153,7 +153,7 @@ def Motifs(inpt, motif_size=15):
 
     feats = Conv1D(250, motif_size, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 5, activation='relu', padding='valid')(feats)
+    feats = Conv1D(100, 3, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
 
     return feats
@@ -180,10 +180,10 @@ def Classifier(feats, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(None,))
-    # motifs09 = GlobalMaxPooling1D()(Motifs(inp, 9))
+    motifs09 = GlobalMaxPooling1D()(Motifs(inp, 9))
     motifs15 = GlobalMaxPooling1D()(Motifs(inp, 15))
     motifs30 = GlobalMaxPooling1D()(Motifs(inp, 30))
-    features = Concatenate()([motifs15, motifs30])
+    features = Concatenate()([motifs09, motifs15, motifs30])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
