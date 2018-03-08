@@ -148,14 +148,19 @@ def step_decay(epoch):
     return lrate
 
 
-def Features(inpt):
-
+def Motifs(inpt, size):
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
-    # feats = Conv1D(1000, 15, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
-    # feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    # feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, size, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 3, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+
+    return feats
+
+
+def Features(inpt):
+    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
 
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -165,9 +170,9 @@ def Features(inpt):
     return feats
 
 
-def Classifier(inpt, classes):
-    out = GlobalMaxPooling1D()(inpt)
-    out = Dense(len(classes), activation='linear')(out)
+def Classifier(feats, classes):
+    out = feats
+    out = Dense(len(classes))(out)
     out = BatchNormalization()(out)
     out = Activation('sigmoid')(out)
     return out
@@ -175,7 +180,10 @@ def Classifier(inpt, classes):
 
 def ModelCNN(classes):
     inp = Input(shape=(None,))
-    out = Classifier(Features(inp), classes)
+    motifs09 = GlobalMaxPooling1D()(Motifs(inp, 9))
+    motifs27 = GlobalMaxPooling1D()(Motifs(inp, 27))
+    features = Concatenate()([motifs09, motifs27])
+    out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
     model.compile(loss='binary_crossentropy', optimizer=adam)
@@ -317,6 +325,8 @@ if __name__ == "__main__":
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
+
+        if f1s[i] < 0.5: continue
 
         model_str = 'deeperseq-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
