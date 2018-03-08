@@ -214,9 +214,12 @@ def add_arguments(parser):
 class LossHistory(Callback):
     def __init__(self):
         self.losses = []
+        self.max_size = 1000
 
     def on_batch_end(self, batch, logs={}):
-        self.losses.append(logs.get('loss'))
+        self.losses.insert(0, logs.get('loss'))
+        if len(self.losses) >= self.max_size:
+            self.losses.pop()
 
 
 def train(model, gen_xy, length_xy, epoch, num_epochs,
