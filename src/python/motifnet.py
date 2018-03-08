@@ -26,7 +26,6 @@ from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 # from keras.losses import hinge, binary_crossentropy
-
 from keras import backend as K
 
 from sklearn.metrics import log_loss
@@ -49,15 +48,15 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 100
 
 
-def get_classes(db, onto):
+def get_classes(db, onto, start=t0, end=t1):
 
     q1 = {'DB': 'UniProtKB',
          'Evidence': {'$in': exp_codes},
-         'Date': {"$lte": t0},
+         'Date': {"$lte": start},
          'Aspect': ASPECT}
     q2 = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": t0, "$lte": t1},
+               'Date': {"$gt": start, "$lte": end},
                'Aspect': ASPECT}
 
     def helper(q):
@@ -71,10 +70,10 @@ def get_classes(db, onto):
     return list(helper(q1) | helper(q2))
 
 
-def get_training_and_validation_streams(db, onto, classes, limit=None):
+def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0, end=t1):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$lte": t0},
+               'Date': {"$lte": start},
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
@@ -85,7 +84,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": t0, "$lte": t1},
+               'Date': {"$gt": start, "$lte": end},
                'Aspect': ASPECT}
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
@@ -176,10 +175,9 @@ def MotifNet(classes):
     features = Concatenate()([motifs03, feats15])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
-    # adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd)
-
+    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    # sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+    model.compile(loss='binary_crossentropy', optimizer=adam)
     return model
 
 
@@ -252,8 +250,8 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
-    # return log_loss(y_true, y_pred)
+    # return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    return log_loss(y_true, y_pred)
 
 
 def predict(model, gen_xy, length_xy, classes):
