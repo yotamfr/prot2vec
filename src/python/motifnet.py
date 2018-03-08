@@ -170,9 +170,7 @@ def Classifier(inp1d, classes):
 
 def DeepSeq(classes):
     inp = Input(shape=(None,))
-    # motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
     feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 3))
-    # features = Concatenate()([motifs03, feats15])
     out = Classifier(feats15, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
@@ -184,8 +182,10 @@ def MotifNet(classes):
     inp = Input(shape=(None,))
     feats05 = GlobalMaxPooling1D()(Features(Motifs(inp, 5), 3))
     feats10 = GlobalMaxPooling1D()(Features(Motifs(inp, 10), 3))
-    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 5))
-    out = Concatenate()([feats05, feats10, feats15])
+    feats18 = GlobalMaxPooling1D()(Features(Motifs(inp, 18), 5))
+    feats36 = GlobalMaxPooling1D()(Features(Motifs(inp, 36), 9))
+    features = Concatenate()([feats05, feats10, feats18, feats36])
+    out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
     model.compile(loss='binary_crossentropy', optimizer=sgd)
