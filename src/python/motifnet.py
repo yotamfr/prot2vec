@@ -171,7 +171,7 @@ def Classifier(inp1d, classes):
 def MotifNet(classes):
     inp = Input(shape=(None,))
     # motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
-    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 5))
+    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 3))
     # features = Concatenate()([motifs03, feats15])
     out = Classifier(feats15, classes)
     model = Model(inputs=[inp], outputs=[out])
