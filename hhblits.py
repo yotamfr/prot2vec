@@ -333,7 +333,7 @@ def add_arguments(parser):
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
     parser.add_argument('--keep_files', action='store_true', default=False,
                         help="Whether to keep intermediate files.")
-    parser.add_argument('--dd', action='store_true', default=False,
+    parser.add_argument('--dd', type=int, default=180,
                         help="How many days before records are considered obsolete?")
 
 
