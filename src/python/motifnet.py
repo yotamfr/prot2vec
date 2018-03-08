@@ -37,7 +37,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.03
+LR = 1.0
 
 BATCH_SIZE = 32
 
@@ -175,9 +175,8 @@ def MotifNet(classes):
     features = Concatenate()([motifs03, feats15])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
-    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    # sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=adam)
+    sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+    model.compile(loss='binary_crossentropy', optimizer=sgd)
     return model
 
 
@@ -230,7 +229,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=1,
+                  epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
