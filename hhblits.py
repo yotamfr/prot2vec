@@ -54,7 +54,7 @@ def prepare_uniprot20():
         os.system("tar -xvzf dbs/uniprot20_2016_02.tgz -C dbs")
 
 
-def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
+def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000, deltadays=180):
     q = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}}
     s = db.goa_uniprot.find(q)
     if limit: s = s.limit(limit)
@@ -71,7 +71,7 @@ def _get_annotated_uniprot(db, limit, min_length=1, max_length=3000):
         doc["_id"]: doc["sequence"] for doc in s
         if ((doc["_id"] not in pssm_ids)
             or
-            (NOW - pssm_ids[doc["_id"]] > timedelta(days=15)))
+            (NOW - pssm_ids[doc["_id"]] > timedelta(days=deltadays)))
     }
 
     return sorted(((k, v) for k, v in seqid2seq.items()), key=lambda pair: -len(pair[1]))
@@ -333,6 +333,8 @@ def add_arguments(parser):
                         help="Set the Max ACC (mact) threshold (for the alignment algorithm).")
     parser.add_argument('--keep_files', action='store_true', default=False,
                         help="Whether to keep intermediate files.")
+    parser.add_argument('--dd', action='store_true', default=False,
+                        help="How many days before records are considered obsolete?")
 
 
 if __name__ == "__main__":
@@ -362,6 +364,6 @@ if __name__ == "__main__":
 
     db.pssm.create_index("updated_at")
 
-    seqs = _get_annotated_uniprot(db, lim)
+    seqs = _get_annotated_uniprot(db, lim, deltadays=args.dd)
 
     _run_hhblits_batched(seqs)
