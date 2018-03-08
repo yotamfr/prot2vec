@@ -37,7 +37,8 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 1.0
+# LR = 1.0
+LR = 0.03
 
 BATCH_SIZE = 32
 
@@ -142,7 +143,7 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = 10.0
+    epochs_drop = 40.0
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
     # print("lrate <- %.4f" % lrate)
     return lrate
@@ -155,8 +156,8 @@ def Motifs(inpt, filter_size=15, num_channels=250):
     return motifs
 
 
-def Features(motifs, filter_size=5, num_channels=100):
-    feats = Conv1D(num_channels, filter_size, activation='relu', padding='valid')(motifs)
+def Features(motifs, filter_size=5, dilation=1, num_channels=100):
+    feats = Conv1D(num_channels, filter_size, dilation_rate=dilation, activation='relu')(motifs)
     feats = Dropout(0.3)(feats)
     return feats
 
@@ -170,7 +171,7 @@ def Classifier(inp1d, classes):
 
 def DeepSeq(classes):
     inp = Input(shape=(None,))
-    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 3))
+    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 15))
     out = Classifier(feats15, classes)
     model = Model(inputs=[inp], outputs=[out])
     sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
@@ -180,15 +181,15 @@ def DeepSeq(classes):
 
 def MotifNet(classes):
     inp = Input(shape=(None,))
-    feats05 = GlobalMaxPooling1D()(Features(Motifs(inp, 5), 3))
-    feats10 = GlobalMaxPooling1D()(Features(Motifs(inp, 10), 3))
-    feats18 = GlobalMaxPooling1D()(Features(Motifs(inp, 18), 5))
-    feats36 = GlobalMaxPooling1D()(Features(Motifs(inp, 36), 9))
-    features = Concatenate()([feats05, feats10, feats18, feats36])
+    feats03 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 3), 3, 2), 3, 4))
+    feats09 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 9), 9), 9))
+    feats27 = GlobalMaxPooling1D()(Features(Motifs(inp, 27), 27))
+    features = Concatenate()([feats03, feats09, feats27])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd)
+    # sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    model.compile(loss='binary_crossentropy', optimizer=adam)
     return model
 
 
@@ -215,6 +216,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB"),
     parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq'],
+                        default="deepseq", help="Specify the model arch.")
     parser.add_argument("--init_epoch", type=int, default=0,
                         help="Which epoch to start training the model?")
     parser.add_argument("--num_epochs", type=int, default=200,
