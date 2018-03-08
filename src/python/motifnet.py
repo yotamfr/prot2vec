@@ -37,8 +37,8 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-# LR = 1.0
 LR = 0.03
+EPOCH_DROP = 4.0
 
 BATCH_SIZE = 32
 
@@ -143,7 +143,7 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = 40.0
+    epochs_drop = EPOCH_DROP
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
     # print("lrate <- %.4f" % lrate)
     return lrate
@@ -169,17 +169,16 @@ def Classifier(inp1d, classes):
     return out
 
 
-def DeepSeq(classes):
+def DeepSeq(classes, opt):
     inp = Input(shape=(None,))
     feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 15))
     out = Classifier(feats15, classes)
     model = Model(inputs=[inp], outputs=[out])
-    sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd)
+    model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
-def MotifNet(classes):
+def MotifNet(classes, opt):
     inp = Input(shape=(None,))
     feats03 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 3), 3, 2), 3, 4))
     feats09 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 9), 9), 9))
@@ -187,9 +186,7 @@ def MotifNet(classes):
     features = Concatenate()([feats03, feats09, feats27])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
-    # sgd = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='binary_crossentropy', optimizer=adam)
+    model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
@@ -218,6 +215,8 @@ def add_arguments(parser):
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq'],
                         default="deepseq", help="Specify the model arch.")
+    parser.add_argument("--opt", type=str, choices=['sgd', 'adam'],
+                        default="adam", help="Specify the model optimizer.")
     parser.add_argument("--init_epoch", type=int, default=0,
                         help="Which epoch to start training the model?")
     parser.add_argument("--num_epochs", type=int, default=200,
@@ -316,7 +315,15 @@ if __name__ == "__main__":
     classes.remove(onto.root)
     assert onto.root not in classes
 
-    model = MotifNet(classes)
+    if args.opt == "adam":
+        LR, EPOCH_DROP = 0.03, 4.0
+        opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    else:
+        LR, EPOCH_DROP = 1.0, 40.0
+        opt = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+
+    model = MotifNet(classes, opt) if args.arch == "motifnet" else DeepSeq(classes, opt)
+
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
