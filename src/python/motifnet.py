@@ -216,7 +216,6 @@ class LossHistory(Callback):
         self.losses = []
 
     def on_batch_end(self, batch, logs={}):
-        print(logs.get('loss'))
         self.losses.append(logs.get('loss'))
 
 
@@ -250,7 +249,8 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
+    # return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
+    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
     # return log_loss(y_true, y_pred, normalize=True)
 
 
