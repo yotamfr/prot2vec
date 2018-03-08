@@ -232,7 +232,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=num_epochs,
+                  epochs=1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
