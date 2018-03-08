@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.001
+LR = 0.1
 
 BATCH_SIZE = 32
 
@@ -143,51 +143,42 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = 4.0
+    epochs_drop = 1.0
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
+    print("lrate <- %.4f" % lrate)
     return lrate
 
 
-def Motifs(inpt, motif_size=15):
-    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+def Motifs(inpt, filter_size=15, num_channels=250):
+    motifs = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    motifs = Conv1D(num_channels, filter_size, activation='relu', padding='valid')(motifs)
+    motifs = Dropout(0.3)(motifs)
+    return motifs
 
-    feats = Conv1D(250, motif_size, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 5, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
 
+def Features(motifs, filter_size=5, num_channels=100):
+    feats = Conv1D(num_channels, filter_size, activation='relu', padding='valid')(motifs)
+    feats = Dropout(0.3)(feats)
     return feats
 
 
-def Features(inpt):
-    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 5, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-
-    return feats
-
-
-def Classifier(feats, classes):
-    out = feats
-    out = Dense(len(classes))(out)
+def Classifier(inp1d, classes):
+    out = Dense(len(classes))(inp1d)
     out = BatchNormalization()(out)
     out = Activation('sigmoid')(out)
     return out
 
 
-def ModelCNN(classes):
+def MotifNet(classes):
     inp = Input(shape=(None,))
-    # motifs09 = GlobalAveragePooling1D()(Motifs(inp, 9))
-    motifs15 = GlobalAveragePooling1D()(Motifs(inp, 15))
-    motifs30 = GlobalAveragePooling1D()(Motifs(inp, 30))
-    features = Concatenate()([motifs15, motifs30])
+    motifs03 = GlobalMaxPooling1D()(Motifs(inp, 3, 100))
+    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 5))
+    features = Concatenate()([motifs03, feats15])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
-    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='binary_crossentropy', optimizer=adam)
+    # adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
+    model.compile(loss='binary_crossentropy', optimizer=sgd)
 
     return model
 
@@ -245,7 +236,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history, ])
+                  callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
@@ -261,8 +252,8 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    # return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
-    return log_loss(y_true, y_pred)
+    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    # return log_loss(y_true, y_pred)
 
 
 def predict(model, gen_xy, length_xy, classes):
@@ -309,7 +300,7 @@ if __name__ == "__main__":
     classes.remove(onto.root)
     assert onto.root not in classes
 
-    model = ModelCNN(classes)
+    model = MotifNet(classes)
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
@@ -330,7 +321,7 @@ if __name__ == "__main__":
 
         if f1s[i] < 0.5: continue
 
-        model_str = 'motifnet-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
+        model_str = 'themenet-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
