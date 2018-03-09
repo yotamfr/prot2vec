@@ -216,10 +216,8 @@ def MotifNet(classes, opt):
 
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
-    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = Inception(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Inception(feats)
+    emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Inception(Inception(Inception(emb)))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
