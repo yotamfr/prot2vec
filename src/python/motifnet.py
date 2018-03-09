@@ -170,9 +170,17 @@ def Classifier(inp1d, classes):
 
 
 def DeepSeq(classes, opt):
-    inp = Input(shape=(None,))
-    feats15 = GlobalMaxPooling1D()(Features(Motifs(inp, 15), 15))
-    out = Classifier(feats15, classes)
+    inpt = Input(shape=(None,))
+    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inp], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
@@ -342,9 +350,9 @@ if __name__ == "__main__":
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
 
-        if f1s[i] < 0.5: continue
+        if f1s[i] > 0.5: continue
 
-        model_str = 'themenet-%d-%.5f-%.2f' % (epoch + 1, loss, f1s[i])
+        model_str = '%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
