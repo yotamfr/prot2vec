@@ -169,23 +169,25 @@ def Classifier(inp1d, classes):
     return out
 
 
-def Inception(inpt):
+def Inception(inpt, num_channels=64):
 
-    tower_0 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
-    tower_1 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
-    tower_1 = Conv1D(64, 6, padding='same', activation='relu')(tower_1)
+    tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
 
-    tower_2 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
-    tower_2 = Conv1D(64, 10, padding='same', activation='relu')(tower_2)
+    tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
 
-    tower_3 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
-    tower_3 = Conv1D(64, 15, padding='same', activation='relu')(tower_3)
+    tower_3 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_3 = Conv1D(num_channels, 15, padding='same', activation='relu')(tower_3)
 
-    tower_4 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
-    tower_4 = Conv1D(64, 30, padding='same', activation='relu')(tower_4)
+    # tower_4 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    # tower_4 = Conv1D(num_channels, 30, padding='same', activation='relu')(tower_4)
 
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3, tower_4])
+    # return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3, tower_4])
+    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3])
+
 
 
 def DeepSeq(classes, opt):
