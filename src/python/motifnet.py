@@ -37,8 +37,8 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.03
-EPOCH_DROP = 4.0
+LR = 0.01
+EPOCH_DROP = 1.0
 
 BATCH_SIZE = 32
 
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     if args.opt == "adam":
-        LR, EPOCH_DROP = 0.03, 4.0
+        LR, EPOCH_DROP = 0.01, 1.0
         opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
     else:
         LR, EPOCH_DROP = 1.0, 40.0
