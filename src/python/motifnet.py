@@ -245,7 +245,7 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB"),
     parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
-    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq'],
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq', 'inception'],
                         default="deepseq", help="Specify the model arch.")
     parser.add_argument("--opt", type=str, choices=['sgd', 'adam'],
                         default="adam", help="Specify the model optimizer.")
@@ -353,7 +353,7 @@ if __name__ == "__main__":
     else:
         LR, EPOCH_DROP = 1.0, 40.0
         opt = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-    model
+
     if args.arch == "motifnet":
         model = MotifNet(classes, opt)
     elif args.arch == "deepseq":
