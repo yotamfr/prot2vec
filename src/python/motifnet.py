@@ -179,10 +179,7 @@ def Inception(inpt, tower1=6, tower2=10):
     tower_2 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
     tower_2 = Conv1D(64, tower2, padding='same', activation='relu')(tower_2)
 
-    tower_3 = MaxPooling1D(3, strides=1, padding='same')(inpt)
-    tower_3 = Conv1D(64, 1, padding='same', activation='relu')(tower_3)
-
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3])
+    return Concatenate(axis=2)([tower_0, tower_1, tower_2])
 
 
 def DeepSeq(classes, opt):
