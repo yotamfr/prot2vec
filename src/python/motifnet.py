@@ -46,7 +46,7 @@ t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
-MIN_LENGTH = 100
+MIN_LENGTH = 1
 
 
 def get_classes(db, onto, start=t0, end=t1):
@@ -100,7 +100,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
 def pad_seq(seq, max_length=MAX_LENGTH):
     delta = max_length - len(seq)
-    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
+    seq += [PAD for _ in range(delta)]
     return np.asarray(seq)
 
 
@@ -124,7 +124,7 @@ class DataStream(object):
         s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
-            if not MIN_LENGTH // 4 <= len(seq) <= MAX_LENGTH:
+            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
             y = np.zeros(len(classes))
             for go in onto.propagate(seq2go[k], include_root=False):
@@ -215,6 +215,8 @@ def MotifNet(classes, opt):
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
     img = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Conv1D(192, 15, strides=3, activation='relu')(img)
+    feats = Dropout(0.3)(feats)
     feats = Inception(Inception(img))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
@@ -226,7 +228,7 @@ def batch_generator(stream):
 
     def prepare(batch):
         ids, X, Y = zip(*batch)
-        b = max(MIN_LENGTH, max(map(len, X)))
+        b = max(MIN_LENGTH * 100, max(map(len, X)))
         X = [pad_seq(seq, b) for seq in X]
         return ids, np.asarray(X), np.asarray(Y)
 
@@ -379,7 +381,7 @@ if __name__ == "__main__":
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
 
-        if f1s[i] > 0.5: continue
+        if f1s[i] < 0.5: continue
 
         model_str = '%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)

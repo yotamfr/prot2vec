@@ -340,7 +340,7 @@ def precision(tau, predictions, targets, classes=None):
 
     P, T = get_P_and_T(tau, predictions, targets, classes)
 
-    if len(P) == 0: return 1.0
+    if len(P) == 0: return 0.0
 
     total = sum([len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)])
     return total / len(P)
