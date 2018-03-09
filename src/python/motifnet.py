@@ -182,12 +182,10 @@ def Inception(inpt, num_channels=64):
     tower_3 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_3 = Conv1D(num_channels, 15, padding='same', activation='relu')(tower_3)
 
-    # tower_4 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    # tower_4 = Conv1D(num_channels, 30, padding='same', activation='relu')(tower_4)
+    tower_4 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_4 = Conv1D(num_channels, 30, padding='same', activation='relu')(tower_4)
 
-    # return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3, tower_4])
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3])
-
+    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3, tower_4])
 
 
 def DeepSeq(classes, opt):
