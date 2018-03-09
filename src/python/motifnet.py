@@ -181,7 +181,7 @@ def DeepSeq(classes, opt):
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
-    model = Model(inputs=[inp], outputs=[out])
+    model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
