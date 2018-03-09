@@ -294,5 +294,7 @@ if __name__ == "__main__":
 
         print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 
-        model_path = 'checkpoints/deep-seq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model_path = 'checkpoints/deepseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
         model.save_weights(model_path)
+        with open(model_path, "w+") as f:
+            f.write(model.to_json())
