@@ -22,7 +22,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
-from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
+from keras.layers import MaxPooling2D, MaxPooling1D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 # from keras.losses import hinge, binary_crossentropy
@@ -169,6 +169,20 @@ def Classifier(inp1d, classes):
     return out
 
 
+def Inception(inpt, tower1=6, tower2=10):
+
+    tower_1 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(64, tower1, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(64, tower2, padding='same', activation='relu')(tower_2)
+
+    # tower_3 = MaxPooling1D(3, strides=1, padding='same')(inpt)
+    # tower_3 = Conv1D(64, 1, padding='same', activation='relu')(tower_3)
+
+    return Concatenate(axis=1)([tower_1, tower_2])
+
+
 def DeepSeq(classes, opt):
     inpt = Input(shape=(None,))
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
@@ -194,6 +208,16 @@ def MotifNet(classes, opt):
     features = Concatenate()([feats03, feats09, feats27])
     out = Classifier(features, classes)
     model = Model(inputs=[inp], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
+    return model
+
+
+def ProteinInception(classes, opt):
+    inpt = Input(shape=(None,))
+    img = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Inception(Inception(img))
+    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
@@ -329,8 +353,13 @@ if __name__ == "__main__":
     else:
         LR, EPOCH_DROP = 1.0, 40.0
         opt = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
-
-    model = MotifNet(classes, opt) if args.arch == "motifnet" else DeepSeq(classes, opt)
+    model
+    if args.arch == "motifnet":
+        model = MotifNet(classes, opt)
+    elif args.arch == "deepseq":
+        model = DeepSeq(classes, opt)
+    elif args.arch == "inception":
+        model = ProteinInception(classes, opt)
 
     if args.resume:
         model.load_weights(args.resume)
