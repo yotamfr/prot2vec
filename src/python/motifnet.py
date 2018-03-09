@@ -219,7 +219,7 @@ def ProteinInception(classes, opt):
     img = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     # feats = Conv1D(192, 15, strides=3, activation='relu')(img)
     # feats = Dropout(0.3)(feats)
-    feats = Inception(img)
+    feats = Inception(Inception(img))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
