@@ -235,7 +235,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
                   epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
-                  initial_epoch=num_epochs,
+                  initial_epoch=epoch,
                   callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
