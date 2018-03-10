@@ -46,7 +46,7 @@ t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
-MIN_LENGTH = 100
+MIN_LENGTH = 1
 
 
 def get_classes(db, onto, start=t0, end=t1):
@@ -124,7 +124,7 @@ class DataStream(object):
         s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
-            if not MIN_LENGTH // 4 <= len(seq) <= MAX_LENGTH:
+            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
             y = np.zeros(len(classes))
             for go in onto.propagate(seq2go[k], include_root=False):
@@ -226,7 +226,7 @@ def batch_generator(stream):
 
     def prepare(batch):
         ids, X, Y = zip(*batch)
-        b = max(MIN_LENGTH, max(map(len, X)))
+        b = max(map(len, X)) + 100
         X = [pad_seq(seq, b) for seq in X]
         return ids, np.asarray(X), np.asarray(Y)
 
