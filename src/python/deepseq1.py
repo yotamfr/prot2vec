@@ -29,7 +29,7 @@ from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCall
 
 from keras import backend as K
 
-from sklearn.metrics import log_loss, hinge_loss
+from sklearn.metrics import log_loss
 
 import math
 
@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.001
+LR = 0.01
 
 BATCH_SIZE = 32
 
@@ -47,6 +47,28 @@ t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
+
+
+def get_classes(db, onto, start=t0, end=t1):
+
+    q1 = {'DB': 'UniProtKB',
+         'Evidence': {'$in': exp_codes},
+         'Date': {"$lte": start},
+         'Aspect': ASPECT}
+    q2 = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$gt": start, "$lte": end},
+               'Aspect': ASPECT}
+
+    def helper(q):
+        seq2go, _ = GoAnnotationCollectionLoader(
+            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
+        for i, (k, v) in enumerate(seq2go.items()):
+            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+            seq2go[k] = onto.propagate(v)
+        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
+
+    return list(helper(q1) | helper(q2))
 
 
 def get_training_and_validation_streams(db, onto, classes, limit=None):
@@ -145,7 +167,7 @@ def Classifier(inpt, classes):
     out = inpt
     out = Dense(len(classes), activation='linear')(out)
     out = BatchNormalization()(out)
-    out = Activation('tanh')(out)
+    out = Activation('sigmoid')(out)
     return out
 
 
@@ -153,31 +175,34 @@ def ModelCNN(classes):
     inp = Input(shape=(None,))
     out = Classifier(Features(inp), classes)
     model = Model(inputs=[inp], outputs=[out])
-    # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
     adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='hinge', optimizer=adam)
+    model.compile(loss='binary_crossentropy', optimizer=adam)
 
     return model
 
 
-def batch_generator(gen, normalize=False):
-    xByShapes, yByShapes = dict(), dict()
-    for _, x, y in gen:
-        if normalize: x = np.divide(np.add(x, -np.mean(x)), np.std(x))
-        if x.shape in xByShapes:
-            xByShapes[x.shape].append(x)
-            yByShapes[x.shape].append(y)
-            X, Y = xByShapes[x.shape], yByShapes[x.shape]
-            if len(X) == BATCH_SIZE:
-                yield np.array(X), np.array(Y)
-                del xByShapes[x.shape]
-                del yByShapes[x.shape]
-        else:
-            xByShapes[x.shape] = [x]
-            yByShapes[x.shape] = [y]
+def batch_generator(stream):
 
-    for X, Y in zip(xByShapes.values(), yByShapes.values()):
-        yield np.array(X), np.array(Y)
+    def prepare(batch):
+        ids, X, Y = zip(*batch)
+        b = max(MIN_LENGTH * 100, max(map(len, X)))
+        X = [pad_seq(seq, b) for seq in X]
+        return ids, np.asarray(X), np.asarray(Y)
+
+    batch = []
+    for k, x, y in stream:
+        if len(batch) == BATCH_SIZE:
+            yield prepare(batch)
+            batch = []
+        batch.append([k, x, y])
+
+    yield prepare(batch)
+
+
+def pad_seq(seq, max_length=MAX_LENGTH):
+    delta = max_length - len(seq)
+    seq += [PAD for _ in range(delta)]
+    return np.asarray(seq)
 
 
 def add_arguments(parser):
@@ -202,20 +227,21 @@ class LossHistory(Callback):
 
 
 def train(model, gen_xy, length_xy, epoch, num_epochs,
-          history=LossHistory(), lrate=LearningRateScheduler(step_decay)):
+          history=LossHistory(),
+          lrate=LearningRateScheduler(step_decay)):
 
     pbar = tqdm(total=length_xy)
 
-    for X, Y in gen_xy:
+    for _, X, Y in gen_xy:
         assert len(X) == len(Y)
 
-        model.fit(x=X, y=zeroone2oneminusone(Y),
+        model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=num_epochs,
+                  epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history])
+                  callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
@@ -230,8 +256,8 @@ def oneminusone2zeroone(vec):
     return np.divide(np.add(np.array(vec), 1), 2)
 
 
-def calc_loss(y_true, y_pred):
-    return np.mean([hinge_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
+    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def predict(model, gen_xy, length_xy, classes):
@@ -249,14 +275,10 @@ def predict(model, gen_xy, length_xy, classes):
 
 
 def evaluate(y_true, y_pred, classes):
-    y_pred = oneminusone2zeroone(y_pred)
-
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
-
-    f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
-
-    return calc_loss(y_true, y_pred), f_max
+    prs, rcs, f1s = performance(y_pred, y_true, classes)
+    return calc_loss(y_true, y_pred), prs, rcs, f1s
 
 
 if __name__ == "__main__":
@@ -274,7 +296,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes
+    classes = get_classes(db, onto)
     classes.remove(onto.root)
     assert onto.root not in classes
 
@@ -290,9 +312,16 @@ if __name__ == "__main__":
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
         y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
-        loss, f_max = evaluate(y_true, y_pred, classes)
+        loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
+        i = np.argmax(f1s)
 
-        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
+        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
+              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        model_path = 'checkpoints/ds-hinge-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
-        model.save_weights(model_path)
+        if f1s[i] < 0.5: continue
+
+        model_str = '%s-%d-%.5f-%.2f' % ("deeperseq", epoch + 1, loss, f1s[i])
+        model.save_weights("checkpoints/%s.hdf5" % model_str)
+        with open("checkpoints/%s.json" % model_str, "w+") as f:
+            f.write(model.to_json())
+        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
