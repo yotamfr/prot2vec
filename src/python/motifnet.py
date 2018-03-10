@@ -205,23 +205,21 @@ def DeepSeq(classes, opt):
     return model
 
 
+def DeepSeqModule(inpt):
+    feats = inpt
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    return feats
+
+
 def MotifNet(classes, opt):
-    inp = Input(shape=(None,))
-    feats03 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 3), 3, 2), 3, 4))
-    feats09 = GlobalMaxPooling1D()(Features(Features(Motifs(inp, 9), 9), 9))
-    feats27 = GlobalMaxPooling1D()(Features(Motifs(inp, 27), 27))
-    features = Concatenate()([feats03, feats09, feats27])
-    out = Classifier(features, classes)
-    model = Model(inputs=[inp], outputs=[out])
-    model.compile(loss='binary_crossentropy', optimizer=opt)
-    return model
-
-
-def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = Inception(Inception(emb))
-    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    inception = GlobalMaxPooling1D()(Inception(Inception(emb)))
+    deepseq = GlobalMaxPooling1D()(DeepSeqModule(emb))
+    out = Classifier(Concatenate()([inception, deepseq]), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
