@@ -18,7 +18,7 @@ import tensorflow as tf
 
 ### Keras
 from keras import optimizers
-from keras.models import Model
+from keras.models import Model, Layer
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
@@ -26,6 +26,7 @@ from keras.layers import MaxPooling2D, MaxPooling1D, AveragePooling1D, GlobalMax
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 # from keras.losses import hinge, binary_crossentropy
+
 from keras import backend as K
 
 from sklearn.metrics import log_loss
@@ -47,6 +48,39 @@ t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
+
+
+class LRN(Layer):
+    def __init__(self, alpha=0.0001, k=1, beta=0.75, n=5, **kwargs):
+        self.alpha = alpha
+        self.k = k
+        self.beta = beta
+        self.n = n
+        super(LRN, self).__init__(**kwargs)
+
+    def call(self, x, mask=None):
+        b, ch, r = x.shape
+        half_n = self.n // 2  # half the local region
+        input_sqr = K.sqr(x)  # square the input
+        extra_channels = K.alloc(0., b, ch + 2 * half_n, r)  # make an empty tensor with zero pads along channel dimension
+        input_sqr = K.set_subtensor(extra_channels[:, half_n:half_n + ch, :],
+                                    input_sqr)  # set the center to be the squared input
+        scale = self.k  # offset for the scale
+        norm_alpha = self.alpha / self.n  # normalized alpha
+        for i in range(self.n):
+            scale += norm_alpha * input_sqr[:, i:i + ch, :]
+        scale = scale ** self.beta
+        x = x / scale
+        return x
+
+    def get_config(self):
+        config = {"alpha": self.alpha,
+                  "k": self.k,
+                  "beta": self.beta,
+                  "n": self.n}
+        base_config = super(LRN, self).get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
 
 
 def get_classes(db, onto, start=t0, end=t1):
@@ -254,11 +288,9 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = Conv1D(250, 15, activation='relu', padding='valid')(out)
-    out = Dropout(0.2)(out)
+    out = LRN()(out)
     out = SmallInception(out)
-    out = Dropout(0.2)(out)
     out = SmallInception(out)
-    out = Dropout(0.2)(out)
     out = GlobalMaxPooling1D()(out)
     out = Classifier(out, classes)
     model = Model(inputs=[inpt], outputs=[out])
