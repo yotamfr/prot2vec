@@ -71,10 +71,10 @@ def get_classes(db, onto, start=t0, end=t1):
     return list(helper(q1) | helper(q2))
 
 
-def get_training_and_validation_streams(db, onto, classes, limit=None):
+def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0, end=t1):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$lte": t0},
+               'Date': {"$lte": start},
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
@@ -85,7 +85,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": t0, "$lte": t1},
+               'Date': {"$gt": start, "$lte": end},
                'Aspect': ASPECT}
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
@@ -96,6 +96,42 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
     stream_tst = DataStream(source, count, seq2go_tst, onto, classes)
 
     return stream_trn, stream_tst
+
+
+class DataStream(object):
+    def __init__(self, source, count, seq2go, onto, classes):
+
+        self._classes = classes
+        self._count = count
+        self._source = source
+        self._seq2go = seq2go
+        self._onto = onto
+
+    def __iter__(self):
+
+        classes = self._classes
+        count = self._count
+        source = self._source
+        seq2go = self._seq2go
+        onto = self._onto
+
+        s_cls = set(classes)
+
+        for k, seq in UniprotCollectionLoader(source, count):
+            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
+                continue
+            y = np.zeros(len(classes))
+            for go in onto.propagate(seq2go[k], include_root=False):
+                if go not in s_cls:
+                    continue
+                y[classes.index(go)] = 1
+
+                x = [AA.aa2index[aa] for aa in seq]
+
+            yield k, x, y
+
+    def __len__(self):
+        return self._count
 
 
 def pad_seq(seq):
