@@ -309,7 +309,7 @@ if __name__ == "__main__":
         trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
+        _, y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
 
