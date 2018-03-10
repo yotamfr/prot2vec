@@ -253,7 +253,7 @@ def oneminusone2zeroone(vec):
 
 
 def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
+    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
 
 
 def predict(model, gen_xy, length_xy, classes):
