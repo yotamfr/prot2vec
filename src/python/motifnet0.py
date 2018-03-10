@@ -354,12 +354,14 @@ if __name__ == "__main__":
         LR, EPOCH_DROP = 1.0, 40.0
         opt = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
 
-    if args.arch == "motifnet":
-        model = MotifNet(classes, opt)
-    elif args.arch == "deepseq":
-        model = DeepSeq(classes, opt)
-    elif args.arch == "inception":
-        model = ProteinInception(classes, opt)
+    # if args.arch == "motifnet":
+    #     model = MotifNet(classes, opt)
+    # elif args.arch == "deepseq":
+    #     model = DeepSeq(classes, opt)
+    # elif args.arch == "inception":
+    #     model = ProteinInception(classes, opt)
+
+    model = ProteinInception(classes, opt)
 
     if args.resume:
         model.load_weights(args.resume)
@@ -376,12 +378,13 @@ if __name__ == "__main__":
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
 
-        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
-              % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
+        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
+              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
         if f1s[i] < 0.5: continue
 
-        model_str = '%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f1s[i])
+        model_str = '%s-%d-%.5f-%.2f' % ("inception", epoch + 1, loss, f1s[i])
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
+        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
