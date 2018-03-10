@@ -190,15 +190,13 @@ def LargeInception(inpt, num_channels=64):
 
 def SmallInception(inpt, num_channels=64):
 
-    tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
 
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
 
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2])
+    return Concatenate(axis=2)([tower_1, tower_2])
 
 
 def ResidualInception(inpt1, inpt2, num_channels=64):
@@ -221,7 +219,7 @@ def ResidualInception(inpt1, inpt2, num_channels=64):
 def ResInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = SmallInception(SmallInception(emb))
+    feats = SmallInception(SmallInception(SmallInception(emb)))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
