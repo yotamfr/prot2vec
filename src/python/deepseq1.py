@@ -100,7 +100,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
 def pad_seq(seq, max_length=MAX_LENGTH):
     delta = max_length - len(seq)
-    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
+    seq = seq + [PAD for _ in range(delta)]
     return np.asarray(seq)
 
 
