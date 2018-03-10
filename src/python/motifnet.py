@@ -100,7 +100,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
 def pad_seq(seq, max_length=MAX_LENGTH):
     delta = max_length - len(seq)
-    seq += [PAD for _ in range(delta)]
+    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
     return np.asarray(seq)
 
 
@@ -169,7 +169,7 @@ def Classifier(inp1d, classes):
     return out
 
 
-def Inception(inpt, num_channels=64):
+def LargeInception(inpt, num_channels=64):
 
     tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
@@ -186,6 +186,17 @@ def Inception(inpt, num_channels=64):
     tower_4 = Conv1D(num_channels, 30, padding='same', activation='relu')(tower_4)
 
     return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3, tower_4])
+
+
+def SmallInception(inpt, num_channels=64):
+
+    tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+
+    return Concatenate(axis=2)([tower_1, tower_2])
 
 
 def DeepSeq(classes, opt):
@@ -211,13 +222,17 @@ def DeepSeqModule(inpt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
+    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Dropout(0.3)(feats)
     return feats
 
 
 def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    inception = GlobalMaxPooling1D()(Inception(Inception(emb)))
+    inception = GlobalMaxPooling1D()(SmallInception(LargeInception(emb)))
     deepseq = GlobalMaxPooling1D()(DeepSeqModule(emb))
     out = Classifier(Concatenate()([inception, deepseq]), classes)
     model = Model(inputs=[inpt], outputs=[out])
@@ -228,7 +243,7 @@ def MotifNet(classes, opt):
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = Inception(Inception(emb))
+    feats = LargeInception(LargeInception(emb))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
@@ -356,7 +371,6 @@ if __name__ == "__main__":
 
     print("Listing Classes...")
     classes = get_classes(db, onto)
-    # classes = onto.classes
     classes.remove(onto.root)
     assert onto.root not in classes
 
