@@ -216,7 +216,7 @@ def DeepSeq(classes, opt):
     return model
 
 
-def DeepSeqModule(inpt):
+def DeeperSeqModule(inpt):
     feats = inpt
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -233,7 +233,7 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     inception = GlobalMaxPooling1D()(SmallInception(LargeInception(emb)))
-    deepseq = GlobalMaxPooling1D()(DeepSeqModule(emb))
+    deepseq = GlobalMaxPooling1D()(DeeperSeqModule(emb))
     out = Classifier(Concatenate()([inception, deepseq]), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
