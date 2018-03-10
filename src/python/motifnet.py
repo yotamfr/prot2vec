@@ -412,3 +412,4 @@ if __name__ == "__main__":
         model.save_weights("checkpoints/%s.hdf5" % model_str)
         with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
+        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
