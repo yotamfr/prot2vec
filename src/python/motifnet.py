@@ -243,7 +243,7 @@ def MotifNet(classes, opt):
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = LargeInception(LargeInception(emb))
+    feats = SmallInception(LargeInception(emb))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
@@ -337,9 +337,10 @@ def predict(model, gen_xy, length_xy, classes):
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
     ids = list()
 
-    for i, (k, X, Y) in enumerate(gen_xy):
+    for i, (uid, X, Y) in enumerate(gen_xy):
         assert len(X) == len(Y)
         k = len(Y)
+        ids.append(uid)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
         pbar.update(k)
