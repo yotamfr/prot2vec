@@ -254,7 +254,7 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     motifnet = Conv1D(250, 15, activation='relu', padding='valid')(emb)
-    motifnet = SmallInception(SmallInception(motifnet))
+    motifnet = SmallInception(SmallInception(motifnet, 100), 100)
     feats = GlobalMaxPooling1D()(motifnet)
     out = Classifier(feats, classes)
     model = Model(inputs=[inpt], outputs=[out])
