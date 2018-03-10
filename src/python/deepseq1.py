@@ -98,6 +98,12 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
     return stream_trn, stream_tst
 
 
+def pad_seq(seq, max_length=MAX_LENGTH):
+    delta = max_length - len(seq)
+    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
+    return np.asarray(seq)
+
+
 class DataStream(object):
     def __init__(self, source, count, seq2go, onto, classes):
 
@@ -134,53 +140,31 @@ class DataStream(object):
         return self._count
 
 
-def pad_seq(seq):
-    seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
-    return np.asarray(seq)
-
-
-class DataStream(object):
-    def __init__(self, source, count, seq2go, onto, classes):
-
-        self._classes = classes
-        self._count = count
-        self._source = source
-        self._seq2go = seq2go
-        self._onto = onto
-
-    def __iter__(self):
-
-        classes = self._classes
-        count = self._count
-        source = self._source
-        seq2go = self._seq2go
-        onto = self._onto
-
-        s_cls = set(classes)
-
-        for k, seq in UniprotCollectionLoader(source, count):
-            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
-                continue
-            y = np.zeros(len(classes))
-            for go in onto.propagate(seq2go[k], include_root=False):
-                if go not in s_cls:
-                    continue
-                y[classes.index(go)] = 1
-
-                x = pad_seq([AA.aa2index[aa] for aa in seq])
-
-            yield k, x, y
-
-    def __len__(self):
-        return self._count
-
-
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
     epochs_drop = 1.0
-    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
+    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
+    # print("lrate <- %.4f" % lrate)
     return lrate
+
+
+def batch_generator(stream):
+
+    def prepare(batch):
+        ids, X, Y = zip(*batch)
+        b = max(MIN_LENGTH * 100, max(map(len, X)))
+        X = [pad_seq(seq, b) for seq in X]
+        return ids, np.asarray(X), np.asarray(Y)
+
+    batch = []
+    for k, x, y in stream:
+        if len(batch) == BATCH_SIZE:
+            yield prepare(batch)
+            batch = []
+        batch.append([k, x, y])
+
+    yield prepare(batch)
 
 
 def Features(inpt):
@@ -215,30 +199,6 @@ def ModelCNN(classes):
     model.compile(loss='binary_crossentropy', optimizer=adam)
 
     return model
-
-
-def batch_generator(stream):
-
-    def prepare(batch):
-        ids, X, Y = zip(*batch)
-        b = max(MIN_LENGTH * 100, max(map(len, X)))
-        X = [pad_seq(seq, b) for seq in X]
-        return ids, np.asarray(X), np.asarray(Y)
-
-    batch = []
-    for k, x, y in stream:
-        if len(batch) == BATCH_SIZE:
-            yield prepare(batch)
-            batch = []
-        batch.append([k, x, y])
-
-    yield prepare(batch)
-
-
-def pad_seq(seq, max_length=MAX_LENGTH):
-    delta = max_length - len(seq)
-    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
-    return np.asarray(seq)
 
 
 def add_arguments(parser):
