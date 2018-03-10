@@ -61,7 +61,7 @@ class LRN(Layer):
     def call(self, x, mask=None):
         b, ch, r = x.shape
         half_n = self.n // 2  # half the local region
-        input_sqr = K.sqr(x)  # square the input
+        input_sqr = K.sqrt(x)  # square the input
         extra_channels = K.alloc(0., b, ch + 2 * half_n, r)  # make an empty tensor with zero pads along channel dimension
         input_sqr = K.set_subtensor(extra_channels[:, half_n:half_n + ch, :],
                                     input_sqr)  # set the center to be the squared input
@@ -288,7 +288,7 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = Conv1D(250, 15, activation='relu', padding='valid')(out)
-    out = LRN()(out)
+    out = BatchNormalization()(out)
     out = SmallInception(out)
     out = SmallInception(out)
     out = GlobalMaxPooling1D()(out)
