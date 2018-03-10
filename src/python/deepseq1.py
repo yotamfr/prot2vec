@@ -100,7 +100,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
 def pad_seq(seq, max_length=MAX_LENGTH):
     delta = max_length - len(seq)
-    seq = seq + [PAD for _ in range(delta)]
+    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
     return np.asarray(seq)
 
 
@@ -153,7 +153,8 @@ def batch_generator(stream):
 
     def prepare(batch):
         ids, X, Y = zip(*batch)
-        X = [pad_seq(seq) for seq in X]
+        b = max(map(len, X)) + 100
+        X = [pad_seq(seq, b) for seq in X]
         return ids, np.asarray(X), np.asarray(Y)
 
     batch = []
@@ -232,7 +233,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=epoch + 1,
+                  epochs=num_epochs,        # epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
