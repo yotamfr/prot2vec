@@ -225,6 +225,16 @@ def MotifNet(classes, opt):
     return model
 
 
+def ProteinInception(classes, opt):
+    inpt = Input(shape=(None,))
+    emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Inception(Inception(emb))
+    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    model = Model(inputs=[inpt], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
+    return model
+
+
 def batch_generator(stream):
 
     def prepare(batch):
