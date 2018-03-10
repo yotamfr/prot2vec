@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.01
+LR = 0.001
 
 BATCH_SIZE = 32
 
@@ -145,7 +145,6 @@ def step_decay(epoch):
     drop = 0.5
     epochs_drop = 1.0
     lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
-    # print("lrate <- %.4f" % lrate)
     return lrate
 
 
@@ -233,10 +232,10 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=num_epochs,        # epoch + 1,
+                  epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
-                  initial_epoch=epoch,
+                  initial_epoch=num_epochs,
                   callbacks=[history, lrate])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
@@ -262,11 +261,12 @@ def predict(model, gen_xy, length_xy, classes):
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
     ids = list()
 
-    for i, (k, X, Y) in enumerate(gen_xy):
+    for i, (uid, X, Y) in enumerate(gen_xy):
         assert len(X) == len(Y)
         k = len(Y)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
+        ids.append(uid)
         pbar.update(k)
     pbar.close()
     return ids, y_true, y_pred
@@ -294,7 +294,8 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = get_classes(db, onto)
+    # classes = get_classes(db, onto)
+    classes = onto.classes
     classes.remove(onto.root)
     assert onto.root not in classes
 
