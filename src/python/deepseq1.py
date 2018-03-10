@@ -153,8 +153,7 @@ def batch_generator(stream):
 
     def prepare(batch):
         ids, X, Y = zip(*batch)
-        b = max(map(len, X)) + 100
-        X = [pad_seq(seq, b) for seq in X]
+        X = [pad_seq(seq) for seq in X]
         return ids, np.asarray(X), np.asarray(Y)
 
     batch = []
