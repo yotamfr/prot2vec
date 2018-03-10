@@ -253,7 +253,7 @@ def DeepeseqModule(inpt):
 def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    motifnet = GlobalMaxPooling1D()(SmallInception(DeepeseqModule(emb)))
+    motifnet = GlobalMaxPooling1D()(SmallInception(SmallInception(DeepeseqModule(emb))))
     out = Classifier(motifnet, classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
