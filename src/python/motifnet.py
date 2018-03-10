@@ -199,6 +199,33 @@ def SmallInception(inpt, num_channels=64):
     return Concatenate(axis=2)([tower_1, tower_2])
 
 
+def ResidualInception(inpt1, inpt2, num_channels=64):
+
+    tower_11 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt1)
+    tower_11 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_11)
+
+    tower_12 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt1)
+    tower_12 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_12)
+
+    tower_21 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt2)
+    tower_21 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_21)
+
+    tower_22 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt2)
+    tower_22 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_22)
+
+    return Concatenate(axis=2)([tower_11, tower_12, tower_21, tower_22])
+
+
+def ResInception(classes, opt):
+    inpt = Input(shape=(None,))
+    emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = ResidualInception(emb, SmallInception(emb))
+    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    model = Model(inputs=[inpt], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
+    return model
+
+
 def DeepSeq(classes, opt):
     inpt = Input(shape=(None,))
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
@@ -273,7 +300,7 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB"),
     parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
-    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq', 'inception'],
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq', 'inception', 'resinception'],
                         default="deepseq", help="Specify the model arch.")
     parser.add_argument("--opt", type=str, choices=['sgd', 'adam'],
                         default="adam", help="Specify the model optimizer.")
@@ -388,6 +415,11 @@ if __name__ == "__main__":
         model = DeepSeq(classes, opt)
     elif args.arch == "inception":
         model = ProteinInception(classes, opt)
+    elif args.arch == "resinception":
+        model = ResInception(classes, opt)
+    else:
+        print("Unknown model arch")
+        exit(0)
 
     if args.resume:
         model.load_weights(args.resume)
