@@ -217,7 +217,7 @@ def ResidualInception(inpt1, inpt2, num_channels=64):
 def ResInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = SmallInception(LargeInception(emb), 128)
+    feats = SmallInception(SmallInception(emb, 256), 128)
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
