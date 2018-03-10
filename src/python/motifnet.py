@@ -220,7 +220,9 @@ def ResInception(classes, opt):
     inpt = Input(shape=(None,))
     emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     feats = ResidualInception(emb, SmallInception(emb))
-    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    feats = GlobalMaxPooling1D()(feats)
+    feats = Dense(256, activation='relu')(feats)
+    out = Classifier(feats, classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
