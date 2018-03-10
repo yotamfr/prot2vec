@@ -294,8 +294,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    # classes = get_classes(db, onto)
-    classes = onto.classes
+    classes = get_classes(db, onto)
     classes.remove(onto.root)
     assert onto.root not in classes
 
