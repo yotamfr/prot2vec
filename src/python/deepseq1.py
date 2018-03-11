@@ -81,7 +81,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
     count = limit if limit else db.uniprot.count(query)
     source = db.uniprot.find(query).batch_size(10)
     if limit: source = source.limit(limit)
-    stream_trn = DataStream(source, count, seq2go_trn, onto, classes)
+    stream_trn = DataStream(source, count, seq2go_trn)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -93,7 +93,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
     count = limit if limit else db.uniprot.count(query)
     source = db.uniprot.find(query).batch_size(10)
     if limit: source = source.limit(limit)
-    stream_tst = DataStream(source, count, seq2go_tst, onto, classes)
+    stream_tst = DataStream(source, count, seq2go_tst)
 
     return stream_trn, stream_tst
 
@@ -105,36 +105,25 @@ def pad_seq(seq, max_length=MAX_LENGTH):
 
 
 class DataStream(object):
-    def __init__(self, source, count, seq2go, onto, classes):
+    def __init__(self, source, count, seq2go):
 
-        self._classes = classes
         self._count = count
         self._source = source
         self._seq2go = seq2go
-        self._onto = onto
 
     def __iter__(self):
 
-        classes = self._classes
         count = self._count
         source = self._source
         seq2go = self._seq2go
-        onto = self._onto
-
-        s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            y = np.zeros(len(classes))
-            for go in onto.propagate(seq2go[k], include_root=False):
-                if go not in s_cls:
-                    continue
-                y[classes.index(go)] = 1
 
-                x = [AA.aa2index[aa] for aa in seq]
+            x = [AA.aa2index[aa] for aa in seq]
 
-            yield k, x, y
+            yield k, x, seq2go[k]
 
     def __len__(self):
         return self._count
@@ -148,21 +137,41 @@ def step_decay(epoch):
     return lrate
 
 
-def batch_generator(stream):
+def batch_generator(stream, onto, classes):
+
+    s_cls = set(classes)
 
     def prepare(batch):
-        ids, X, Y = zip(*batch)
+        ids, X, labels = zip(*batch)
         b = max(map(len, X)) + 100
         X = [pad_seq(seq, b) for seq in X]
+        Y = []
+        for lbl in labels:
+            y = np.zeros(len(classes))
+            for go in onto.propagate(lbl, include_root=False):
+                if go not in s_cls:
+                    continue
+                y[classes.index(go)] = 1
+            Y.append(y)
         return ids, np.asarray(X), np.asarray(Y)
 
-    batch = []
+    mapper = {}
     for k, x, y in stream:
+        if len(x) in mapper:
+            mapper[len(x)].append([k, x, y])
+        else:
+            mapper[len(x)] = [[k, x, y]]
+
+        if len(mapper[len(x)]) == BATCH_SIZE:
+            yield prepare(mapper[len(x)])
+            del mapper[len(x)]
+
+    batch = []
+    for l in sorted(mapper.keys()):
+        batch.append(mapper[l])
         if len(batch) == BATCH_SIZE:
             yield prepare(batch)
             batch = []
-        batch.append([k, x, y])
-
     yield prepare(batch)
 
 
@@ -308,8 +317,8 @@ if __name__ == "__main__":
 
         trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
-        train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        _, y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
+        train(model, batch_generator(trn_stream, onto, classes), len(trn_stream), epoch, args.num_epochs)
+        _, y_true, y_pred = predict(model, batch_generator(tst_stream, onto, classes), len(tst_stream), classes)
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
 
