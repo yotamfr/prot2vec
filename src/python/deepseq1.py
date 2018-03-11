@@ -155,20 +155,7 @@ def batch_generator(stream, onto, classes):
             Y.append(y)
         return ids, np.asarray(X), np.asarray(Y)
 
-    mapper = {}
-    for k, x, y in stream:
-        if len(x) in mapper:
-            mapper[len(x)].append([k, x, y])
-        else:
-            mapper[len(x)] = [[k, x, y]]
-
-        if len(mapper[len(x)]) == BATCH_SIZE:
-            yield prepare(mapper[len(x)])
-            del mapper[len(x)]
-
-    data = []
-    for l in sorted(mapper.keys()):
-        data.extend(mapper[l])
+    data = sorted(stream, key=lambda elem: elem[0])
 
     batch = []
     for k, x, y in data:
