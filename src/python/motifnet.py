@@ -470,8 +470,8 @@ if __name__ == "__main__":
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
 
-        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
-              % (epoch + 1, loss, f1s[i], prs[i], rcs[i]))
+        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
+              % (epoch + 1, num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
         if f1s[i] < 0.5: continue
 
