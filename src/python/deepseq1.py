@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.01
+LR = 0.001
 
 BATCH_SIZE = 32
 
@@ -100,7 +100,8 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
 def pad_seq(seq, max_length=MAX_LENGTH):
     delta = max_length - len(seq)
-    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
+    seq = seq + [PAD for _ in range(delta)]
+    # seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
     return np.asarray(seq)
 
 
@@ -232,7 +233,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=epoch + 1,
+                  epochs=num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
