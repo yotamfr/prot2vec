@@ -166,9 +166,13 @@ def batch_generator(stream, onto, classes):
             yield prepare(mapper[len(x)])
             del mapper[len(x)]
 
-    batch = []
+    data = []
     for l in sorted(mapper.keys()):
-        batch.append(mapper[l])
+        data.extend(mapper[l])
+
+    batch = []
+    for k, x, y in data:
+        batch.append([k, x, y])
         if len(batch) == BATCH_SIZE:
             yield prepare(batch)
             batch = []
