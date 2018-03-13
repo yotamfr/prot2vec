@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.001
+LR = 0.01
 
 BATCH_SIZE = 32
 
@@ -47,6 +47,28 @@ t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
+
+
+def get_classes(db, onto, start=t0, end=t1):
+
+    q1 = {'DB': 'UniProtKB',
+         'Evidence': {'$in': exp_codes},
+         'Date': {"$lte": start},
+         'Aspect': ASPECT}
+    q2 = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$gt": start, "$lte": end},
+               'Aspect': ASPECT}
+
+    def helper(q):
+        seq2go, _ = GoAnnotationCollectionLoader(
+            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
+        for i, (k, v) in enumerate(seq2go.items()):
+            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+            seq2go[k] = onto.propagate(v)
+        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
+
+    return list(helper(q1) | helper(q2))
 
 
 def get_training_and_validation_streams(db, onto, classes, limit=None):
@@ -212,7 +234,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=num_epochs,
+                  epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
@@ -274,7 +296,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes
+    classes = get_classes(db, onto)
     classes.remove(onto.root)
     assert onto.root not in classes
 
@@ -292,7 +314,7 @@ if __name__ == "__main__":
         y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
         loss, f_max = evaluate(y_true, y_pred, classes)
 
-        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
+        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, args.num_epochs, loss, f_max))
 
         model_prefix = 'checkpoints/deepseq-%d-%.5f-%.2f' % (epoch + 1, loss, f_max)
         model.save_weights("%s.hdf5" % model_prefix)
