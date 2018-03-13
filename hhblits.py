@@ -288,7 +288,7 @@ def _get_pssm(seq):
                 continue
             aln.append(r)
 
-    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm hhblits.out 2>&1" \
+    cline = "%s/psiblast -subject %s.seq -in_msa %s.msa -out_ascii_pssm %s.pssm 1>psiblast.out 2>&1" \
             % (prefix_blast, seq.id, seq.id, seq.id)
     assert os.WEXITSTATUS(os.system(cline)) == 0
 
