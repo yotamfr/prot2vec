@@ -38,7 +38,7 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.01
+LR = 0.001
 
 BATCH_SIZE = 32
 
@@ -234,7 +234,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=epoch + 1,
+                  epochs=num_epochs,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
@@ -272,13 +272,10 @@ def predict(model, gen_xy, length_xy, classes):
 
 
 def evaluate(y_true, y_pred, classes):
-
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
-
-    f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
-
-    return calc_loss(y_true, y_pred), f_max
+    prs, rcs, f1s = performance(y_pred, y_true, classes)
+    return calc_loss(y_true, y_pred), prs, rcs, f1s
 
 
 if __name__ == "__main__":
@@ -312,11 +309,16 @@ if __name__ == "__main__":
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
         y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
-        loss, f_max = evaluate(y_true, y_pred, classes)
+        loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
+        i = np.argmax(f1s)
 
-        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, args.num_epochs, loss, f_max))
+        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
+              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        model_prefix = 'checkpoints/deepseq-%d-%.5f-%.2f' % (epoch + 1, loss, f_max)
-        model.save_weights("%s.hdf5" % model_prefix)
-        with open("%s.json" % model_prefix, "w+") as f:
+        if f1s[i] < 0.5: continue
+
+        model_str = '%s-%d-%.5f-%.2f' % ("deeperseq", epoch + 1, loss, f1s[i])
+        model.save_weights("checkpoints/%s.hdf5" % model_str)
+        with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
+        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
