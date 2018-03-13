@@ -49,28 +49,6 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-def get_classes(db, onto, start=t0, end=t1):
-
-    q1 = {'DB': 'UniProtKB',
-         'Evidence': {'$in': exp_codes},
-         'Date': {"$lte": start},
-         'Aspect': ASPECT}
-    q2 = {'DB': 'UniProtKB',
-               'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": start, "$lte": end},
-               'Aspect': ASPECT}
-
-    def helper(q):
-        seq2go, _ = GoAnnotationCollectionLoader(
-            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
-        for i, (k, v) in enumerate(seq2go.items()):
-            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
-            seq2go[k] = onto.propagate(v)
-        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
-
-    return list(helper(q1) | helper(q2))
-
-
 def get_training_and_validation_streams(db, onto, classes, limit=None):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -272,10 +250,13 @@ def predict(model, gen_xy, length_xy, classes):
 
 
 def evaluate(y_true, y_pred, classes):
+
     y_pred = y_pred[~np.all(y_pred == 0, axis=1)]
     y_true = y_true[~np.all(y_true == 0, axis=1)]
-    prs, rcs, f1s = performance(y_pred, y_true, classes)
-    return calc_loss(y_true, y_pred), prs, rcs, f1s
+
+    f_max = F_max(y_pred, y_true, classes, np.arange(0.1, 1, 0.1))
+
+    return calc_loss(y_true, y_pred), f_max
 
 
 if __name__ == "__main__":
@@ -293,7 +274,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = get_classes(db, onto)
+    classes = onto.classes
     classes.remove(onto.root)
     assert onto.root not in classes
 
@@ -309,16 +290,11 @@ if __name__ == "__main__":
 
         train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
         y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
-        loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
-        i = np.argmax(f1s)
+        loss, f_max = evaluate(y_true, y_pred, classes)
 
-        print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
-              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
+        print("[Epoch %d] (Validation Loss: %.5f, F_max: %.3f)" % (epoch + 1, loss, f_max))
 
-        if f1s[i] < 0.5: continue
-
-        model_str = '%s-%d-%.5f-%.2f' % ("deeperseq", epoch + 1, loss, f1s[i])
-        model.save_weights("checkpoints/%s.hdf5" % model_str)
-        with open("checkpoints/%s.json" % model_str, "w+") as f:
+        model_path = 'checkpoints/deepseq-%d-%.5f-%.2f.hdf5' % (epoch + 1, loss, f_max)
+        model.save_weights(model_path)
+        with open(model_path, "w+") as f:
             f.write(model.to_json())
-        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
