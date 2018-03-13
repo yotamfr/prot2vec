@@ -12,6 +12,7 @@ from tqdm import tqdm
 from Bio.Seq import Seq
 from Bio import SeqIO, AlignIO
 from Bio.SeqRecord import SeqRecord
+from Bio.SeqIO import parse as parse_fasta
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,7 +22,6 @@ from tempfile import gettempdir
 tmp_dir = gettempdir()
 
 from src.python.consts import *
-from src.python.preprocess import *
 
 import argparse
 
@@ -357,10 +357,7 @@ if __name__ == "__main__":
         _run_hhblits_batched(seqs, db.pssm)
     else:
         fasta_fname = args.input_file
-        num_seq = count_lines(fasta_fname, sep=bytes('>', 'utf8'))
         fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
-        print(fasta_fname)
-        seqs = FastaFileLoader(fasta_src, num_seq).load()
-        seqs = sorted(((tgtid, str(seq)) for tgtid, seq in seqs.items()), key=lambda pair: -len(pair[1]))
+        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src), key=lambda p: -len(p[1]))
         db.cafapi.create_index("updated_at")
         _run_hhblits_batched(seqs, db.cafapi)
