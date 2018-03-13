@@ -290,7 +290,9 @@ def MotifNet(classes, opt):
     out = Conv1D(250, 15, activation='relu', padding='valid')(out)
     out = BatchNormalization()(out)
     out = SmallInception(out)
+    out = BatchNormalization()(out)
     out = SmallInception(out)
+    out = BatchNormalization()(out)
     out = GlobalMaxPooling1D()(out)
     out = Classifier(out, classes)
     model = Model(inputs=[inpt], outputs=[out])
@@ -471,7 +473,7 @@ if __name__ == "__main__":
         i = np.argmax(f1s)
 
         print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
-              % (epoch + 1, num_epochs, loss, f1s[i], prs[i], rcs[i]))
+              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
         if f1s[i] < 0.5: continue
 
