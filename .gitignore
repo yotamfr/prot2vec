@@ -30,7 +30,11 @@ dist
 .ipynb_checkpoints
 .Rproj.user
 
+Data/CAFA_PI/CAFA pi Submission Rules.pdf
+Data/CAFA_PI/keywords.txt
+Data/CAFA_PI/sampleSubmission/
+Data/CAFA_PI/sampleSubmissions.zip
+Data/CAFA_PI/targetFiles.zip
+
 src/__pycache__/
 src/python/__pycache__/
-
-

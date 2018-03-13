@@ -7,13 +7,11 @@ from datetime import datetime, timedelta
 
 from numpy import unique
 
-import subprocess
 from tqdm import tqdm
 
 from Bio.Seq import Seq
 from Bio import SeqIO, AlignIO
 from Bio.SeqRecord import SeqRecord
-from Bio.Align.AlignInfo import SummaryInfo
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,6 +21,7 @@ from tempfile import gettempdir
 tmp_dir = gettempdir()
 
 from src.python.consts import *
+from src.python.preprocess import *
 
 import argparse
 
@@ -126,7 +125,7 @@ def _set_unique_ids(input_file, output_file):
                 fout.write(line)
 
 
-def _run_hhblits_batched(sequences):
+def _run_hhblits_batched(sequences, collection):
 
     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
     pbar = tqdm(range(len(records)), desc="sequences processed")
@@ -134,20 +133,8 @@ def _run_hhblits_batched(sequences):
     while records:
         batch = []
         while (len(batch) < batch_size) and (len(records) > 0):
-
             seq = records.pop()
             pbar.update(1)
-
-            # doc = db.pssm.find_one({"_id": seq.id})
-            # if doc and ("pssm" in doc) and doc["pssm"]:
-            #     if NOW - doc["updated_at"] < timedelta(days=10):
-            #         continue
-
-            # db.pssm.update_one({
-            #     "_id": seq.id}, {
-            #     '$set': {"updated_at": datetime.utcnow()}
-            # }, upsert=True)
-
             batch.append(seq)
 
         pwd = os.getcwd()
@@ -192,7 +179,7 @@ def _run_hhblits_batched(sequences):
 
         e = ThreadPoolExecutor(num_cpu)
         for (seq, pssm, aln) in e.map(_get_pssm, [seq for seq in batch if os.path.exists("%s.a3m" % seq.id)]):
-            db.pssm.update_one({
+            collection.update_one({
                 "_id": seq.id}, {
                 '$set': {"pssm": pssm,
                          "alignment": aln,
@@ -212,32 +199,32 @@ def _read_a3m(seq):
     return seq, open("%s.a3m" % str(seq.id), 'r').read()
 
 
-def _run_hhblits_parallel(sequences):
-
-    global pbar
-
-    pwd = os.getcwd()
-    os.chdir(out_dir)
-    is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-
-    n = len(records)
-    pbar = tqdm(range(n), desc="sequences processed")
-    e = ThreadPoolExecutor(num_cpu)
-
-    for (seq, pssm, aln) in e.map(_hhblits, [seq for seq in records if os.path.exists("%s.a3m" % seq.id)]):
-        db.pssm.update_one({
-            "_id": seq.id}, {
-            '$set': {"pssm": pssm,
-                     "alignment": aln,
-                     "seq": str(seq.seq),
-                     "length": len(seq.seq),
-                     "updated_at": datetime.utcnow()}
-        }, upsert=True)
-
-    if cleanup: os.system("rm ./*")
-    os.chdir(pwd)
-    pbar.update(1)
+# def _run_hhblits_parallel(sequences):
+#
+#     global pbar
+#
+#     pwd = os.getcwd()
+#     os.chdir(out_dir)
+#     is_new = {"$gte": datetime.utcnow() - timedelta(days=5)}
+#     records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
+#
+#     n = len(records)
+#     pbar = tqdm(range(n), desc="sequences processed")
+#     e = ThreadPoolExecutor(num_cpu)
+#
+#     for (seq, pssm, aln) in e.map(_hhblits, [seq for seq in records if os.path.exists("%s.a3m" % seq.id)]):
+#         db.pssm.update_one({
+#             "_id": seq.id}, {
+#             '$set': {"pssm": pssm,
+#                      "alignment": aln,
+#                      "seq": str(seq.seq),
+#                      "length": len(seq.seq),
+#                      "updated_at": datetime.utcnow()}
+#         }, upsert=True)
+#
+#     if cleanup: os.system("rm ./*")
+#     os.chdir(pwd)
+#     pbar.update(1)
 
 
 def _hhblits(seq_record):
@@ -335,6 +322,8 @@ def add_arguments(parser):
                         help="Whether to keep intermediate files.")
     parser.add_argument('--dd', type=int, default=180,
                         help="How many days before records are considered obsolete?")
+    parser.add_argument("--input_file", type=str, default=None,
+                        help="Supply an input file in FASTA format.")
 
 
 if __name__ == "__main__":
@@ -362,8 +351,16 @@ if __name__ == "__main__":
     db = client['prot2vec']
     lim = args.limit
 
-    db.pssm.create_index("updated_at")
-
-    seqs = _get_annotated_uniprot(db, lim, deltadays=args.dd)
-
-    _run_hhblits_batched(seqs)
+    if not args.input_file:
+        seqs = _get_annotated_uniprot(db, lim, deltadays=args.dd)
+        db.pssm.create_index("updated_at")
+        _run_hhblits_batched(seqs, db.pssm)
+    else:
+        fasta_fname = args.input_file
+        num_seq = count_lines(fasta_fname, sep=bytes('>', 'utf8'))
+        fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
+        print(fasta_fname)
+        seqs = FastaFileLoader(fasta_src, num_seq).load()
+        seqs = sorted(((tgtid, str(seq)) for tgtid, seq in seqs.items()), key=lambda pair: -len(pair[1]))
+        db.cafapi.create_index("updated_at")
+        _run_hhblits_batched(seqs, db.cafapi)
