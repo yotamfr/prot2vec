@@ -302,12 +302,12 @@ def MotifNet(classes, opt):
 
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
-    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = SmallInception(feats)
-    # feats = Dropout(0.2)(feats)
-    feats = SmallInception(feats)
-    # feats = Dropout(0.2)(feats)
-    out = Classifier(GlobalMaxPooling1D()(feats), classes)
+    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    out = SmallInception(out)
+    out = BatchNormalization()(out)
+    out = SmallInception(out)
+    out = BatchNormalization()(out)
+    out = Classifier(GlobalMaxPooling1D()(out), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
