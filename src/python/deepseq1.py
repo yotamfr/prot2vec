@@ -208,7 +208,7 @@ def add_arguments(parser):
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("--init_epoch", type=int, default=0,
                         help="Which epoch to start training the model?")
-    parser.add_argument("--num_epochs", type=int, default=20,
+    parser.add_argument("--num_epochs", type=int, default=200,
                         help="How many epochs to train the model?")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
