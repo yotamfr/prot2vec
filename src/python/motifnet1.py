@@ -22,7 +22,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
-from keras.layers import MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
+from keras.layers import MaxPooling1D, MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 # from keras.losses import hinge, binary_crossentropy
@@ -125,38 +125,72 @@ def step_decay(epoch):
     return lrate
 
 
-def Features(inpt):
+def OriginalIception(inpt, num_channels=64):
 
-    feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = GlobalMaxPooling1D()(feats)
-    return feats
+    tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(num_channels, 3, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(num_channels, 5, padding='same', activation='relu')(tower_2)
+
+    # tower_3 = MaxPooling1D(3, padding='same')(inpt)
+    # tower_3 = Conv1D(num_channels, 1, padding='same')(tower_3)
+
+    return Concatenate(axis=2)([tower_0, tower_1, tower_2,])
 
 
-def Classifier(inpt, classes):
-    out = inpt
-    out = Dense(len(classes), activation='linear')(out)
+def LargeInception(inpt, num_channels=64):
+
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(inpt)
+    tower_1 = BatchNormalization()(tower_1)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(inpt)
+    tower_2 = BatchNormalization()(tower_2)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+
+    return Concatenate(axis=2)([tower_1, tower_2])
+
+
+def SmallInception(inpt, num_channels=64):
+
+    tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+    tower_1 = BatchNormalization()(tower_1)
+
+    tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+    tower_2 = BatchNormalization()(tower_2)
+
+    return Concatenate(axis=2)([tower_1, tower_2])
+
+
+def Classifier(inp1d, classes):
+    out = Dense(len(classes))(inp1d)
     out = BatchNormalization()(out)
     out = Activation('sigmoid')(out)
     return out
 
 
-def ModelCNN(classes):
-    inp = Input(shape=(None,))
-    out = Classifier(Features(inp), classes)
-    model = Model(inputs=[inp], outputs=[out])
-    # sgd = optimizers.SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-    adam = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model.compile(loss='binary_crossentropy', optimizer=adam)
-
+def MotifNet(classes, opt):
+    inpt = Input(shape=(None,))
+    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    out = Conv1D(256, 14, activation='relu', padding='valid')(out)
+    out = MaxPooling1D(3, strides=2)(out)
+    out = BatchNormalization()(out)
+    out = Conv1D(256, 1, activation='relu', padding='valid')(out)
+    out = Conv1D(256, 6, activation='relu', padding='valid')(out)
+    out = BatchNormalization()(out)
+    out = MaxPooling1D(3, strides=2)(out)
+    out = OriginalIception(out)
+    out = OriginalIception(out)
+    out = OriginalIception(out)
+    out = GlobalMaxPooling1D()(out)
+    out = Classifier(out, classes)
+    model = Model(inputs=[inpt], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
@@ -275,7 +309,7 @@ if __name__ == "__main__":
     classes.remove(onto.root)
     assert onto.root not in classes
 
-    model = ModelCNN(classes)
+    model = MotifNet(classes)
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
@@ -294,7 +328,7 @@ if __name__ == "__main__":
         print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        model_path = 'checkpoints/deeperseq-%d-%.5f-%.2f' % (epoch + 1, loss, f_max)
+        model_path = 'checkpoints/motifnet-%d-%.5f-%.2f' % (epoch + 1, loss, f_max)
         model.save_weights("%s.hdf5" % model_path)
         with open("%s.json" % model_path, "w+") as f:
             f.write(model.to_json())
