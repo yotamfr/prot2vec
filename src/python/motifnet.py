@@ -228,7 +228,7 @@ def SmallInception(inpt, num_channels=64):
 
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
-    tower_1 = BatchNormalization()(tower_1)
+    tower_2 = BatchNormalization()(tower_2)
 
     return Concatenate(axis=2)([tower_1, tower_2])
 
