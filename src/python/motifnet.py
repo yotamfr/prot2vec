@@ -213,10 +213,10 @@ def OriginalIception(inpt, num_channels=64):
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_2 = Conv1D(num_channels, 5, padding='same', activation='relu')(tower_2)
 
-    tower_3 = MaxPooling1D(3, padding='same', activation='relu')(inpt)
-    tower_3 = Conv1D(num_channels, 1, padding='same', activation='relu')(tower_3)
+    # tower_3 = MaxPooling1D(3, padding='same', activation='relu')(inpt)
+    # tower_3 = Conv1D(num_channels, 1, padding='same', activation='relu')(tower_3)
 
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2, tower_3])
+    return Concatenate(axis=2)([tower_0, tower_1, tower_2])
 
 
 def LargeInception(inpt, num_channels=64):
