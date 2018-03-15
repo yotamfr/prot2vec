@@ -329,7 +329,7 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model = ProteinInception(classes, opt)
+    model = MotifNet(classes, opt)
 
     if args.resume:
         model.load_weights(args.resume)
