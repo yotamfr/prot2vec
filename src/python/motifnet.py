@@ -307,7 +307,7 @@ def MotifNet(classes, opt):
     out = Conv1D(256, 1, activation='relu', padding='valid')(out)
     out = Conv1D(256, 6, activation='relu', padding='valid')(out)
     out = BatchNormalization()(out)
-    out = MaxPooling1D(3, strides=2)(out)
+    # out = MaxPooling1D(3, strides=2)(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
