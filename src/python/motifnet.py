@@ -208,10 +208,10 @@ def OriginalIception(inpt, num_channels=64):
     tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+    tower_1 = Conv1D(num_channels, 3, padding='same', activation='relu')(tower_1)
 
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+    tower_2 = Conv1D(num_channels, 5, padding='same', activation='relu')(tower_2)
 
     # tower_3 = MaxPooling1D(3, padding='same')(inpt)
     # tower_3 = Conv1D(num_channels, 1, padding='same')(tower_3)
@@ -302,12 +302,12 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = Conv1D(256, 14, activation='relu', padding='valid')(out)
-    out = MaxPooling1D(3, strides=4)(out)
+    out = MaxPooling1D(3, strides=2)(out)
     out = BatchNormalization()(out)
     out = Conv1D(256, 1, activation='relu', padding='valid')(out)
     out = Conv1D(256, 6, activation='relu', padding='valid')(out)
     out = BatchNormalization()(out)
-    out = MaxPooling1D(3, strides=4)(out)
+    out = MaxPooling1D(3, strides=2)(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
