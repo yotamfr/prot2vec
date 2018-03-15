@@ -302,7 +302,7 @@ def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = Conv1D(256, 14, activation='relu', padding='valid')(out)
-    out = MaxPooling1D(3, strides=2)(out)
+    # out = MaxPooling1D(3, strides=2)(out)
     out = BatchNormalization()(out)
     out = Conv1D(256, 1, activation='relu', padding='valid')(out)
     out = Conv1D(256, 6, activation='relu', padding='valid')(out)
