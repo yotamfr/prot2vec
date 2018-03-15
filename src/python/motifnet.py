@@ -219,14 +219,14 @@ def OriginalIception(inpt, num_channels=64):
     return Concatenate(axis=2)([tower_0, tower_1, tower_2,])
 
 
-def LargeInception(inpt, num_channels=64):
+def LargeInception(inpt, num_channels=128):
 
-    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(inpt)
-    tower_1 = BatchNormalization()(tower_1)
+    # tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(inpt)
+    # tower_1 = BatchNormalization()(tower_1)
     tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
 
-    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(inpt)
-    tower_2 = BatchNormalization()(tower_2)
+    # tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(inpt)
+    # tower_2 = BatchNormalization()(tower_2)
     tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
 
     return Concatenate(axis=2)([tower_1, tower_2])
@@ -322,9 +322,12 @@ def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = LargeInception(out)
-    out = Dropout(0.3)(out)
+    out = Dropout(0.2)(out)
     out = LargeInception(out)
-    out = Dropout(0.3)(out)
+    out = Dropout(0.2)(out)
+    out = LargeInception(out)
+    out = Dropout(0.2)(out)
+    out = LargeInception(out)
     out = Classifier(GlobalMaxPooling1D()(out), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
