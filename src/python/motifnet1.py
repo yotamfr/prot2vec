@@ -127,7 +127,7 @@ def step_decay(epoch):
 
 def OriginalIception(inpt, num_channels=64):
 
-    tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    # tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_1 = Conv1D(num_channels, 3, padding='same', activation='relu')(tower_1)
@@ -138,7 +138,7 @@ def OriginalIception(inpt, num_channels=64):
     # tower_3 = MaxPooling1D(3, padding='same')(inpt)
     # tower_3 = Conv1D(num_channels, 1, padding='same')(tower_3)
 
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2,])
+    return Concatenate(axis=2)([tower_1, tower_2,])
 
 
 def LargeInception(inpt, num_channels=64):
@@ -179,16 +179,29 @@ def MotifNet(classes, opt):
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     out = Conv1D(256, 14, activation='relu', padding='valid')(out)
     out = MaxPooling1D(3, strides=2)(out)
-    out = BatchNormalization()(out)
+    # out = BatchNormalization()(out)
     out = Conv1D(256, 1, activation='relu', padding='valid')(out)
     out = Conv1D(256, 6, activation='relu', padding='valid')(out)
-    out = BatchNormalization()(out)
+    # out = BatchNormalization()(out)
     out = MaxPooling1D(3, strides=2)(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
     out = OriginalIception(out)
     out = GlobalMaxPooling1D()(out)
     out = Classifier(out, classes)
+    model = Model(inputs=[inpt], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
+    return model
+
+
+def ProteinInception(classes, opt):
+    inpt = Input(shape=(None,))
+    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    out = SmallInception(out)
+    # out = Dropout(0.3)(out)
+    out = SmallInception(out)
+    # out = Dropout(0.3)(out)
+    out = Classifier(GlobalMaxPooling1D()(out), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
@@ -310,7 +323,7 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model = MotifNet(classes, opt)
+    model = ProteinInception(classes, opt)
 
     if args.resume:
         model.load_weights(args.resume)
