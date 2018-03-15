@@ -205,19 +205,15 @@ def Classifier(inp1d, classes):
 
 def LargeInception(inpt, num_channels=64):
 
-    tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(inpt)
     tower_1 = BatchNormalization()(tower_1)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
 
-    tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(inpt)
     tower_2 = BatchNormalization()(tower_2)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
 
-    tower_3 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_3 = Conv1D(num_channels, 20, padding='same', activation='relu')(tower_3)
-    tower_3 = BatchNormalization()(tower_3)
-
-    return Concatenate(axis=2)([tower_1, tower_2, tower_3])
+    return Concatenate(axis=2)([tower_1, tower_2])
 
 
 def SmallInception(inpt, num_channels=64):
@@ -308,6 +304,7 @@ def ProteinInception(classes, opt):
     out = LargeInception(out)
     out = Dropout(0.3)(out)
     out = LargeInception(out)
+    out = Dropout(0.3)(out)
     out = Classifier(GlobalMaxPooling1D()(out), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
