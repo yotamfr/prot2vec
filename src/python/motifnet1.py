@@ -309,7 +309,9 @@ if __name__ == "__main__":
     classes.remove(onto.root)
     assert onto.root not in classes
 
-    model = MotifNet(classes)
+    opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    model = MotifNet(classes, opt)
+
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
