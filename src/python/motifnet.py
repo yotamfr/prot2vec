@@ -282,7 +282,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
     pbar = tqdm(total=length_xy)
 
-    for _, X, Y in gen_xy:
+    for _, (X, Y) in gen_xy:
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
