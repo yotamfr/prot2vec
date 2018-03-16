@@ -18,11 +18,11 @@ import tensorflow as tf
 
 ### Keras
 from keras import optimizers
-from keras.models import Model, Layer
+from keras.models import Model
 from keras.layers import Input, Dense, Embedding, Activation
 from keras.layers import Conv2D, Conv1D
 from keras.layers import Dropout, BatchNormalization
-from keras.layers import MaxPooling2D, MaxPooling1D, AveragePooling1D, GlobalMaxPooling1D, GlobalAveragePooling1D
+from keras.layers import MaxPooling1D, MaxPooling2D, GlobalMaxPooling1D, GlobalAveragePooling1D
 from keras.layers import Concatenate, Flatten, Reshape
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, LambdaCallback, LearningRateScheduler
 # from keras.losses import hinge, binary_crossentropy
@@ -38,10 +38,11 @@ import argparse
 sess = tf.Session()
 K.set_session(sess)
 
-LR = 0.01
-EPOCH_DROP = 1.0
+LR = 0.001
 
 BATCH_SIZE = 32
+
+LONG_EXPOSURE = True
 
 t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
@@ -50,65 +51,10 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-class LRN(Layer):
-    def __init__(self, alpha=0.0001, k=1, beta=0.75, n=5, **kwargs):
-        self.alpha = alpha
-        self.k = k
-        self.beta = beta
-        self.n = n
-        super(LRN, self).__init__(**kwargs)
-
-    def call(self, x, mask=None):
-        b, ch, r = x.shape
-        half_n = self.n // 2  # half the local region
-        input_sqr = K.sqrt(x)  # square the input
-        extra_channels = K.alloc(0., b, ch + 2 * half_n, r)  # make an empty tensor with zero pads along channel dimension
-        input_sqr = K.set_subtensor(extra_channels[:, half_n:half_n + ch, :],
-                                    input_sqr)  # set the center to be the squared input
-        scale = self.k  # offset for the scale
-        norm_alpha = self.alpha / self.n  # normalized alpha
-        for i in range(self.n):
-            scale += norm_alpha * input_sqr[:, i:i + ch, :]
-        scale = scale ** self.beta
-        x = x / scale
-        return x
-
-    def get_config(self):
-        config = {"alpha": self.alpha,
-                  "k": self.k,
-                  "beta": self.beta,
-                  "n": self.n}
-        base_config = super(LRN, self).get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-
-def get_classes(db, onto, start=t0, end=t1):
-
-    q1 = {'DB': 'UniProtKB',
-         'Evidence': {'$in': exp_codes},
-         'Date': {"$lte": start},
-         'Aspect': ASPECT}
-    q2 = {'DB': 'UniProtKB',
-               'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": start, "$lte": end},
-               'Aspect': ASPECT}
-
-    def helper(q):
-        seq2go, _ = GoAnnotationCollectionLoader(
-            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
-        for i, (k, v) in enumerate(seq2go.items()):
-            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
-            seq2go[k] = onto.propagate(v)
-        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
-
-    return list(helper(q1) | helper(q2))
-
-
-def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0, end=t1):
+def get_training_and_validation_streams(db, onto, classes, limit=None):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$lte": start},
+               'Date': {"$lte": t0},
                'Aspect': ASPECT}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train), db.goa_uniprot.count(q_train), ASPECT).load()
     query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
@@ -119,7 +65,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": start, "$lte": end},
+               'Date': {"$gt": t0, "$lte": t1},
                'Aspect': ASPECT}
 
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid), db.goa_uniprot.count(q_valid), ASPECT).load()
@@ -132,43 +78,26 @@ def get_training_and_validation_streams(db, onto, classes, limit=None, start=t0,
     return stream_trn, stream_tst
 
 
-def pad_seq(seq, max_length=MAX_LENGTH):
-    delta = max_length - len(seq)
-    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
-    return np.asarray(seq)
-
-
 class DataStream(object):
-    def __init__(self, source, count, seq2go, onto, classes):
+    def __init__(self, source, count, seq2go):
 
-        self._classes = classes
         self._count = count
         self._source = source
         self._seq2go = seq2go
-        self._onto = onto
 
     def __iter__(self):
 
-        classes = self._classes
         count = self._count
         source = self._source
         seq2go = self._seq2go
-        onto = self._onto
-
-        s_cls = set(classes)
 
         for k, seq in UniprotCollectionLoader(source, count):
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            y = np.zeros(len(classes))
-            for go in onto.propagate(seq2go[k], include_root=False):
-                if go not in s_cls:
-                    continue
-                y[classes.index(go)] = 1
 
-                x = [AA.aa2index[aa] for aa in seq]
+            x = [AA.aa2index[aa] for aa in seq]
 
-            yield k, x, y
+            yield k, x, seq2go[k]
 
     def __len__(self):
         return self._count
@@ -177,35 +106,14 @@ class DataStream(object):
 def step_decay(epoch):
     initial_lrate = LR
     drop = 0.5
-    epochs_drop = EPOCH_DROP
-    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor(epoch / epochs_drop)))
-    # print("lrate <- %.4f" % lrate)
+    epochs_drop = 1.0
+    lrate = max(0.0001, initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop)))
     return lrate
-
-
-def Motifs(inpt, filter_size=15, num_channels=250):
-    motifs = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    motifs = Conv1D(num_channels, filter_size, activation='relu', padding='valid')(motifs)
-    motifs = Dropout(0.3)(motifs)
-    return motifs
-
-
-def Features(motifs, filter_size=5, dilation=1, num_channels=100):
-    feats = Conv1D(num_channels, filter_size, dilation_rate=dilation, activation='relu')(motifs)
-    feats = Dropout(0.3)(feats)
-    return feats
-
-
-def Classifier(inp1d, classes):
-    out = Dense(len(classes))(inp1d)
-    out = BatchNormalization()(out)
-    out = Activation('sigmoid')(out)
-    return out
 
 
 def OriginalIception(inpt, num_channels=64):
 
-    tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
+    # tower_0 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
 
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
     tower_1 = Conv1D(num_channels, 3, padding='same', activation='relu')(tower_1)
@@ -216,64 +124,85 @@ def OriginalIception(inpt, num_channels=64):
     # tower_3 = MaxPooling1D(3, padding='same')(inpt)
     # tower_3 = Conv1D(num_channels, 1, padding='same')(tower_3)
 
-    return Concatenate(axis=2)([tower_0, tower_1, tower_2,])
+    return Concatenate(axis=2)([tower_1, tower_2,])
 
 
-def LargeInception(inpt, num_channels=128):
+def LargeInception(inpt, num_channels=64):
 
     tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(inpt)
-    # tower_1 = BatchNormalization()(tower_1)
-    # tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
+    tower_1 = BatchNormalization()(tower_1)
+    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
 
     tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(inpt)
-    # tower_2 = BatchNormalization()(tower_2)
-    # tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
+    tower_2 = BatchNormalization()(tower_2)
+    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
 
     return Concatenate(axis=2)([tower_1, tower_2])
 
 
-def SmallInception(inpt, num_channels=64):
+def SmallInception(inpt, num_channels=150):
 
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
-    tower_1 = BatchNormalization()(tower_1)
+    tower_1 = Conv1D(num_channels, 5, padding='same', activation='relu')(tower_1)
+    # tower_1 = BatchNormalization()(tower_1)
 
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
-    tower_2 = BatchNormalization()(tower_2)
+    tower_2 = Conv1D(num_channels, 15, padding='same', activation='relu')(tower_2)
+    # tower_2 = BatchNormalization()(tower_2)
 
     return Concatenate(axis=2)([tower_1, tower_2])
 
 
-def ResidualInception(inpt1, inpt2, num_channels=64):
-
-    tower_11 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt1)
-    tower_11 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_11)
-
-    tower_12 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt1)
-    tower_12 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_12)
-
-    tower_21 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt2)
-    tower_21 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_21)
-
-    tower_22 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt2)
-    tower_22 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_22)
-
-    return Concatenate(axis=2)([tower_11, tower_12, tower_21, tower_22])
+def Classifier(inp1d, classes):
+    out = Dense(len(classes))(inp1d)
+    out = BatchNormalization()(out)
+    out = Activation('sigmoid')(out)
+    return out
 
 
-def ResInception(classes, opt):
+def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
-    emb = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    feats = ResidualInception(SmallInception(emb), emb)
+    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    out = Conv1D(250, 15, activation='relu', padding='valid')(out)
+    out = Dropout(0.2)(out)
+    out = Conv1D(100, 15, activation='relu', padding='valid')(out)
+    out = SmallInception(out)
+    out = Dropout(0.2)(out)
+    out = SmallInception(out)
+    out = Dropout(0.2)(out)
+    out = Conv1D(250, 5, activation='relu', padding='valid')(out)
+    out = Dropout(0.2)(out)
+    out = Classifier(GlobalMaxPooling1D()(out), classes)
+    model = Model(inputs=[inpt], outputs=[out])
+    model.compile(loss='binary_crossentropy', optimizer=opt)
+    return model
+
+
+def Inception(inpt, tower1=6, tower2=10):
+
+    tower_1 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(64, tower1, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(64, tower2, padding='same', activation='relu')(tower_2)
+
+    # tower_3 = MaxPooling1D(3, strides=1, padding='same')(inpt)
+    # tower_3 = Conv1D(64, 1, padding='same', activation='relu')(tower_3)
+
+    return Concatenate(axis=2)([tower_1, tower_2])
+
+
+def ProteinInception(classes, opt):
+    inpt = Input(shape=(None,))
+    img = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Inception(Inception(img))
     out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
-def DeepSeq(classes, opt):
-    inpt = Input(shape=(None,))
+def Features(inpt):
     feats = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -283,100 +212,69 @@ def DeepSeq(classes, opt):
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    out = Classifier(GlobalMaxPooling1D()(feats), classes)
-    model = Model(inputs=[inpt], outputs=[out])
-    model.compile(loss='binary_crossentropy', optimizer=opt)
-    return model
-
-
-def DeepeseqModule(inpt):
-    feats = inpt
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
-    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
-    feats = Dropout(0.3)(feats)
+    feats = GlobalMaxPooling1D()(feats)
     return feats
 
 
-def MotifNet(classes, opt):
-    inpt = Input(shape=(None,))
-    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    out = Conv1D(256, 14, activation='relu', padding='valid')(out)
-    # out = MaxPooling1D(3, strides=2)(out)
+def Classifier(inpt, classes):
+    out = inpt
+    out = Dense(len(classes), activation='linear')(out)
     out = BatchNormalization()(out)
-    out = Conv1D(256, 1, activation='relu', padding='valid')(out)
-    out = Conv1D(256, 6, activation='relu', padding='valid')(out)
-    out = BatchNormalization()(out)
-    # out = MaxPooling1D(3, strides=2)(out)
-    out = OriginalIception(out)
-    out = OriginalIception(out)
-    out = OriginalIception(out)
-    out = GlobalMaxPooling1D()(out)
-    out = Classifier(out, classes)
-    model = Model(inputs=[inpt], outputs=[out])
+    out = Activation('sigmoid')(out)
+    return out
+
+
+def DeeperSeq(classes, opt):
+    inp = Input(shape=(None,))
+    out = Classifier(Features(inp), classes)
+    model = Model(inputs=[inp], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
-def ProteinInception(classes, opt):
-    inpt = Input(shape=(None,))
-    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    out = SmallInception(out)
-    out = Dropout(0.2)(out)
-    out = SmallInception(out)
-    out = Dropout(0.2)(out)
-    # out = SmallInception(out)
-    # out = Dropout(0.2)(out)
-    out = Classifier(GlobalMaxPooling1D()(out), classes)
-    model = Model(inputs=[inpt], outputs=[out])
-    model.compile(loss='binary_crossentropy', optimizer=opt)
-    return model
+def batch_generator(stream, onto, classes):
 
+    s_cls = set(classes)
+    data = dict()
 
-def batch_generator(stream):
+    def labels2vec(lbl):
+        y = np.zeros(len(classes))
+        for go in onto.propagate(lbl, include_root=False):
+            if go not in s_cls:
+                continue
+            y[classes.index(go)] = 1
 
-    def prepare(batch):
-        ids, X, Y = zip(*batch)
-        b = max(map(len, X)) + 100
-        X = [pad_seq(seq, b) for seq in X]
-        return ids, np.asarray(X), np.asarray(Y)
+    def pad_seq(seq, max_length=MAX_LENGTH):
+        delta = max_length - len(seq)
+        seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
+        return np.asarray(seq)
 
-    batch = []
+    def prepare_batch(sequences, labels):
+        Y = np.asarray(map(labels2vec, labels))
+        # b = max(map(len, sequences))
+        X = np.asarray(map(pad_seq, sequences))
+        return X, Y
+
     for k, x, y in stream:
-        if len(batch) == BATCH_SIZE:
-            yield prepare(batch)
-            batch = []
-        batch.append([k, x, y])
+        if len(x) in data:
+            data[len(x)].append([k, x, y])
+            ids, seqs, lbls = zip(*data[len(x)])
+            if len(seqs) == BATCH_SIZE:
+                yield ids, prepare_batch(seqs, lbls)
+                del data[len(x)]
+        else:
+            data[len(x)] = [[k, x, y]]
 
-    yield prepare(batch)
-
-
-def add_arguments(parser):
-    parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
-                        help="Supply the URL of MongoDB"),
-    parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
-                        default="F", help="Specify the ontology aspect.")
-    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq', 'inception', 'resinception'],
-                        default="deepseq", help="Specify the model arch.")
-    parser.add_argument("--opt", type=str, choices=['sgd', 'adam'],
-                        default="adam", help="Specify the model optimizer.")
-    parser.add_argument("--init_epoch", type=int, default=0,
-                        help="Which epoch to start training the model?")
-    parser.add_argument("--num_epochs", type=int, default=200,
-                        help="How many epochs to train the model?")
-    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
+    for ids, seqs, lbls in zip(*data.values()):
+        yield ids, prepare_batch(seqs, lbls)
 
 
 class LossHistory(Callback):
     def __init__(self):
         self.losses = []
-        self.max_size = 200
 
     def on_batch_end(self, batch, logs={}):
-        self.losses.insert(0, logs.get('loss'))
-        # while len(self.losses) > self.max_size:
-        #     self.losses.pop()
+        self.losses.append(logs.get('loss'))
 
 
 def train(model, gen_xy, length_xy, epoch, num_epochs,
@@ -384,16 +282,16 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
     pbar = tqdm(total=length_xy)
 
-    for _, X, Y in gen_xy:
+    for X, Y in gen_xy:
         assert len(X) == len(Y)
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=epoch + 1,
+                  epochs=num_epochs if LONG_EXPOSURE else epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
-                  callbacks=[history, lrate])
+                  callbacks=[history])
         pbar.set_description("Training Loss:%.5f" % np.mean(history.losses))
         pbar.update(len(Y))
 
@@ -408,27 +306,22 @@ def oneminusone2zeroone(vec):
     return np.divide(np.add(np.array(vec), 1), 2)
 
 
-def calc_loss(y_true, y_pred, batch_size=BATCH_SIZE):
-    # return batch_size * np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
-    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred)])
-    # return log_loss(y_true, y_pred, normalize=True)
+def calc_loss(y_true, y_pred):
+    return np.mean([log_loss(y, y_hat) for y, y_hat in zip(y_true, y_pred) if np.any(y)])
 
 
 def predict(model, gen_xy, length_xy, classes):
     pbar = tqdm(total=length_xy, desc="Predicting...")
     i, m, n = 0, length_xy, len(classes)
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
-    ids = list()
-
-    for i, (uid, X, Y) in enumerate(gen_xy):
+    for i, (X, Y) in enumerate(gen_xy):
         assert len(X) == len(Y)
         k = len(Y)
-        ids.append(uid)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
         pbar.update(k)
     pbar.close()
-    return ids, y_true, y_pred
+    return y_true, y_pred
 
 
 def evaluate(y_true, y_pred, classes):
@@ -436,6 +329,19 @@ def evaluate(y_true, y_pred, classes):
     y_true = y_true[~np.all(y_true == 0, axis=1)]
     prs, rcs, f1s = performance(y_pred, y_true, classes)
     return calc_loss(y_true, y_pred), prs, rcs, f1s
+
+
+def add_arguments(parser):
+    parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
+                        help="Supply the URL of MongoDB"),
+    parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
+                        default="F", help="Specify the ontology aspect.")
+    parser.add_argument("--init_epoch", type=int, default=0,
+                        help="Which epoch to start training the model?")
+    parser.add_argument("--arch", type=str, choices=['deeperseq' 'motifnet', 'inception'],
+                        default="inception", help="Specify the model arch.")
+    parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
 
 
 if __name__ == "__main__":
@@ -453,52 +359,47 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    print("Listing Classes...")
-    classes = get_classes(db, onto)
+    classes = onto.classes
     classes.remove(onto.root)
     assert onto.root not in classes
 
-    if args.opt == "adam":
-        LR, EPOCH_DROP = 0.01, 1.0
-        opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    else:
-        LR, EPOCH_DROP = 1.0, 40.0
-        opt = optimizers.SGD(lr=LR, momentum=0.9, nesterov=True)
+    opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
 
-    if args.arch == "motifnet":
-        model = MotifNet(classes, opt)
-    elif args.arch == "deepseq":
-        model = DeepSeq(classes, opt)
-    elif args.arch == "inception":
+    if args.arch == 'inception':
         model = ProteinInception(classes, opt)
-    elif args.arch == "resinception":
-        model = ResInception(classes, opt)
+        LONG_EXPOSURE = False
+        num_epochs = 200
+    elif args.arch == 'deeperseq':
+        model = DeeperSeq(classes, opt)
+        LONG_EXPOSURE = True
+        num_epochs = 20
+    elif args.arch == 'motifnet':
+        model = MotifNet(classes, opt)
+        LONG_EXPOSURE = False
+        num_epochs = 200
     else:
-        print("Unknown model arch")
+        print('Unknown model arch')
         exit(0)
 
     if args.resume:
         model.load_weights(args.resume)
         print("Loaded model from disk")
-
     model.summary()
 
-    for epoch in range(args.init_epoch, args.num_epochs):
+    for epoch in range(args.init_epoch, num_epochs):
 
         trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
 
-        train(model, batch_generator(trn_stream), len(trn_stream), epoch, args.num_epochs)
-        _, y_true, y_pred = predict(model, batch_generator(tst_stream), len(tst_stream), classes)
+        train(model, batch_generator(trn_stream, onto, classes), len(trn_stream), epoch, num_epochs)
+        y_true, y_pred = predict(model, batch_generator(tst_stream, onto, classes), len(tst_stream), classes)
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
+        f_max = f1s[i]
 
         print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
-              % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
+              % (epoch + 1, num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        if f1s[i] < 0.5: continue
-
-        model_str = '%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f1s[i])
-        model.save_weights("checkpoints/%s.hdf5" % model_str)
-        with open("checkpoints/%s.json" % model_str, "w+") as f:
+        model_path = 'checkpoints/%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f_max)
+        model.save_weights("%s.hdf5" % model_path)
+        with open("%s.json" % model_path, "w+") as f:
             f.write(model.to_json())
-        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
