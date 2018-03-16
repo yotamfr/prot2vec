@@ -263,7 +263,7 @@ def batch_generator(stream, onto, classes):
                 yield ids, prepare_batch(seqs, lbls)
                 del data[len(x)]
         else:
-            data[len(x)] = list([k, x, y])
+            data[len(x)] = [[k, x, y]]
 
     for ids, seqs, lbls in zip(*data.values()):
         yield ids, prepare_batch(seqs, lbls)
