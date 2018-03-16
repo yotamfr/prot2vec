@@ -76,9 +76,9 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
     return stream_trn, stream_tst
 
 
-def pad_seq(seq):
-    delta = MAX_LENGTH - len(seq)
-    seq = [PAD for _ in range(delta//2)] + seq + [PAD for _ in range(MAX_LENGTH - delta//2)]
+def pad_seq(seq, max_length=MAX_LENGTH):
+    delta = max_length - len(seq)
+    seq = [PAD for _ in range(delta - delta//2)] + seq + [PAD for _ in range(delta//2)]
     return np.asarray(seq)
 
 
@@ -155,15 +155,15 @@ def LargeInception(inpt, num_channels=64):
     return Concatenate(axis=2)([tower_1, tower_2])
 
 
-def SmallInception(inpt, num_channels=64):
+def SmallInception(inpt, num_channels=150):
 
     tower_1 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_1 = Conv1D(num_channels, 6, padding='same', activation='relu')(tower_1)
-    tower_1 = BatchNormalization()(tower_1)
+    tower_1 = Conv1D(num_channels, 5, padding='same', activation='relu')(tower_1)
+    # tower_1 = BatchNormalization()(tower_1)
 
     tower_2 = Conv1D(num_channels, 1, padding='same', activation='relu')(inpt)
-    tower_2 = Conv1D(num_channels, 10, padding='same', activation='relu')(tower_2)
-    tower_2 = BatchNormalization()(tower_2)
+    tower_2 = Conv1D(num_channels, 15, padding='same', activation='relu')(tower_2)
+    # tower_2 = BatchNormalization()(tower_2)
 
     return Concatenate(axis=2)([tower_1, tower_2])
 
@@ -178,36 +178,40 @@ def Classifier(inp1d, classes):
 def MotifNet(classes, opt):
     inpt = Input(shape=(None,))
     out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    out = Conv1D(256, 15, activation='relu', padding='valid')(out)
-    out = Dropout(0.3)(out)
-    # out = MaxPooling1D(3, strides=2)(out)
-    # out = BatchNormalization()(out)
-    # out = Conv1D(256, 1, activation='relu', padding='valid')(out)
-    # out = Conv1D(128, 5, activation='relu', padding='valid')(out)
-    # out = Dropout(0.3)(out)
-    # out = BatchNormalization()(out)
-    # out = MaxPooling1D(3, strides=2)(out)
-    out = OriginalIception(out)
-    out = Dropout(0.3)(out)
-    out = OriginalIception(out)
-    out = Dropout(0.3)(out)
-
-    # out = OriginalIception(out)
-    out = GlobalMaxPooling1D()(out)
-    out = Classifier(out, classes)
+    out = Conv1D(250, 15, activation='relu', padding='valid')(out)
+    out = Dropout(0.2)(out)
+    out = Conv1D(100, 15, activation='relu', padding='valid')(out)
+    out = SmallInception(out)
+    out = Dropout(0.2)(out)
+    out = SmallInception(out)
+    out = Dropout(0.2)(out)
+    out = Conv1D(250, 5, activation='relu', padding='valid')(out)
+    out = Dropout(0.2)(out)
+    out = Classifier(GlobalMaxPooling1D()(out), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
 
 
+def Inception(inpt, tower1=6, tower2=10):
+
+    tower_1 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_1 = Conv1D(64, tower1, padding='same', activation='relu')(tower_1)
+
+    tower_2 = Conv1D(64, 1, padding='same', activation='relu')(inpt)
+    tower_2 = Conv1D(64, tower2, padding='same', activation='relu')(tower_2)
+
+    # tower_3 = MaxPooling1D(3, strides=1, padding='same')(inpt)
+    # tower_3 = Conv1D(64, 1, padding='same', activation='relu')(tower_3)
+
+    return Concatenate(axis=2)([tower_1, tower_2])
+
+
 def ProteinInception(classes, opt):
     inpt = Input(shape=(None,))
-    out = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
-    out = SmallInception(out)
-    # out = Dropout(0.3)(out)
-    out = SmallInception(out)
-    # out = Dropout(0.3)(out)
-    out = Classifier(GlobalMaxPooling1D()(out), classes)
+    img = Embedding(input_dim=26, output_dim=23, embeddings_initializer='uniform')(inpt)
+    feats = Inception(Inception(img))
+    out = Classifier(GlobalMaxPooling1D()(feats), classes)
     model = Model(inputs=[inpt], outputs=[out])
     model.compile(loss='binary_crossentropy', optimizer=opt)
     return model
@@ -265,7 +269,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
-                  epochs=num_epochs,
+                  epochs=epoch + 1,
                   verbose=0,
                   validation_data=None,
                   initial_epoch=epoch,
@@ -329,7 +333,11 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-    model = MotifNet(classes, opt)
+
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'inception'],
+                        default="inception", help="Specify the model arch.")
+
+    model = ProteinInception(classes, opt) if args.arch == 'inception' else MotifNet(classes, opt)
 
     if args.resume:
         model.load_weights(args.resume)
@@ -349,7 +357,7 @@ if __name__ == "__main__":
         print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, args.num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        model_path = 'checkpoints/motifnet-%d-%.5f-%.2f' % (epoch + 1, loss, f_max)
+        model_path = 'checkpoints/%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f_max)
         model.save_weights("%s.hdf5" % model_path)
         with open("%s.json" % model_path, "w+") as f:
             f.write(model.to_json())
