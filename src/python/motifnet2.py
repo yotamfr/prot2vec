@@ -2,12 +2,6 @@ import os
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-from src.python.consts import *
-
-from src.python.preprocess import *
-
-from src.python.geneontology import *
-
 from src.python.baselines import *
 
 from pymongo import MongoClient
@@ -49,6 +43,28 @@ t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
 MIN_LENGTH = 1
+
+
+def get_classes(db, onto, start=t0, end=t1):
+
+    q1 = {'DB': 'UniProtKB',
+         'Evidence': {'$in': exp_codes},
+         'Date': {"$lte": start},
+         'Aspect': ASPECT}
+    q2 = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$gt": start, "$lte": end},
+               'Aspect': ASPECT}
+
+    def helper(q):
+        seq2go, _ = GoAnnotationCollectionLoader(
+            db.goa_uniprot.find(q), db.goa_uniprot.count(q), ASPECT).load()
+        for i, (k, v) in enumerate(seq2go.items()):
+            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+            seq2go[k] = onto.propagate(v)
+        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
+
+    return list(helper(q1) | helper(q2))
 
 
 def get_training_and_validation_streams(db, limit=None):
@@ -245,14 +261,19 @@ def batch_generator(stream, onto, classes):
             y[classes.index(go)] = 1
         return y
 
-    def pad_seq(seq, max_length=MAX_LENGTH):
-        delta = max_length - len(seq)
-        seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
+    # def pad_seq(seq, max_length=MAX_LENGTH):
+    #     delta = max_length - len(seq)
+    #     seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
+    #     return np.asarray(seq)
+
+    def pad_seq(seq):
+        seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
         return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
-        Y = np.asarray([e for e in map(labels2vec, labels)])
-        X = np.asarray([e for e in map(pad_seq, sequences)])
+        # b = max(map(len, sequences)) + 100
+        Y = np.asarray([labels2vec(lbl) for lbl in labels])
+        X = np.asarray([pad_seq(seq) for seq in sequences])
         return X, Y
 
     for k, x, y in stream:
@@ -360,7 +381,7 @@ if __name__ == "__main__":
     print("Loading Ontology...")
     onto = get_ontology(ASPECT)
 
-    classes = onto.classes
+    classes = get_classes(db, onto)
     classes.remove(onto.root)
     assert onto.root not in classes
 
@@ -400,7 +421,8 @@ if __name__ == "__main__":
         print("[Epoch %d/%d] (Validation Loss: %.5f, F_max: %.3f, precision: %.3f, recall: %.3f)"
               % (epoch + 1, num_epochs, loss, f1s[i], prs[i], rcs[i]))
 
-        model_path = 'checkpoints/%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f_max)
-        model.save_weights("%s.hdf5" % model_path)
-        with open("%s.json" % model_path, "w+") as f:
+        model_str = '%s-%d-%.5f-%.2f' % (args.arch, epoch + 1, loss, f_max)
+        model.save_weights("checkpoints/%s.hdf5" % model_str)
+        with open("checkpoints/%s.json" % model_str, "w+") as f:
             f.write(model.to_json())
+        np.save("checkpoints/%s.npy" % model_str, np.asarray(classes))
