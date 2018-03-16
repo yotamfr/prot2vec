@@ -282,8 +282,7 @@ def train(model, gen_xy, length_xy, epoch, num_epochs,
 
     pbar = tqdm(total=length_xy)
 
-    for X, Y in gen_xy:
-        assert len(X) == len(Y)
+    for _, X, Y in gen_xy:
 
         model.fit(x=X, y=Y,
                   batch_size=BATCH_SIZE,
@@ -313,15 +312,16 @@ def calc_loss(y_true, y_pred):
 def predict(model, gen_xy, length_xy, classes):
     pbar = tqdm(total=length_xy, desc="Predicting...")
     i, m, n = 0, length_xy, len(classes)
+    ids = list()
     y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
-    for i, (X, Y) in enumerate(gen_xy):
-        assert len(X) == len(Y)
+    for i, (keys, (X, Y)) in enumerate(gen_xy):
         k = len(Y)
+        ids.extend(keys)
         y_hat, y = model.predict(X), Y
         y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
         pbar.update(k)
     pbar.close()
-    return y_true, y_pred
+    return ids, y_true, y_pred
 
 
 def evaluate(y_true, y_pred, classes):
