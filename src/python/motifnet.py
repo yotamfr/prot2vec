@@ -51,7 +51,7 @@ MAX_LENGTH = 2000
 MIN_LENGTH = 1
 
 
-def get_training_and_validation_streams(db, onto, classes, limit=None):
+def get_training_and_validation_streams(db, limit=None):
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$lte": t0},
@@ -61,7 +61,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
     count = limit if limit else db.uniprot.count(query)
     source = db.uniprot.find(query).batch_size(10)
     if limit: source = source.limit(limit)
-    stream_trn = DataStream(source, count, seq2go_trn, onto, classes)
+    stream_trn = DataStream(source, count, seq2go_trn)
 
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
@@ -73,7 +73,7 @@ def get_training_and_validation_streams(db, onto, classes, limit=None):
     count = limit if limit else db.uniprot.count(query)
     source = db.uniprot.find(query).batch_size(10)
     if limit: source = source.limit(limit)
-    stream_tst = DataStream(source, count, seq2go_tst, onto, classes)
+    stream_tst = DataStream(source, count, seq2go_tst)
 
     return stream_trn, stream_tst
 
@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     for epoch in range(args.init_epoch, num_epochs):
 
-        trn_stream, tst_stream = get_training_and_validation_streams(db, onto, classes)
+        trn_stream, tst_stream = get_training_and_validation_streams(db)
 
         train(model, batch_generator(trn_stream, onto, classes), len(trn_stream), epoch, num_epochs)
         y_true, y_pred = predict(model, batch_generator(tst_stream, onto, classes), len(tst_stream), classes)
