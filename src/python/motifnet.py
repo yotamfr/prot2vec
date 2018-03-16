@@ -265,7 +265,8 @@ def batch_generator(stream, onto, classes):
         else:
             data[len(x)] = [[k, x, y]]
 
-    for ids, seqs, lbls in zip(*data.values()):
+    for packet in data.values():
+        ids, seqs, lbls = zip(*packet)
         yield ids, prepare_batch(seqs, lbls)
 
 
