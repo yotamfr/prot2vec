@@ -243,6 +243,7 @@ def batch_generator(stream, onto, classes):
             if go not in s_cls:
                 continue
             y[classes.index(go)] = 1
+        return y
 
     def pad_seq(seq, max_length=MAX_LENGTH):
         delta = max_length - len(seq)
@@ -250,7 +251,6 @@ def batch_generator(stream, onto, classes):
         return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
-        # b = max(map(len, sequences))
         Y = np.asarray([e for e in map(labels2vec, labels)])
         X = np.asarray([e for e in map(pad_seq, sequences)])
         return X, Y
@@ -391,7 +391,7 @@ if __name__ == "__main__":
         trn_stream, tst_stream = get_training_and_validation_streams(db)
 
         train(model, batch_generator(trn_stream, onto, classes), len(trn_stream), epoch, num_epochs)
-        y_true, y_pred = predict(model, batch_generator(tst_stream, onto, classes), len(tst_stream), classes)
+        _, y_true, y_pred = predict(model, batch_generator(tst_stream, onto, classes), len(tst_stream), classes)
         loss, prs, rcs, f1s = evaluate(y_true, y_pred, classes)
         i = np.argmax(f1s)
         f_max = f1s[i]
