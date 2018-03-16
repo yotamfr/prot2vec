@@ -338,7 +338,7 @@ def add_arguments(parser):
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("--init_epoch", type=int, default=0,
                         help="Which epoch to start training the model?")
-    parser.add_argument("--arch", type=str, choices=['deeperseq' 'motifnet', 'inception'],
+    parser.add_argument("--arch", type=str, choices=['deeperseq', 'motifnet', 'inception'],
                         default="inception", help="Specify the model arch.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
