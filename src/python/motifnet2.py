@@ -261,14 +261,14 @@ def batch_generator(stream, onto, classes):
             y[classes.index(go)] = 1
         return y
 
-    # def pad_seq(seq, max_length=MAX_LENGTH):
-    #     delta = max_length - len(seq)
-    #     seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
-    #     return np.asarray(seq)
-
-    def pad_seq(seq):
-        seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
+    def pad_seq(seq, max_length=MAX_LENGTH):
+        delta = max_length - len(seq)
+        seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
         return np.asarray(seq)
+
+    # def pad_seq(seq):
+    #     seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
+    #     return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
         # b = max(map(len, sequences)) + 100
@@ -277,14 +277,15 @@ def batch_generator(stream, onto, classes):
         return X, Y
 
     for k, x, y in stream:
-        if len(x) in data:
-            data[len(x)].append([k, x, y])
-            ids, seqs, lbls = zip(*data[len(x)])
+        lx = len(x)
+        if lx in data:
+            data[lx].append([k, x, y])
+            ids, seqs, lbls = zip(*data[lx])
             if len(seqs) == BATCH_SIZE:
                 yield ids, prepare_batch(seqs, lbls)
-                del data[len(x)]
+                del data[lx]
         else:
-            data[len(x)] = [[k, x, y]]
+            data[lx] = [[k, x, y]]
 
     for packet in data.values():
         ids, seqs, lbls = zip(*packet)
