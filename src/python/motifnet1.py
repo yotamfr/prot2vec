@@ -247,6 +247,8 @@ def add_arguments(parser):
                         help="Which epoch to start training the model?")
     parser.add_argument("--num_epochs", type=int, default=20,
                         help="How many epochs to train the model?")
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'inception'],
+                        default="inception", help="Specify the model arch.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
 
@@ -333,9 +335,6 @@ if __name__ == "__main__":
     assert onto.root not in classes
 
     opt = optimizers.Adam(lr=LR, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
-
-    parser.add_argument("--arch", type=str, choices=['motifnet', 'inception'],
-                        default="inception", help="Specify the model arch.")
 
     model = ProteinInception(classes, opt) if args.arch == 'inception' else MotifNet(classes, opt)
 
