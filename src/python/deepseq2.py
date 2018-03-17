@@ -236,14 +236,6 @@ def Features(inpt):
     return feats
 
 
-def Classifier(inpt, classes):
-    out = inpt
-    out = Dense(len(classes), activation='linear')(out)
-    out = BatchNormalization()(out)
-    out = Activation('sigmoid')(out)
-    return out
-
-
 def DeeperSeq(classes, opt):
     inp = Input(shape=(None,))
     out = Classifier(Features(inp), classes)
