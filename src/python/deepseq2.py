@@ -169,10 +169,11 @@ def SmallInception(inpt, num_channels=150):
     return Concatenate(axis=2)([tower_1, tower_2])
 
 
-def Classifier(inp1d, classes, size_hidden=250):
+def Classifier(inp1d, classes, size_hidden=500):
     out = Dense(size_hidden)(inp1d)
     out = BatchNormalization()(out)
     out = Activation('relu')(out)
+    out = Dropout(0.5)(out)
     out = Dense(len(classes))(out)
     out = BatchNormalization()(out)
     out = Activation('sigmoid')(out)
