@@ -384,7 +384,7 @@ if __name__ == "__main__":
         model = ProteinInception(classes, opt)
         LONG_EXPOSURE = False
         num_epochs = 200
-    elif args.arch == 'deeperseq':
+    elif args.arch == 'deepseq':
         model = DeeperSeq(classes, opt)
         LONG_EXPOSURE = True
         num_epochs = 20
