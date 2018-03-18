@@ -64,7 +64,7 @@ def get_classes(db, onto, start=t0, end=t1):
             seq2go[k] = onto.propagate(v)
         return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
 
-    return list(helper(q1) | helper(q2))
+    return onto.sort(helper(q1) | helper(q2))
 
 
 def get_training_and_validation_streams(db, limit=None):
@@ -357,8 +357,8 @@ def add_arguments(parser):
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("--init_epoch", type=int, default=0,
                         help="Which epoch to start training the model?")
-    parser.add_argument("--arch", type=str, choices=['deeperseq', 'motifnet', 'inception'],
-                        default="inception", help="Specify the model arch.")
+    parser.add_argument("--arch", type=str, choices=['deepseq', 'motifnet', 'inception'],
+                        default="deepseq", help="Specify the model arch.")
     parser.add_argument('-r', '--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
 
