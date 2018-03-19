@@ -263,9 +263,9 @@ def batch_generator(stream, onto, classes):
     #     return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
-        # b = max(map(len, sequences)) + 100
+        b = max(map(len, sequences)) + 100
         Y = np.asarray([labels2vec(lbl) for lbl in labels])
-        X = np.asarray([pad_seq(seq) for seq in sequences])
+        X = np.asarray([pad_seq(seq, b) for seq in sequences])
         return X, Y
 
     for k, x, y in stream:
