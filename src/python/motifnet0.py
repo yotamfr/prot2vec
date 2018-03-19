@@ -245,8 +245,8 @@ def add_arguments(parser):
                         help="Supply the URL of MongoDB"),
     parser.add_argument("--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
-    parser.add_argument("--inception", type=str, choices=['motifnet', 'deepseq', 'inception'],
-                        default="deepseq", help="Specify the model arch.")
+    parser.add_argument("--arch", type=str, choices=['motifnet', 'deepseq', 'inception'],
+                        default="inception", help="Specify the model arch.")
     parser.add_argument("--opt", type=str, choices=['sgd', 'adam'],
                         default="adam", help="Specify the model optimizer.")
     parser.add_argument("--init_epoch", type=int, default=0,
