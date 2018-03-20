@@ -358,6 +358,7 @@ if __name__ == "__main__":
     else:
         fasta_fname = args.input_file
         fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
-        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src), key=lambda p: -len(p[1]))
+        existing_ids = set([doc["_id"] for doc in db.cafapi.find({})])
+        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids), key=lambda p: -len(p[1]))
         db.cafapi.create_index("updated_at")
         _run_hhblits_batched(seqs, db.cafapi)
