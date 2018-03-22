@@ -13,7 +13,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--data_dir", type=str, default=gettempdir(),
                     help="Supply working directory for the data")
 parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
-                    help="Supply the URL of MongoDB")
+                    help="Supply the URL for the MongoDB server.")
+parser.add_argument("--db_name", type=str, required=True, choices=['prot2vec', 'prot2vec2'],
+                    help="The name of the DB to which to write the data.")
 parser.add_argument("-c", "--collection", type=str, required=True,
                     choices=['trembl', 'sprot', 'goa_uniprot', 'goa_uniprot_noiea', 'goa_pdb'],
                     help="The name of the collection that you want load.")
@@ -24,9 +26,10 @@ parser.add_argument('--exp', action='store_true', default=False,
 args = parser.parse_args()
 
 client = MongoClient(args.mongo_url)
-db = client['prot2vec']
+db = client[args.db_name]
 
-exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
+# exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"]
+exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"] + ["HDA", "HEP", "HMP"]
 
 
 def blocks(files, size=8192*1024):

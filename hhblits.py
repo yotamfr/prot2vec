@@ -389,5 +389,5 @@ if __name__ == "__main__":
         fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
         existing_ids = set([doc["_id"] for doc in db.cafa_pi.find({})])
         seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids), key=lambda p: -len(p[1]))
-        db.cafapi.create_index("updated_at")
+        db.cafa_pi.create_index("updated_at")
         func(seqs, db.cafa_pi)
