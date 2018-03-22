@@ -35,6 +35,8 @@ Data/CAFA_PI/keywords.txt
 Data/CAFA_PI/sampleSubmission/
 Data/CAFA_PI/sampleSubmissions.zip
 Data/CAFA_PI/targetFiles.zip
+Data/validation_set.fasta
+Data/training_set.fasta
 
 src/__pycache__/
 src/python/__pycache__/
