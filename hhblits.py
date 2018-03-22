@@ -346,7 +346,7 @@ def add_arguments(parser):
                         help='Where to save the output/log files?')
     parser.add_argument("--comp", type=str, required=True, choices=['hhblits', 'profile'],
                         help="The name of the computation that you want run.")
-    parser.add_argument("--db_name", type=str, default='prot2vec2', choices=['prot2vec', 'prot2vec2'],
+    parser.add_argument("--db_name", type=str, default='prot2vec', choices=['prot2vec', 'prot2vec2'],
                         help="The name of the DB to which to write the data.")
 
 
