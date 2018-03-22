@@ -27,14 +27,10 @@ import argparse
 
 
 out_dir = "./hhblits"
-
-if not os.path.exists(out_dir): os.mkdir(out_dir)
-
 prefix_hhsuite = "/usr/share/hhsuite"
 prefix_blast = "/usr/bin"
 uniprot20url = "http://wwwuser.gwdg.de/%7Ecompbiol/data/hhsuite/databases/hhsuite_dbs/uniprot20_2016_02.tgz"
 uniprot20name = "uniprot20_2016_02"
-# uniprot20name = "uniprot20_2013_03"
 
 batch_size = 2
 num_cpu = 2
@@ -324,6 +320,8 @@ def add_arguments(parser):
                         help="How many days before records are considered obsolete?")
     parser.add_argument("--input_file", type=str, default=None,
                         help="Supply an input file in FASTA format.")
+    parser.add_argument('--out_dir', default='./hhblits', type=str, metavar='PATH',
+                        help='Where to save the output/log files?')
 
 
 if __name__ == "__main__":
@@ -331,6 +329,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
+
+    out_dir = args.out_dir
+    if not os.path.exists(out_dir): os.mkdir(out_dir)
 
     num_cpu = args.num_cpu
     batch_size = args.batch_size
