@@ -10,9 +10,7 @@ from Bio.SeqRecord import SeqRecord
 
 from Bio.Blast.Applications import NcbiblastpCommandline
 
-from .consts import *
-
-from .preprocess import *
+from .preprocess2 import *
 
 from itertools import cycle
 import matplotlib.pyplot as plt
