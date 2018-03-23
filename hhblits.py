@@ -344,7 +344,7 @@ def add_arguments(parser):
                         help="Supply an input file in FASTA format.")
     parser.add_argument('--out_dir', default='./hhblits', type=str, metavar='PATH',
                         help='Where to save the output/log files?')
-    parser.add_argument("--comp", type=str, required=True, choices=['hhblits', 'profile'],
+    parser.add_argument("--comp", type=str, required=True, choices=['hhblits', 'profiles'],
                         help="The name of the computation that you want run.")
     parser.add_argument("--db_name", type=str, default='prot2vec', choices=['prot2vec', 'prot2vec2'],
                         help="The name of the DB to which to write the data.")
