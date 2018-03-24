@@ -223,29 +223,30 @@ def get_training_and_validation_streams(db, start, end, asp, profile=1, limit=No
         collection = db.uniprot
         DataStream = SequenceStream
 
-    q_train = {'DB': 'UniProtKB',
-               'Evidence': {'$in': exp_codes},
-               'Date': {"$lte": start},
-               'Aspect': asp}
-    seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train),
-                                                 db.goa_uniprot.count(q_train), asp).load()
-    query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
-    count = limit if limit else collection.count(query)
-    source = collection.find(query).batch_size(10)
-    if limit: source = source.limit(limit)
-    stream_trn = DataStream(source, count, seq2go_trn)
-
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$gt": start, "$lte": end},
                'Aspect': asp}
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid),
                                                  db.goa_uniprot.count(q_valid), asp).load()
-    query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}}
+    query = {"_id": {"$in": list(seq2go_tst.keys())}}
     count = limit if limit else collection.count(query)
     source = collection.find(query).batch_size(10)
     if limit: source = source.limit(limit)
     stream_tst = DataStream(source, count, seq2go_tst)
+
+    q_train = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$lte": start},
+               'Aspect': asp}
+    seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train),
+                                                 db.goa_uniprot.count(q_train), asp).load()
+    seq2go_trn = {k:v for k,v in seq2go_trn.items() if k not in seq2go_tst}
+    query = {"_id": {"$in": list(seq2go_trn.keys())}}
+    count = limit if limit else collection.count(query)
+    source = collection.find(query).batch_size(10)
+    if limit: source = source.limit(limit)
+    stream_trn = DataStream(source, count, seq2go_trn)
 
     return stream_trn, stream_tst
 
@@ -280,8 +281,7 @@ class SequenceStream(DataStream):
                 continue
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            indices = [AA.aa2index[aa] for aa in seq]
-            yield uid, indices, seq2go[uid]
+            yield [uid, seq, seq2go[uid]]
 
     def to_fasta(self, out_file):
         count = self._count
@@ -310,15 +310,15 @@ class ProfileStream(DataStream):
                 continue
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            indices = [AA.aa2index[aa] for aa in seq]
             mat = pssm2matrix(seq, pssm)
-            yield uid, indices, mat, seq2go[uid]
+            yield [uid, seq, mat, seq2go[uid]]
 
 
-def load_data(stream, reverse=True):
+def load_data(stream, reverse=True, indices=True):
     data = []
     for i, packet in enumerate(stream):
         sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(stream)))
+        if indices: packet[1] = [AA.aa2index[aa] for aa in packet[1]]
         data.append(packet)
     data.sort(key=lambda p: len(p[1]), reverse=reverse)  # it is important to have seq @ 2nd place
     return data

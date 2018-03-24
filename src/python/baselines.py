@@ -35,25 +35,6 @@ t1 = TODAY
 
 cleanup = True
 
-# unparseables = ["Cross_product_review", "Involved_in",
-#                 "gocheck_do_not_annotate",
-#                 "Term not to be used for direct annotation",
-#                 "gocheck_do_not_manually_annotate",
-#                 "Term not to be used for direct manual annotation",
-#                 "goslim_aspergillus", "Aspergillus GO slim",
-#                 "goslim_candida", "Candida GO slim",
-#                 "goslim_generic", "Generic GO slim",
-#                 "goslim_metagenomics", "Metagenomics GO slim",
-#                 "goslim_pir", "PIR GO slim",
-#                 "goslim_plant", "Plant GO slim",
-#                 "goslim_pombe", "Fission yeast GO slim",
-#                 "goslim_yeast", "Yeast GO slim",
-#                 "gosubset_prok", "Prokaryotic GO subset",
-#                 "mf_needs_review", "Catalytic activity terms in need of attention",
-#                 "termgenie_unvetted",
-#                 "Terms created by TermGenie that do not follow a template and require additional vetting by editors",
-#                 "virus_checked", "Viral overhaul terms"]
-
 
 def init_GO(asp=ASPECT, src=None):
     global ONTO, ASPECT
@@ -73,61 +54,6 @@ def load_all_data():
     cc, _ = load_data(db, asp='C', codes=exp_codes)
     bp, _ = load_data(db, asp='P', codes=exp_codes)
     return mf, cc, bp
-
-
-# def load_evaluation_data(setting="cafa2"):
-#     if setting == "cafa2":
-#         data_root = "data/cafa/CAFA2Supplementary_data/data/"
-#
-#         go_pth = os.path.join(data_root, "ontology", "go_20130615-termdb.obo")
-#         go_copy_pth = "%s.copy" % go_pth
-#
-#         with open(go_pth, "rt") as fin:
-#             with open(go_copy_pth, "wt") as fout:
-#                 for line in fin:
-#                     for term in unparseables:
-#                         line = line.replace(term, '')
-#
-#                     fout.write(line)
-#
-#         init_GO(ASPECT, go_copy_pth)
-#         fpath = os.path.join(data_root, "GO-t0", "goa.go.%s" % GoAspect(ASPECT))
-#         num_mapping = count_lines(fpath, sep=bytes('\n', 'utf8'))
-#         src_mapping = open(fpath, 'r')
-#         ref2go, _ = MappingFileLoader(src_mapping, num_mapping).load()
-#
-#         trg2seq = dict()
-#         for domain in ["archaea", "bacteria", "eukarya"]:
-#             targets_dir = os.path.join(data_root, "CAFA2-targets", domain)
-#             trg2seq.update(load_cafa2_targets(targets_dir))
-#         trg2go = dict()
-#         annots_dir = os.path.join(data_root, "benchmark", "groundtruth")
-#         fpath = os.path.join(annots_dir, "propagated_%s.txt" % GoAspect(ASPECT))
-#         num_mapping = count_lines(fpath, sep=bytes('\n', 'utf8'))
-#         src_mapping = open(fpath, 'r')
-#         d1, _ = MappingFileLoader(src_mapping, num_mapping).load()
-#         trg2go.update(d1)
-#         return trg2seq, trg2go
-#     elif setting == "cafa3":
-#         pass
-#
-#     else:
-#         print("Unknown evaluation setting")
-#     pass
-
-
-# def load_cafa2_targets(targets_dir):
-#
-#     trg2seq = dict()
-#
-#     for fname in os.listdir(targets_dir):
-#         print("\nLoading: %s" % fname)
-#         fpath = "%s/%s" % (targets_dir, fname)
-#         num_seq = count_lines(fpath, sep=bytes('>', 'utf8'))
-#         fasta_src = parse_fasta(open(fpath, 'r'), 'fasta')
-#         trg2seq.update(FastaFileLoader(fasta_src, num_seq).load())
-#
-#     return trg2seq
 
 
 def load_training_and_validation(db, limit=None):
@@ -334,24 +260,30 @@ def get_P_and_T(tau, predictions, targets, classes=None):
     return P, T
 
 
-def precision(tau, predictions, targets, classes=None):
-
+def precision_per_seq(tau, predictions, targets, classes=None):
     P, T = get_P_and_T(tau, predictions, targets, classes)
+    return [len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)]
 
+
+def recall_per_seq(tau, predictions, targets, classes=None, partial_evaluation=False):
+    P, T = get_P_and_T(tau, predictions, targets, classes)
+    if partial_evaluation:
+        P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
+    return [len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)]
+
+
+def precision(tau, predictions, targets, classes=None):
+    P, T = get_P_and_T(tau, predictions, targets, classes)
     if len(P) == 0: return 0.0
-
     total = sum([len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)])
     return total / len(P)
 
 
 def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
-
     P, T = get_P_and_T(tau, predictions, targets, classes)
     if partial_evaluation:
         P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
-
     if len(P) == 0: return 0.0
-
     total = sum([len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)])
     return total / len(T)
 
