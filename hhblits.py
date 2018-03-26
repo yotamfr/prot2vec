@@ -191,9 +191,8 @@ def _run_hhblits_batched(sequences, collection):
     pbar.close()
 
 
-def _get_profile_func(pssm=True):
-    func = _get_pssm if pssm else _get_profile
-    attr_name = "pssm" if pssm else "profile"
+def _get_profile_func(method="pssm"):
+    func = _get_pssm if method == "pssm" else _get_profile
 
     def _comp_profile_batched(sequences, collection):
 
@@ -215,7 +214,7 @@ def _get_profile_func(pssm=True):
                 if not attr: continue
                 collection.update_one({
                     "_id": seq.id}, {
-                    '$set': {attr_name: attr,
+                    '$set': {method: attr,
                              "seq": str(seq.seq),
                              "length": len(seq.seq),
                              "updated_at": datetime.utcnow()}
@@ -374,8 +373,7 @@ if __name__ == "__main__":
     db = client[args.db_name]
     lim = args.limit
 
-    func = _run_hhblits_batched if args.comp == 'hhblits' \
-        else _get_profile_func(args.comp == "pssm")
+    func = _run_hhblits_batched if args.comp == 'hhblits' else _get_profile_func(args.comp)
 
     if not args.input_file:
         seqs = _get_annotated_uniprot(db, lim, deltadays=args.dd)
@@ -384,7 +382,8 @@ if __name__ == "__main__":
     else:
         fasta_fname = args.input_file
         fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
-        existing_ids = set([doc["_id"] for doc in db.cafa_pi.find({})])
-        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids), key=lambda p: -len(p[1]))
+        existing_ids = set([doc["_id"] for doc in db.cafa_pi.find({}) if args.comp in doc])
+        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids),
+                      key=lambda p: -len(p[1]))
         db.cafa_pi.create_index("updated_at")
         func(seqs, db.cafa_pi)
