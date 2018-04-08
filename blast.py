@@ -100,7 +100,7 @@ if __name__ == "__main__":
     db_pth = _prepare_blast(uid2seq_trn)
     dist_mat = {}
 
-    # compute_blast_parallel(uid2seq_trn, dist_mat)
+    compute_blast_parallel(uid2seq_trn, dist_mat)
     compute_blast_parallel(uid2seq_tst, dist_mat)
 
     timestamp = datetime.date.today().strftime("%m-%d-%Y_%I:%m%p")
