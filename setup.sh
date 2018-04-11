@@ -49,6 +49,7 @@ fi
 
 conda install -p virtualenv visdom -c conda-forge
 
+#conda install -p virtualenv -c https://conda.anaconda.org/biocore scikit-bio
 
 ### activate virtualenv
 source activate virtualenv
@@ -83,6 +84,12 @@ pip install obonet
 pip install sconce      # Sconce is a dashboard for monitoring and comparing data in real time.
 
 pip install A3MIO
+
+pip install python-Levenshtein
+
+#pip install beaker
+
+#pip install colorlog
 
 ### install virtualenv as kernel to ipython notebook
 pip install ipykernel
