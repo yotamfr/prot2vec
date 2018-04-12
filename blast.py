@@ -28,7 +28,7 @@ import pickle
 
 import datetime
 
-NUM_CPU = 16
+NUM_CPU = 32
 
 E = ThreadPoolExecutor(NUM_CPU)
 
@@ -107,7 +107,7 @@ def to_fasta(seq_map, out_file):
     SeqIO.write(sequences, open(out_file, 'w+'), "fasta")
 
 
-def load_nature_repr_set(db, sample_size=50000):
+def load_nature_repr_set(db):
     def to_fasta(seq_map, out_file):
         sequences = []
         for unipid, seq in seq_map.items():
@@ -126,9 +126,7 @@ def load_nature_repr_set(db, sample_size=50000):
     fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
     seq_map = FastaFileLoader(fasta_src, num_seq).load()
     all_seqs = [Seq(uid, str(seq)) for uid, seq in seq_map.items()]
-    sample_size = min(sample_size, len(all_seqs))
-    sample = np.random.choice(all_seqs, sample_size, replace=False)
-    return sample
+    return all_seqs
 
 
 # def get_blast_metric(blast_mat_pth, nature_sequence, sample_size=10e2):
@@ -247,23 +245,36 @@ class Seq(object):
         return len(self.seq)
 
 
-class BLAST(object):
-
-    def __init__(self, collection):
-        self.collection = collection
-
-    def get_hits(self, seq1, seq2):
-        collection = self.collection
-        hits = list(map(HSP, collection.find({"qseqid": seq1.uid, "sseqid": seq2.uid})))
-        hits.extend(map(HSP, collection.find({"qseqid": seq2.uid, "sseqid": seq1.uid})))
-        return hits
-
-
 def load_object(pth):
     with open(pth, 'rb') as f:
         loaded_dist_mat = pickle.load(f)
         assert len(loaded_dist_mat) > 0
     return loaded_dist_mat
+
+
+class BLAST(object):
+
+    def __init__(self, collection):
+        self.collection = collection
+        self.blast_cache = {}
+
+    def load_precomputed(self, targets):
+        collection = self.collection
+        blast_cache = self.blast_cache
+        pbar = tqdm(range(len(targets)), desc="blast hits loaded")
+        for tgt in targets:
+            hits = map(HSP, collection.find({"qseqid": tgt.uid}))
+            blast_cache[tgt] = list(hits)
+            pbar.update(1)
+        pbar.close()
+
+    def get_hits(self, seq1, seq2):
+        collection = self.collection
+        hits = list(map(HSP, collection.find({"qseqid": seq1.uid, "sseqid": seq2.uid})))
+        return hits
+
+    def __getitem__(self, uid):
+        return self.blast_cache[uid]
 
 
 def add_arguments(parser):
@@ -325,7 +336,7 @@ if __name__ == "__main__":
         compute_blast_parallel(uid2seq_trn, db_pth, blast_hsp_matrix)
         # save_object(blast_hsp_matrix, pth)
 
-        nature_set = load_nature_repr_set(db, sample_size=300000)
+        nature_set = load_nature_repr_set(db)
         uid2seq_nature = {seq.uid: seq.seq for seq in nature_set}
         compute_blast_parallel(uid2seq_nature, db_pth, blast_hsp_matrix)
         # save_object(blast_hsp_matrix, pth)
