@@ -10,7 +10,7 @@ from Bio.SeqRecord import SeqRecord
 
 from Bio.Blast.Applications import NcbiblastpCommandline
 
-from .preprocess2 import *
+from src.python.preprocess2 import *
 
 from itertools import cycle
 import matplotlib.pyplot as plt
@@ -30,10 +30,8 @@ ONTO = None
 PRIOR = None
 THRESHOLDS = np.arange(.05, 1, .05)
 
-t0 = datetime(2016, 2, 1, 0, 0)
-t1 = TODAY
-
 cleanup = True
+eps = 10e-6
 
 
 def init_GO(asp=ASPECT, src=None):
@@ -54,49 +52,6 @@ def load_all_data():
     cc, _ = load_data(db, asp='C', codes=exp_codes)
     bp, _ = load_data(db, asp='P', codes=exp_codes)
     return mf, cc, bp
-
-
-def load_training_and_validation(db, limit=None):
-    q_train = {'DB': 'UniProtKB',
-               'Evidence': {'$in': exp_codes},
-               'Date':  {"$lte": t0},
-               'Aspect': ASPECT}
-
-    sequences_train, annotations_train, _ = _get_labeled_data(db, q_train, None)
-
-    q_valid = {'DB': 'UniProtKB',
-               'Evidence': {'$in': exp_codes},
-               'Date':  {"$gt": t0, "$lte": t1},
-               'Aspect': ASPECT}
-
-    sequences_valid, annotations_valid, _ = _get_labeled_data(db, q_valid, limit)
-    forbidden = set(sequences_train.keys())
-    sequences_valid = {k: v for k, v in sequences_valid.items() if k not in forbidden}
-    annotations_valid = {k: v for k, v in annotations_valid.items() if k not in forbidden}
-
-    return sequences_train, annotations_train, sequences_valid, annotations_valid
-
-
-def _get_labeled_data(db, query, limit, propagate=True):
-
-    c = limit if limit else db.goa_uniprot.count(query)
-    s = db.goa_uniprot.find(query)
-    if limit: s = s.limit(limit)
-
-    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, ASPECT).load()
-
-    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
-    num_seq = db.uniprot.count(query)
-    src_seq = db.uniprot.find(query)
-
-    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
-
-    if propagate:
-        for k, v in seqid2goid.items():
-            annots = ONTO.propagate(v, include_root=False)
-            seqid2goid[k] = annots
-
-    return seqid2seq, seqid2goid, goid2seqid
 
 
 def _prepare_naive(reference):
@@ -124,9 +79,9 @@ def _naive(target, reference):
     return PRIOR
 
 
-def _prepare_blast(sequences, load_file=0):
+def _prepare_blast(sequences):
+    # print('### entering _prepare_blast')
     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % GoAspect(ASPECT))
-    if load_file == 1 and os.path.exists(blastdb_pth): return
     records = [SeqRecord(Seq(seq), id) for id, seq in sequences.items()]
     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
@@ -203,12 +158,10 @@ def _blast(target_fasta, reference, topn=None, choose_max_prob=True):
 
 
 def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
-
     if len(target_seqs) > 1:
         pbar = tqdm(range(len(target_seqs)), desc="targets processed")
     else:
         pbar = None
-
     if binary_mode:
         predictions = np.zeros((len(target_seqs), len(ONTO.classes)))
         for i, (_, seq) in enumerate(target_seqs.items()):
@@ -224,7 +177,6 @@ def _predict(reference_annots, target_seqs, func_predict, binary_mode=False):
             predictions[seqid] = func_predict(SeqRecord(Seq(seq), seqid), reference_annots)
             if pbar: pbar.update(1)
     if pbar: pbar.close()
-
     return predictions
 
 
@@ -232,76 +184,70 @@ def bin2dict(distribution, classes):
     return {classes[i]: prob for i, prob in enumerate(distribution)}
 
 
-def get_P_and_T(tau, predictions, targets, classes=None):
+def get_P_and_T_from_dictionaries(tau, predictions, targets):
     P, T = [], []
-    if classes:
-        for seq_preds, seq_targets in zip(map(lambda p: bin2dict(p, classes), predictions),
-                                          map(lambda t: bin2dict(t, classes), targets)):
-
-            seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
-            seq_targets = [go for go, prob in seq_targets.items() if prob >= tau]
-
-            if len(seq_annots) == 0:
-                continue
-            P.append(set(seq_annots))
-            T.append(set(seq_targets))
-    else:
-
-        for seqid, seq_preds in predictions.items():
-            seq_targets = targets[seqid]
-            seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
-            if len(seq_annots) == 0:
-                continue
-            P.append(set(seq_annots))
-            T.append(set(seq_targets))
-
+    for seqid, seq_preds in predictions.items():
+        seq_targets = targets[seqid]
+        assert len(seq_targets) > 0
+        seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
+        P.append(set(seq_annots))
+        T.append(set(seq_targets))
     assert len(P) == len(T)
-
     return P, T
 
 
-def precision_per_seq(tau, predictions, targets, classes=None):
-    P, T = get_P_and_T(tau, predictions, targets, classes)
-    return [len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)]
-
-
-def recall_per_seq(tau, predictions, targets, classes=None, partial_evaluation=False):
-    P, T = get_P_and_T(tau, predictions, targets, classes)
-    if partial_evaluation:
-        P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
-    return [len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)]
+def get_P_and_T_from_arrays(tau, predictions, targets, classes):
+    P, T = [], []
+    for seq_preds, seq_targets in zip(map(lambda p: bin2dict(p, classes), predictions),
+                                      map(lambda t: bin2dict(t, classes), targets)):
+        seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
+        seq_targets = [go for go, prob in seq_targets.items() if prob >= tau]
+        assert len(seq_targets) > 0
+        P.append(set(seq_annots))
+        T.append(set(seq_targets))
+    assert len(P) == len(T)
+    return P, T
 
 
 def precision(tau, predictions, targets, classes=None):
-    P, T = get_P_and_T(tau, predictions, targets, classes)
-    if len(P) == 0: return 0.0
-    total = sum([len(P_i & T_i) / len(P_i) for P_i, T_i in zip(P, T)])
-    return total / len(P)
+    assert type(predictions) == type(targets)
+    if isinstance(predictions, dict):
+        P, T = get_P_and_T_from_dictionaries(tau, predictions, targets)
+    else:
+        assert classes
+        P, T = get_P_and_T_from_arrays(tau, predictions, targets, classes)
+    ret = [len(P_i & T_i) / len(P_i) if len(P_i) else 1.0 for P_i, T_i in zip(P, T)]
+    return ret
 
 
 def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
-    P, T = get_P_and_T(tau, predictions, targets, classes)
+    assert type(predictions) == type(targets)
+    if isinstance(predictions, dict):
+        P, T = get_P_and_T_from_dictionaries(tau, predictions, targets)
+    else:
+        assert classes
+        P, T = get_P_and_T_from_arrays(tau, predictions, targets, classes)
     if partial_evaluation:
         P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
-    if len(P) == 0: return 0.0
-    total = sum([len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)])
-    return total / len(T)
+    ret = [len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)]
+    return ret
 
 
 def F_beta(pr, rc, beta=1):
-    if rc == 0 and pr == 0:
-        return np.nan
+    if pr == 0 and rc == 0: return eps
     return (1 + beta ** 2) * ((pr * rc) / (((beta ** 2) * pr) + rc))
 
 
-def F_max(prd, tgt, classes=None, thresholds=THRESHOLDS):
-    return np.max([F_beta(precision(th, prd, tgt, classes), recall(th, prd, tgt, classes)) for th in thresholds])
+def F1(pr, rc):
+    if pr == 0 and rc == 0: return eps
+    return 2 * ((pr * rc) / (pr + rc))
 
 
-def predict(reference_seqs, reference_annots, target_seqs, method, load_file=1):
+def predict(reference_seqs, reference_annots, target_seqs, method, basename=""):
+    filename = "%s_%s.npy" % (method, basename)
     if method == "blast":
-        pred_path = os.path.join(tmp_dir, 'pred-blast-%s.npy' % GoAspect(ASPECT))
-        if load_file == 1 and os.path.exists(pred_path):
+        pred_path = os.path.join(tmp_dir, filename)
+        if basename and os.path.exists(pred_path):
             return np.load(pred_path).item()
         _prepare_blast(reference_seqs)
         predictions = _predict(reference_annots, target_seqs, _blast)
@@ -312,33 +258,38 @@ def predict(reference_seqs, reference_annots, target_seqs, method, load_file=1):
         predictions = _predict(reference_annots, target_seqs, _naive)
         return predictions
     elif method == "deepseq":
-        pred_path = os.path.join(tmp_dir, 'pred-deepseq-%s.npy' % GoAspect(ASPECT))
+        pred_path = os.path.join(tmp_dir, filename)
         return np.load(pred_path).item()
     elif method == "seq2go":
-        pred_path = os.path.join(tmp_dir, 'pred-seq2go-%s.npy' % GoAspect(ASPECT))
+        pred_path = os.path.join(tmp_dir, filename)
         return np.load(pred_path).item()
     elif method == "seq2go-proba":
-        pred_path = os.path.join(tmp_dir, 'pred-seq2go-proba-%s.npy' % GoAspect(ASPECT))
+        pred_path = os.path.join(tmp_dir, filename)
         return np.load(pred_path).item()
     else:
         print("Unknown method")
 
 
-def performance(predictions, ground_truth, classes=None, thresholds=THRESHOLDS):
-    P, T = predictions, ground_truth
-    prs = [precision(th, P, T, classes) for th in thresholds]
-    rcs = [recall(th, P, T, classes) for th in thresholds]
-    f1s = [F_beta(pr, rc) for pr, rc in zip(prs, rcs)]
-    return prs, rcs, f1s
+def performance(predictions, ground_truth, classes=None, ths=THRESHOLDS):
+    prs, rcs, f1s = [], [], []
+    for tau in ths:
+        pr_per_seq = precision(tau, predictions, ground_truth, classes)
+        rc_per_seq = recall(tau, predictions, ground_truth, classes)
+        pr_tau = np.mean(pr_per_seq)
+        rc_tau = np.mean(rc_per_seq)
+        prs.append(pr_tau)
+        rcs.append(rc_tau)
+        f1s.append(np.mean(F1(pr_tau, rc_tau)))
+    return ths, prs, rcs, f1s
 
 
 def plot_precision_recall(perf):
     # Plot Precision-Recall curve
     lw, n = 2, len(perf)
     methods = list(perf.keys())
-    prs = [v[0] for v in perf.values()]
-    rcs = [v[1] for v in perf.values()]
-    f1s = [v[2] for v in perf.values()]
+    prs = [v[1] for v in perf.values()]
+    rcs = [v[2] for v in perf.values()]
+    f1s = [v[3] for v in perf.values()]
 
     colors = cycle(['red', 'blue', 'navy', 'turquoise', 'darkorange', 'cornflowerblue', 'teal'])
 
@@ -359,22 +310,55 @@ def plot_precision_recall(perf):
     plt.show()
 
 
-def evaluate_performance(db, methods, asp='F', train_and_validation_data=None, load_file=1, plot=1):
-    init_GO(asp)
+def evaluate_performance(db, methods, asp='F', train_and_validation_data=None, filename=None, plot=1):
+    onto = init_GO(asp)
     if train_and_validation_data:
         seqs_train, annots_train, seqs_valid, annots_valid = train_and_validation_data
     else:
         seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, None)
+    annots_train = propagate(annots_train, onto, include_root=False)
+    annots_valid = propagate(annots_valid, onto, include_root=False)
     perf = {}
     for meth in methods:
-        pred = predict(seqs_train, annots_train, seqs_valid, meth, load_file)
+        pred = predict(seqs_train, annots_train, seqs_valid, meth, filename)
         perf[meth] = performance(pred, annots_valid)
     if plot == 1:
         plot_precision_recall(perf)
     return pred, perf
 
 
+def product_of_experts(*predictions):
+
+    def go2p2go2ps(go2p_arr):
+        go2ps = dict()
+        for go2p in go2p_arr:
+            for go, prob in go2p.items():
+                if go in go2ps:
+                    go2ps[go].append(prob)
+                else:
+                    go2ps[go] = [prob]
+        return go2ps
+
+    poe = dict()
+    for pred in predictions:
+        for seqid, go2prob in pred.items():
+            if seqid in poe:
+                poe[seqid].append(pred[seqid])
+            else:
+                poe[seqid] = [pred[seqid]]
+
+    for seqid, arr in poe.items():
+        poe[seqid] = go2p2go2ps(arr)
+
+    for seqid, go2prob in poe.items():
+        for go, ps in go2prob.items():
+            poe[seqid][go] = 1 - np.prod([(1 - p) for p in ps])
+
+    return poe
+
+
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
@@ -384,6 +368,18 @@ if __name__ == "__main__":
     lim = 100
     init_GO(ASPECT)
 
-    seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, lim)
-    y_blast = predict(seqs_train, annots_train, seqs_valid, "blast")
-    performance(y_blast, annots_valid)
+    t0 = datetime(2017, 1, 1, 0, 0)
+    t1 = datetime.utcnow()
+
+    seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, t0, t1, ASPECT, lim)
+
+    predictions_blast = predict(seqs_train, annots_train, seqs_valid, "blast")
+    ths, prs, rcs, f1s = performance(predictions_blast, annots_valid)
+
+    import json
+    print(json.dumps(predictions_blast, indent=1))
+    print(json.dumps(annots_valid, indent=1))
+
+    import pandas as pd
+    print(pd.DataFrame({"Threshold": ths, "Precision": prs, "Recall": rcs, "F1": f1s}).head(20))
+    print(len(seqs_train), len(seqs_valid), len(predictions_blast))
