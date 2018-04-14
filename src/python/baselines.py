@@ -198,13 +198,13 @@ def get_P_and_T_from_dictionaries(tau, predictions, targets):
 
 def get_P_and_T_from_arrays(tau, predictions, targets, classes):
     P, T = [], []
-    for seq_preds, seq_targets in zip(map(lambda p: bin2dict(p, classes), predictions),
-                                      map(lambda t: bin2dict(t, classes), targets)):
-        seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
-        seq_targets = [go for go, prob in seq_targets.items() if prob >= tau]
-        assert len(seq_targets) > 0
-        P.append(set(seq_annots))
-        T.append(set(seq_targets))
+    for prob_dict in map(lambda p: bin2dict(p, classes), predictions):
+        annots = [go for go, prob in prob_dict.items() if prob >= tau]
+        P.append(set(annots))
+    for prob_dict in map(lambda t: bin2dict(t, classes), targets):
+        annots = [go for go, prob in prob_dict.items() if prob == 1.0]
+        assert len(annots) == sum(prob_dict.values())
+        T.append(set(annots))
     assert len(P) == len(T)
     return P, T
 
@@ -229,18 +229,18 @@ def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
         P, T = get_P_and_T_from_arrays(tau, predictions, targets, classes)
     if partial_evaluation:
         P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
-    ret = [len(P_i & T_i) / len(T_i) for P_i, T_i in zip(P, T)]
+    ret = [len(P_i & T_i) / len(T_i) if len(P_i) else 0.0 for P_i, T_i in zip(P, T)]
     return ret
 
 
 def F_beta(pr, rc, beta=1):
-    if pr == 0 and rc == 0: return eps
+    pr = max(pr, eps)
+    rc = max(rc, eps)
     return (1 + beta ** 2) * ((pr * rc) / (((beta ** 2) * pr) + rc))
 
 
 def F1(pr, rc):
-    if pr == 0 and rc == 0: return eps
-    return 2 * ((pr * rc) / (pr + rc))
+    return F_beta(pr, rc, beta=1)
 
 
 def predict(reference_seqs, reference_annots, target_seqs, method, basename=""):

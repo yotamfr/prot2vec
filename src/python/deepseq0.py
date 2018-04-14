@@ -250,8 +250,24 @@ def predict(model, gen_xy, length_xy, classes):
         assert len(X) == len(Y)
         k = len(Y)
         y_hat, y = model.predict(X), Y
-        y_pred[i:i + k, ], y_true[i:i + k, ] = y_hat, y
+        y_pred[i:i + k, ] = y_hat
+        y_true[i:i + k, ] = y
         pbar.update(k)
+    pbar.close()
+    return y_true, y_pred
+
+
+def predict_dummy(model, gen_xy, length_xy, classes):
+    pbar = tqdm(total=length_xy, desc="Predicting...")
+    i, m, n = 0, length_xy, len(classes)
+    y_pred, y_true = np.zeros((m, n)), np.zeros((m, n))
+    for i, (X, Y) in enumerate(gen_xy):
+        assert len(X) == len(Y)
+        k = len(Y)
+        pbar.update(k)
+        y_hat, y = model.predict(np.ones(X.shape) * PAD), Y
+        y_pred[i:i + k, ] = y_hat
+        y_true[i:i + k, ] = y
     pbar.close()
     return y_true, y_pred
 

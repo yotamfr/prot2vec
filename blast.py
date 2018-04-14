@@ -28,52 +28,28 @@ import pickle
 
 import datetime
 
-NUM_CPU = 32
+NUM_CPU = 8
 
 E = ThreadPoolExecutor(NUM_CPU)
 
-EVAL = 10e4
+evalue = 10e4
 
 
 def _prepare_blast(sequences):
     timestamp = datetime.date.today().strftime("%m-%d-%Y")
     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % timestamp)
-    records = [SeqRecord(BioSeq(seq), id) for id, seq in sequences.items()]
+    records = [SeqRecord(BioSeq(seq), uid) for uid, seq in sequences.items()]
     SeqIO.write(records, open(blastdb_pth, 'w+'), "fasta")
     os.system("makeblastdb -in %s -dbtype prot" % blastdb_pth)
     return blastdb_pth
 
 
-# def _blast(target_fasta, database_pth, topn=None, cleanup=True):
-#     seqid = target_fasta.id
-#     query_pth = os.path.join(tmp_dir, "%s.fas" % seqid)
-#     output_pth = os.path.join(tmp_dir, "%s.out" % seqid)
-#     SeqIO.write(target_fasta, open(query_pth, 'w+'), "fasta")
-#     cline = NcbiblastpCommandline(query=query_pth, db=database_pth, out=output_pth,
-#                                   outfmt=5, evalue=EVAL, remote=False, ungapped=False)
-#     child = subprocess.Popen(str(cline), stderr=subprocess.PIPE,
-#                              universal_newlines=True, shell=(sys.platform != "win32"))
-#     handle, _ = child.communicate()
-#     assert child.returncode == 0
-#     blast_qresult = SearchIO.read(output_pth, 'blast-xml')
-#     distances = {}
-#     for hsp in blast_qresult.hsps[:topn]:
-#         ident = hsp.ident_num / hsp.hit_span
-#         if hsp.hit.id == seqid:
-#             assert ident == 1.0
-#         distances[hsp.hit.id] = ident
-#     if cleanup:
-#         os.remove(query_pth)
-#         os.remove(output_pth)
-#     return distances
-
-
-def _blast(target_fasta, database_pth, evalue=EVAL):
+def _blast(target_fasta, database_pth):
     seqid = target_fasta.id
     query_pth = os.path.join(tmp_dir, "%s.fas" % seqid)
     output_pth = os.path.join(tmp_dir, "%s.tsv" % seqid)
     SeqIO.write(target_fasta, open(query_pth, 'w+'), "fasta")
-    cline = "blastp -db %s -query %s -outfmt 6 -out %s -evalue %d 1>/dev/null 2>&1" \
+    cline = "blastp -db %s -query %s -outfmt 6 -out %s -evalue %s 1>/dev/null 2>&1" \
             % (database_pth, query_pth, output_pth, evalue)
     assert os.WEXITSTATUS(os.system(cline)) == 0
     with open(output_pth, 'r') as f:
@@ -88,9 +64,11 @@ def save_object(obj, filename):
         pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
 
 
+def parallel_blast(db_pth):
+    return lambda seq_record: (seq_record, _blast(seq_record, db_pth))
+
+
 def compute_blast_parallel(uid2seq, db_pth, collection):
-    def parallel_blast(db_pth):
-        return lambda seq_record: (seq_record, _blast(seq_record, db_pth))
     pbar = tqdm(range(len(uid2seq)), desc="sequences processed")
     inputs = [SeqRecord(BioSeq(seq), uid) for uid, seq in uid2seq.items()]
     for i, (seq, hits) in enumerate(E.map(parallel_blast(db_pth), inputs)):
@@ -98,6 +76,31 @@ def compute_blast_parallel(uid2seq, db_pth, collection):
             collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
         pbar.update(1)
     pbar.close()
+
+
+def predict_blast_parallel(queries, seqid2go, db_pth):
+    pbar = tqdm(range(len(queries)), desc="queries processed")
+    inputs = [SeqRecord(BioSeq(tgt.seq), tgt.uid) for tgt in queries]
+    query2hits = {}
+    for i, (query, hits) in enumerate(E.map(parallel_blast(db_pth), inputs)):
+        query2hits[query.id] = hits
+        pbar.update(1)
+    pbar.close()
+    query2preds = {}
+    pbar = tqdm(range(len(query2hits)), desc="hits processed")
+    for i, (qid, hits) in enumerate(query2hits.items()):
+        pbar.update(1)
+        query2preds[qid] = {}
+        if len(hits) == 0:
+            continue
+        for hsp in hits:
+            for go in seqid2go[hsp.sseqid]:
+                if go in query2preds[qid]:
+                    query2preds[qid][go].append(hsp)
+                else:
+                    query2preds[qid][go] = [hsp]
+    pbar.close()
+    return query2preds
 
 
 def to_fasta(seq_map, out_file):
@@ -127,44 +130,6 @@ def load_nature_repr_set(db):
     seq_map = FastaFileLoader(fasta_src, num_seq).load()
     all_seqs = [Seq(uid, str(seq)) for uid, seq in seq_map.items()]
     return all_seqs
-
-
-# def get_blast_metric(blast_mat_pth, nature_sequence, sample_size=10e2):
-#
-#     with open(blast_mat_pth, 'rb') as f:
-#         dist_mat = pickle.load(f)
-#
-#     seq_map = {seq.uid: seq.seq for seq in nature_sequence}
-#
-#     all_sequences = list(seq_map.keys())
-#     prior_sequence_identity = 0.0
-#     for i in range(int(sample_size)):
-#         uid1 = np.random.choice(all_sequences)
-#         uid2 = np.random.choice(all_sequences)
-#         while uid1 == uid2:
-#             uid2 = np.random.choice(all_sequences)
-#         seq1 = Seq(uid1, seq_map[uid1], aa20=True)
-#         seq2 = Seq(uid2, seq_map[uid2], aa20=True)
-#         assert seq1 != seq2
-#         ident = sequence_identity(seq1, seq2)
-#         assert 0.0 <= ident <= 1.0
-#         prior_sequence_identity += ident
-#         sys.stdout.write("\r{0:.0f}%".format(100.0 * i / sample_size))
-#     prior_sequence_identity /= sample_size
-#
-#     print(prior_sequence_identity)
-#
-#     def blast_seq_identity(sequence1, sequence2):
-#         assert sequence1 != sequence2
-#         try:
-#             return dist_mat[sequence1.uid][sequence2.uid]
-#         except KeyError:
-#             try:
-#                 return dist_mat[sequence1.uid][sequence2.uid]
-#             except KeyError:
-#                 return prior_sequence_identity
-#
-#     return blast_seq_identity
 
 
 class ThreadSafeDict(dict) :
@@ -256,15 +221,33 @@ class BLAST(object):
 
     def __init__(self, collection):
         self.collection = collection
-        self.blast_cache = {}
+        self.qid2hsp = {}
+
+    def sort_by_count(self, targets, subject=False):
+        collection = self.collection
+        target2count = {}
+        key = "sseqid" if subject else "qseqid"
+        pbar = tqdm(range(len(targets)), desc="targets processed")
+        for tgt in targets:
+            target2count[tgt] = collection.count({key: tgt.uid})
+            pbar.update(1)
+        pbar.close()
+        seqs = sorted(targets, key=lambda t: -target2count[t])      # reverse order
+        return seqs
 
     def load_precomputed(self, targets):
         collection = self.collection
-        blast_cache = self.blast_cache
-        pbar = tqdm(range(len(targets)), desc="blast hits loaded")
+        pbar = tqdm(range(len(targets)), desc="targets loaded")
         for tgt in targets:
-            hits = map(HSP, collection.find({"qseqid": tgt.uid}))
-            blast_cache[tgt] = list(hits)
+            self[tgt] = {}
+            for hsp in map(HSP, collection.find({"qseqid": tgt.uid})):
+                subj = hsp.sseqid
+                try:
+                    old = self[tgt][subj]
+                    if old.evalue > hsp.evalue:
+                        self[tgt][subj] = hsp
+                except KeyError:
+                    self[tgt][subj] = hsp
             pbar.update(1)
         pbar.close()
 
@@ -273,8 +256,14 @@ class BLAST(object):
         hits = list(map(HSP, collection.find({"qseqid": seq1.uid, "sseqid": seq2.uid})))
         return hits
 
-    def __getitem__(self, uid):
-        return self.blast_cache[uid]
+    def __getitem__(self, seq):
+        return self.qid2hsp[seq.uid]
+
+    def __setitem__(self, seq, val):
+        self.qid2hsp[seq.uid] = val
+
+    def __contains__(self, seq):
+        return seq in self.qid2hsp[seq.uid]
 
 
 def add_arguments(parser):
@@ -284,8 +273,18 @@ def add_arguments(parser):
                         help="The name of the DB to which to write the data.")
     parser.add_argument("--aspect", type=str, default='F', choices=['F', 'P', 'C'],
                         help="The name of the DB to which to write the data.")
-    parser.add_argument('--load', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
+    parser.add_argument("--mode", type=str, default='predict', choices=['comp', 'load', 'predict'],
+                        help="In which mode to do you want me to work?")
+    parser.add_argument("--evalue", type=int, default=10e3,
+                        help="Set evalue threshold for BLAST")
+
+
+def cleanup():
+    try:
+        os.remove("%s/*.fas" % tmp_dir)
+        os.remove("%s/*.tsv" % tmp_dir)
+    except FileNotFoundError:
+        pass
 
 
 if __name__ == "__main__":
@@ -299,22 +298,27 @@ if __name__ == "__main__":
     db = client[args.db_name]
     asp = args.aspect   # molecular function
 
+    evalue = args.evalue
+    # print("evalue=%d" % evalue)
+
     onto = get_ontology(asp)
     t0 = datetime.datetime(2014, 1, 1, 0, 0)
     t1 = datetime.datetime(2014, 9, 1, 0, 0)
+    # t0 = datetime.datetime(2017, 1, 1, 0, 0)
+    # t1 = datetime.datetime.utcnow()
 
     print("Indexing Data...")
     trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)
     print("Loading Train Data...")
-    uid2seq_trn, _, _ = trn_stream.to_dictionaries(propagate=True)
+    uid2seq_trn, uid2go_trn, _ = trn_stream.to_dictionaries(propagate=True)
     print("Loading Validation Data...")
-    uid2seq_tst, _, _ = tst_stream.to_dictionaries(propagate=True)
+    uid2seq_tst, uid2go_tst, _ = tst_stream.to_dictionaries(propagate=True)
 
     db_pth = _prepare_blast(uid2seq_trn)
+    timestamp = datetime.date.today().strftime("%m-%d-%Y")
 
-    if args.load:
-        # timestamp = datetime.date.today().strftime("%m-%d-%Y")
-        # pth = "Data/blast_%s_hits_%s" % (asp, timestamp)
+    if args.mode == "load":
+        pth = "Data/blast_%s_hits_%s" % (asp, timestamp)
         pth = args.load  # Data/blast_F_hits_04-11-2018
         assert os.path.exists(pth)
         print("Loading %s" % pth)
@@ -325,18 +329,29 @@ if __name__ == "__main__":
             db.blast.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
             pbar.update(1)
         pbar.close()
+        cleanup()
 
-    else:
+    elif args.mode == "comp":
         blast_hsp_matrix = db.blast
         db.blast.create_index("qseqid")
         db.blast.create_index("sseqid")
 
         compute_blast_parallel(uid2seq_tst, db_pth, blast_hsp_matrix)
-        # save_object(blast_hsp_matrix, pth)
         compute_blast_parallel(uid2seq_trn, db_pth, blast_hsp_matrix)
-        # save_object(blast_hsp_matrix, pth)
 
         nature_set = load_nature_repr_set(db)
         uid2seq_nature = {seq.uid: seq.seq for seq in nature_set}
         compute_blast_parallel(uid2seq_nature, db_pth, blast_hsp_matrix)
-        # save_object(blast_hsp_matrix, pth)
+        cleanup()
+
+    elif args.mode == "predict":
+        # evalue = 0.001
+        queries = [Seq(uid, seq) for uid, seq in uid2seq_tst.items()]
+        predictions = predict_blast_parallel(queries, uid2go_trn, db_pth)
+        save_object(predictions, "Data/blast_%s_hsp_%s" % (asp, timestamp))
+        save_object(uid2go_tst, "Data/gt_%s_%s" % (asp, timestamp))
+        cleanup()
+
+    else:
+        print("unknown mode")
+        exit(0)

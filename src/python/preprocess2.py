@@ -358,7 +358,7 @@ class SequenceStream(DataStream):
                 else:
                     go2uid[go] = [unipid]
             uid2seq[unipid] = seq
-            uid2go[seq] = annots
+            uid2go[unipid] = annots
         return uid2seq, uid2go, go2uid
 
     def to_fasta(self, out_file):
