@@ -201,6 +201,15 @@ class Ontology(object):
         return len(self.classes)
 
 
+def least_common_ancestor(G, go1, go2):
+    ancestors1 = nx.shortest_path_length(G, source=go1)
+    ancestors2 = nx.shortest_path_length(G, source=go2)
+    common = list(set(ancestors1.keys()) & set(ancestors2.keys()))
+    assert len(common) > 0
+    c = common[np.argmin([ancestors1[c] + ancestors2[c] for c in common])]
+    return c, ancestors1[c] + ancestors2[c]
+
+
 if __name__=="__main__":
     onto = get_ontology('P')
     print(onto.sort(["GO:0065007",

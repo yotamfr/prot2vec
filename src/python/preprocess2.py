@@ -187,7 +187,7 @@ def unzip(src, trg):
         if res != 0: print("failed to decompress")
 
 
-def propagate(seq2go, onto, include_root):
+def propagate_labels(seq2go, onto, include_root):
     seq2go_cpy = {}
     for i, (k, v) in enumerate(seq2go.items()):
         sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
@@ -196,7 +196,7 @@ def propagate(seq2go, onto, include_root):
 
 
 def get_classes(seq2go, onto=None):
-    if onto: seq2go = propagate(seq2go, onto, include_root=False)
+    if onto: seq2go = propagate_labels(seq2go, onto, include_root=False)
     return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
 
 
@@ -281,6 +281,7 @@ def get_training_and_validation_streams(db, start, end, asp, profile=False):
                                                  db.goa_uniprot.count(q_valid), asp).load()
     seq2go_tst = {k: v for k, v in seq2go_tst.items() if k not in seq2go_trn}
     stream_tst = Stream(seq2go_tst, collection, onto)
+    assert not set(seq2go_tst.keys() & seq2go_trn.keys())
     return stream_trn, stream_tst
 
 

@@ -26,8 +26,9 @@ recurrentshop
 build
 dist
 
-*.ipynb*
 .ipynb_checkpoints
+benchmark-*.py
+benchmark-*.ipynb
 .Rproj.user
 
 Data/blast_dist_matrix_04-09-2018

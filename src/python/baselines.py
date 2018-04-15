@@ -198,12 +198,13 @@ def get_P_and_T_from_dictionaries(tau, predictions, targets):
 
 def get_P_and_T_from_arrays(tau, predictions, targets, classes):
     P, T = [], []
-    for prob_dict in map(lambda p: bin2dict(p, classes), predictions):
-        annots = [go for go, prob in prob_dict.items() if prob >= tau]
+    classes_arr = np.asarray(classes)
+    for prob_arr in map(lambda p: np.asarray(p), predictions):
+        annots = classes_arr[prob_arr >= tau]
         P.append(set(annots))
-    for prob_dict in map(lambda t: bin2dict(t, classes), targets):
-        annots = [go for go, prob in prob_dict.items() if prob == 1.0]
-        assert len(annots) == sum(prob_dict.values())
+    for prob_arr in map(lambda t: np.asarray(t), targets):
+        annots = classes_arr[prob_arr == 1.0]
+        assert len(annots) == sum(prob_arr)
         T.append(set(annots))
     assert len(P) == len(T)
     return P, T
@@ -216,7 +217,7 @@ def precision(tau, predictions, targets, classes=None):
     else:
         assert classes
         P, T = get_P_and_T_from_arrays(tau, predictions, targets, classes)
-    ret = [len(P_i & T_i) / len(P_i) if len(P_i) else 1.0 for P_i, T_i in zip(P, T)]
+    ret = [(len(P_i & T_i) / len(P_i)) if len(P_i) else 1.0 for P_i, T_i in zip(P, T)]
     return ret
 
 
@@ -229,7 +230,7 @@ def recall(tau, predictions, targets, classes=None, partial_evaluation=False):
         P, T = get_P_and_T_from_arrays(tau, predictions, targets, classes)
     if partial_evaluation:
         P, T = zip(*[(P_i, T_i) for P_i, T_i in zip(P, T) if len(P_i) > 0])
-    ret = [len(P_i & T_i) / len(T_i) if len(P_i) else 0.0 for P_i, T_i in zip(P, T)]
+    ret = [(len(P_i & T_i) / len(T_i)) if len(P_i) else 0.0 for P_i, T_i in zip(P, T)]
     return ret
 
 
@@ -316,8 +317,8 @@ def evaluate_performance(db, methods, asp='F', train_and_validation_data=None, f
         seqs_train, annots_train, seqs_valid, annots_valid = train_and_validation_data
     else:
         seqs_train, annots_train, seqs_valid, annots_valid = load_training_and_validation(db, None)
-    annots_train = propagate(annots_train, onto, include_root=False)
-    annots_valid = propagate(annots_valid, onto, include_root=False)
+    annots_train = propagate_labels(annots_train, onto, include_root=False)
+    annots_valid = propagate_labels(annots_valid, onto, include_root=False)
     perf = {}
     for meth in methods:
         pred = predict(seqs_train, annots_train, seqs_valid, meth, filename)
