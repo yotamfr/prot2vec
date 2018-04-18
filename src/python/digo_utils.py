@@ -29,7 +29,7 @@ np.random.seed(101)
 
 tmp_dir = gettempdir()
 
-EVAL = 10e5
+EVAL = 10e6
 
 verbose = False
 
@@ -317,6 +317,10 @@ class Graph(object):
     def __contains__(self, go):
         return go in self.nodes
 
+    @property
+    def leaves(self):
+        return [node for node in self if node.is_leaf()]
+
     def sample(self, max_add_to_sample=10):
         def sample_recursive(node, sampled):
             if not node.is_leaf():
@@ -330,7 +334,7 @@ class Graph(object):
         return sample_recursive(self.root, set())
 
 
-def sample_pos_neg(graph, sample_size=15000):
+def sample_pos_neg(graph, sample_size=10000):
     pos, neg = set(), set()
     pbar = tqdm(range(len(graph)), desc="nodes sampled")
     for node in graph:
@@ -339,7 +343,7 @@ def sample_pos_neg(graph, sample_size=15000):
             continue
         s_in = min(10, node.size)
         sample_in = np.random.choice(list(node.sequences), s_in, replace=False)
-        pos |= set(itertools.combinations(sample_in, 2))
+        pos |= set((seq1, seq2) for seq1, seq2 in itertools.combinations(sample_in, 2))
         for cousin in node.cousins:
             s_out = min(10, cousin.size)
             sample_out = np.random.choice(list(cousin.sequences), s_out, replace=False)
@@ -354,52 +358,42 @@ def sample_pos_neg(graph, sample_size=15000):
 def run_metric_on_pairs(metric, pairs, verbose=True):
     data = []
     n = len(pairs)
+    if verbose:
+        pbar = tqdm(range(n), desc="pairs processed")
     for i, (seq1, seq2) in enumerate(pairs):
         data.append(metric(seq1, seq2))
         if verbose:
-            sys.stdout.write("\rProcessing Pairs... {0:.0f}%".format(100.0 * i/n))
+            # sys.stdout.write("\rProcessing Pairs... {0:.0f}%".format(100.0 * i/n))
+            pbar.update(1)
+    if verbose:
+        pbar.close()
     return data
 
 
-def blastp(seq1, seq2, db=None, evalue=EVAL):
-    query_pth = os.path.join(tmp_dir, "%s.seq" % seq1.uid)
-    subject_pth = os.path.join(tmp_dir, "%s.seq" % seq2.uid)
-    output_pth = os.path.join(tmp_dir, "%s_%s.out" % (seq1.uid, seq2.uid))
-    SeqIO.write(SeqRecord(BioSeq(seq1.seq), seq1.uid), open(query_pth, 'w+'), "fasta")
-    SeqIO.write(SeqRecord(BioSeq(seq2.seq), seq2.uid), open(subject_pth, 'w+'), "fasta")
-    cline = "blastp -query %s -subject %s -outfmt 6 -out %s -evalue %d 1>/dev/null 2>&1" \
-            % (query_pth, subject_pth, output_pth, evalue)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
-    assert os.path.exists(output_pth)
-    with open(output_pth, 'r') as f:
-        hits = [HSP(line.split('\t')) for line in f.readlines()]
-        if len(hits) == 0:
-            return HSP([seq1.uid, seq2.uid, 0., 0., 0., 0., 0., 0., 0., 0., EVAL * 1000, eps])
-        hsp = hits[np.argmin([h.evalue for h in hits])]
-        if db: db.blast.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
-    return hsp
-
-
 def kolmogorov_smirnov_test(graph):
+    client = BLAST(db.blast)
     pos, neg = sample_pos_neg(graph)
-    data1 = run_metric_on_pairs(blastp, pos)
-    data2 = run_metric_on_pairs(blastp, neg)
+    data1 = run_metric_on_pairs(client.blastp, pos)
+    data2 = run_metric_on_pairs(client.blastp, neg)
     save_object(data1, "Data/digo_%s_ks_pos_data" % asp)
     save_object(data2, "Data/digo_%s_ks_neg_data" % asp)
     return ks_2samp([h.bitscore for h in data1], [h.bitscore for h in data2])
 
 
 if __name__ == "__main__":
+
+    cleanup()
+
     from pymongo import MongoClient
     client = MongoClient('mongodb://localhost:27017/')
     db = client['prot2vec']
 
     asp = 'F'   # molecular function
     onto = get_ontology(asp)
-    # t0 = datetime.datetime(2014, 1, 1, 0, 0)
-    # t1 = datetime.datetime(2014, 9, 1, 0, 0)
-    t0 = datetime.datetime(2017, 1, 1, 0, 0)
-    t1 = datetime.datetime.utcnow()
+    t0 = datetime.datetime(2014, 1, 1, 0, 0)
+    t1 = datetime.datetime(2014, 9, 1, 0, 0)
+    # t0 = datetime.datetime(2017, 1, 1, 0, 0)
+    # t1 = datetime.datetime.utcnow()
 
     print("Indexing Data...")
     trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)

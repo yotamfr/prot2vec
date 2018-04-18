@@ -24,9 +24,9 @@ np.random.seed(101)
 
 LR = 0.01
 
-BATCH_SIZE = 32
+LEARN_GO = True
 
-LONG_EXPOSURE = True
+BATCH_SIZE = 12
 
 USE_CUDA = True
 
@@ -45,9 +45,9 @@ def evaluate(model, gen_xy, length_xy):
     model.eval()
     pbar = tqdm(total=length_xy)
     err = 0
-    for i, (seq1, seq2, lbl) in enumerate(gen_xy):
-        vec1 = net(seq1)
-        vec2 = net(seq2)
+    for i, (seq1, seq2, node, lbl) in enumerate(gen_xy):
+        vec1 = net(seq1, node)
+        vec2 = net(seq2, node)
         loss = get_loss(vec1, vec2, lbl)
         err += loss.data[0]
         pbar.set_description("Validation Loss:%.5f" % (err/(i + 1)))
@@ -56,39 +56,141 @@ def evaluate(model, gen_xy, length_xy):
     return err / (i + 1)
 
 
-class DeepSeq(nn.Module):
-    def __init__(self):
-        super(DeepSeq, self).__init__()
+class Go2Vec(nn.Module):
+    def __init__(self, emb_weights, requires_grad=LEARN_GO):
+        super(Go2Vec, self).__init__()
+        embedding_size = emb_weights.shape[1]
+        self.embedding = nn.Embedding(emb_weights.shape[0], embedding_size)
+        self.embedding.weight = nn.Parameter(torch.from_numpy(emb_weights).float())
+        self.embedding.requires_grad = requires_grad
 
-        self.embedding = nn.Embedding(26, 5)
+    def forward(self, go):
+        return self.embedding(go)
 
-        self.features = nn.Sequential(
 
-            nn.Conv1d(5, 1000, kernel_size=3),
+class ProteinEncoder(nn.Module):
+    def __init__(self, num_channels, embedding_size, dropout=0.1):
+        super(ProteinEncoder, self).__init__()
+
+        self.aa_embedding = nn.Embedding(26, embedding_size)
+
+        self.cnn = nn.Sequential(
+
+            nn.Conv1d(5, num_channels * 2, kernel_size=15),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
+            nn.Dropout(dropout),
 
-            nn.Conv1d(1000, 500, kernel_size=3),
+            nn.Conv1d(num_channels * 2, num_channels, kernel_size=15),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
+            nn.Dropout(dropout),
 
-            nn.Conv1d(500, 500, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
+            nn.MaxPool1d(3),
 
-            nn.Conv1d(500, 500, kernel_size=3),
+            nn.Conv1d(num_channels, num_channels, kernel_size=15),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
+            nn.Dropout(dropout),
+
+            nn.Conv1d(num_channels, num_channels, kernel_size=15),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
         )
 
-    def forward(self, seq):
-        emb = self.embedding(seq)
-        b = seq.size()[0]
-        emb = emb.view((b, 5, -1))
-        out = self.features(emb)
-        out = F.max_pool1d(out, kernel_size=out.size()[2])
-        out = out.view((b, -1))
-        return out
+        self.embedding_size = embedding_size
+        self.dropout = dropout
+
+    def forward(self, input_seqs, hidden=None):
+        embedded_seqs = self.aa_embedding(input_seqs)
+        input_features = self.cnn(embedded_seqs.transpose(1, 2))
+        return input_features
+
+
+class AttnDecoder(nn.Module):
+
+    def __init__(self, attn_model, prot_section_size, go_embedding_weights, dropout=0.1):
+        super(AttnDecoder, self).__init__()
+
+        self.prot_encoder = ProteinEncoder(prot_section_size, 5)
+
+        self.dropout = dropout
+
+        # Keep for reference
+        self.attn_model = attn_model
+        self.prot_section_size = prot_section_size
+        self.dropout = dropout
+
+        # Define layers
+        self.go_embedding_size = go_embedding_size = go_embedding_weights.shape[1]
+        self.go_embedding = Go2Vec(go_embedding_weights)
+        self.embedding_dropout = nn.Dropout(dropout)
+        self.attn = Attn(attn_model, go_embedding_size, prot_section_size)
+
+    def forward(self, input_seq, input_go_term):
+        encoder_outputs = self.prot_encoder(input_seq)
+        encoder_outputs = self.embedding_dropout(encoder_outputs)
+        embedded_go = self.go_embedding(input_go_term)
+        attn_weights = self.attn(embedded_go, encoder_outputs)
+        context_vec = attn_weights.bmm(encoder_outputs.transpose(1, 2))
+        return context_vec.squeeze(1)
+
+
+class Attn(nn.Module):
+    def __init__(self, method, go_embedding_size, protein_section_size):
+        super(Attn, self).__init__()
+
+        self.method = method
+        self.go_size = go_embedding_size
+        self.prot_size = protein_section_size
+
+        if self.method == 'general':
+            self.attn = nn.Linear(self.prot_size, self.go_size)
+
+        elif self.method == 'concat':
+            self.attn = nn.Linear(self.go_size + self.prot_size, self.go_size)
+            self.v = nn.Parameter(torch.FloatTensor(1, self.go_size))
+
+        else:
+            raise ValueError("unknown attn method")
+
+    def forward(self, go_embedding, protein_sections):
+        max_len = protein_sections.size(2)
+        this_batch_size = protein_sections.size(0)
+
+        # Create variable to store attention energies
+        attn_energies = Variable(torch.zeros(this_batch_size, max_len))  # B x S
+
+        if USE_CUDA:
+            attn_energies = attn_energies.cuda()
+
+            for i in range(max_len):
+                batch_protein_sections = protein_sections[:, :, i]
+                attn_energies[:, i] = self.score(go_embedding, batch_protein_sections)
+
+        # Normalize energies to weights in range 0 to 1, resize to 1 x B x S
+        return F.softmax(attn_energies).unsqueeze(1)
+
+    def score(self, go_embedding, protein_section):
+
+        go_size = self.go_size
+        prot_size = self.prot_size
+        batch_size = go_embedding.size(0)
+
+        if self.method == 'dot':
+            assert prot_size == go_size
+            energy = torch.bmm(go_embedding.view(batch_size, 1, go_size),
+                               protein_section.view(batch_size, prot_size, 1))
+            return energy
+
+        elif self.method == 'general':
+            energy = self.attn(protein_section)
+            energy = torch.bmm(go_embedding.view(batch_size, 1, go_size),
+                               energy.view(batch_size, go_size, 1))
+            return energy
+
+        elif self.method == 'concat':
+            energy = self.attn(torch.cat((go_embedding, protein_section), 1))
+            energy = torch.bmm(self.v.view(batch_size, 1, go_size + prot_size),
+                               energy.view(batch_size, go_size + prot_size, 1))
+            return energy
 
 
 class MultiCosineLoss(nn.Module):
@@ -121,19 +223,25 @@ def batch_generator(data, labels, batch_size=BATCH_SIZE):
         seq = left + [AA.aa2index[aa] for aa in seq] + right
         return np.asarray(seq)
 
-    def prepare_batch(seqs1, seqs2, labels):
+    def prepare_node(node):
+        return onto.classes.index(node.go)
+
+    def prepare_batch(seqs1, seqs2, nodes, labels):
         b1 = max(map(len, seqs1))
         b2 = max(map(len, seqs2))
         inp1 = np.asarray([prepare_seq(seq, b1) for seq in seqs1])
         inp2 = np.asarray([prepare_seq(seq, b2) for seq in seqs2])
+        inp3 = np.asarray([prepare_node(node) for node in nodes])
         inp_var1 = Variable(torch.LongTensor(inp1))
         inp_var2 = Variable(torch.LongTensor(inp2))
+        inp_var3 = Variable(torch.LongTensor(inp3))
         lbl_var = Variable(torch.FloatTensor(labels))
         if USE_CUDA:
             inp_var1 = inp_var1.cuda()
             inp_var2 = inp_var2.cuda()
+            inp_var3 = inp_var3.cuda()
             lbl_var = lbl_var.cuda()
-        return inp_var1, inp_var2, lbl_var
+        return inp_var1, inp_var2, inp_var3, lbl_var
 
     indices = list(range(0, len(data), batch_size))
     np.random.shuffle(indices)
@@ -141,8 +249,8 @@ def batch_generator(data, labels, batch_size=BATCH_SIZE):
         ix = indices.pop()
         batch_inp = data[ix: min(ix + batch_size, len(data))]
         lbls = labels[ix: min(ix + batch_size, len(labels))]
-        seqs1, seqs2 = zip(*batch_inp)
-        yield prepare_batch(seqs1, seqs2, lbls)
+        seqs1, seqs2, nodes = zip(*batch_inp)
+        yield prepare_batch(seqs1, seqs2, nodes, lbls)
 
 
 def train(model, epoch, opt, gen_xy, length_xy):
@@ -155,11 +263,11 @@ def train(model, epoch, opt, gen_xy, length_xy):
 
     err = 0
 
-    for i, (seq1, seq2, lbl) in enumerate(gen_xy):
+    for i, (seq1, seq2, node, lbl) in enumerate(gen_xy):
 
         opt.zero_grad()
-        vec1 = model(seq1)
-        vec2 = model(seq2)
+        vec1 = model(seq1, node)
+        vec2 = model(seq2, node)
 
         loss = get_loss(vec1, vec2, lbl)
 
@@ -195,6 +303,30 @@ def adjust_learning_rate(optimizer, epoch):
         param_group['lr'] = lr
 
 
+def sample_pos_neg(graph, sample_size=10000):
+    pos, neg = set(), set()
+    pbar = tqdm(range(len(graph)), desc="nodes sampled")
+    for node in graph:
+        pbar.update(1)
+        if not node.is_leaf():
+            continue
+        s_in = min(100, node.size)
+        sample_in = np.random.choice(list(node.sequences), s_in, replace=False)
+        pos |= set((seq1, seq2, node) for seq1, seq2 in itertools.combinations(sample_in, 2))
+        for cousin in node.cousins:
+            cousin_sequences = cousin.sequences - node.sequences
+            if not cousin_sequences:
+                continue
+            s_out = min(100, len(cousin_sequences))
+            sample_out = np.random.choice(list(cousin_sequences), s_out, replace=False)
+            neg |= set((seq1, seq2, cousin) for seq1 in sample_out for seq2 in sample_in)
+    pbar.close()
+    n, m = len(pos), len(neg)
+    pos_indices = np.random.choice(list(range(n)), min(n, sample_size), replace=False)
+    neg_indices = np.random.choice(list(range(m)), min(m, sample_size), replace=False)
+    return np.asarray(list(pos))[pos_indices, :], np.asarray(list(neg))[neg_indices, :]
+
+
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB"),
@@ -223,12 +355,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     asp = args.aspect  # default: Molecular Function
+    onto = get_ontology('F')
 
-    client = MongoClient(args.mongo_url)
+    go_embedding_weights = np.asarray([onto.todense(go) for go in onto.classes])
 
-    db = client['prot2vec']
-
-    net = DeepSeq()
+    net = AttnDecoder("general", 500, go_embedding_weights)
 
     ckptpath = args.out_dir
 
@@ -243,9 +374,6 @@ if __name__ == "__main__":
     from pymongo import MongoClient
     client = MongoClient('mongodb://localhost:27017/')
     db = client['prot2vec']
-
-    asp = 'F'   # molecular function
-    onto = get_ontology('F')
 
     t0 = datetime.datetime(2014, 1, 1, 0, 0)
     t1 = datetime.datetime(2014, 9, 1, 0, 0)
@@ -267,7 +395,7 @@ if __name__ == "__main__":
     graph_tst = Graph(onto, uid2seq_tst, go2ids_tst)
     print("Graph contains %d nodes" % len(graph_tst))
 
-    size_trn = 50000
+    size_trn = 400000
     size_tst = 10000
     pos_trn, neg_trn = sample_pos_neg(graph_trn, sample_size=size_trn)
     pos_tst, neg_tst = sample_pos_neg(graph_tst, sample_size=size_tst)
@@ -280,7 +408,8 @@ if __name__ == "__main__":
     data_trn, lbl_trn = shuffle(data_trn, lbl_trn)
     data_tst, lbl_tst = shuffle(data_tst, lbl_tst)
 
-    print("Train: %d, Test: %d" % (len(data_trn), len(data_tst)))
+    print("|Train|: %d, |Test|: %d, Batch_Size: %d, Learn_GO: %s"
+          % (len(data_trn), len(data_tst), BATCH_SIZE, LEARN_GO))
 
     num_epochs = 200
 

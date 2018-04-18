@@ -9,12 +9,7 @@ from Bio.Seq import Seq as BioSeq
 from Bio import SearchIO
 from Bio.SeqRecord import SeqRecord
 
-from Bio.Blast.Applications import NcbiblastpCommandline
-
 from src.python.preprocess2 import *
-
-from itertools import cycle
-import matplotlib.pyplot as plt
 
 from tempfile import gettempdir
 tmp_dir = gettempdir()
@@ -32,10 +27,8 @@ NUM_CPU = 8
 
 E = ThreadPoolExecutor(NUM_CPU)
 
-evalue = 10e4
 
-
-def _prepare_blast(sequences):
+def prepare_blast(sequences):
     timestamp = datetime.date.today().strftime("%m-%d-%Y")
     blastdb_pth = os.path.join(tmp_dir, 'blast-%s' % timestamp)
     records = [SeqRecord(BioSeq(seq), uid) for uid, seq in sequences.items()]
@@ -44,7 +37,7 @@ def _prepare_blast(sequences):
     return blastdb_pth
 
 
-def _blast(target_fasta, database_pth):
+def _blast(target_fasta, database_pth, evalue):
     seqid = target_fasta.id
     query_pth = os.path.join(tmp_dir, "%s.fas" % seqid)
     output_pth = os.path.join(tmp_dir, "%s.tsv" % seqid)
@@ -64,30 +57,30 @@ def save_object(obj, filename):
         pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
 
 
-def parallel_blast(db_pth):
-    return lambda seq_record: (seq_record, _blast(seq_record, db_pth))
+def parallel_blast(db_pth, evalue):
+    return lambda seq_record: (seq_record, _blast(seq_record, db_pth, evalue))
 
 
-def compute_blast_parallel(uid2seq, db_pth, collection):
+def compute_blast_parallel(uid2seq, db_pth, collection, evalue):
     pbar = tqdm(range(len(uid2seq)), desc="sequences processed")
     inputs = [SeqRecord(BioSeq(seq), uid) for uid, seq in uid2seq.items()]
-    for i, (seq, hits) in enumerate(E.map(parallel_blast(db_pth), inputs)):
+    for i, (seq, hits) in enumerate(E.map(parallel_blast(db_pth, evalue), inputs)):
         for hsp in hits:
             collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
         pbar.update(1)
     pbar.close()
 
 
-def predict_blast_parallel(queries, seqid2go, db_pth):
+def predict_blast_parallel(queries, seqid2go, db_pth, evalue):
     pbar = tqdm(range(len(queries)), desc="queries processed")
     inputs = [SeqRecord(BioSeq(tgt.seq), tgt.uid) for tgt in queries]
     query2hits = {}
-    for i, (query, hits) in enumerate(E.map(parallel_blast(db_pth), inputs)):
+    for i, (query, hits) in enumerate(E.map(parallel_blast(db_pth, evalue), inputs)):
         query2hits[query.id] = hits
         pbar.update(1)
     pbar.close()
     query2preds = {}
-    pbar = tqdm(range(len(query2hits)), desc="hits processed")
+    pbar = tqdm(range(len(query2hits)), desc="queries processed")
     for i, (qid, hits) in enumerate(query2hits.items()):
         pbar.update(1)
         query2preds[qid] = {}
@@ -116,8 +109,8 @@ def load_nature_repr_set(db):
         for unipid, seq in seq_map.items():
             sequences.append(SeqRecord(BioSeq(seq), unipid))
         SeqIO.write(sequences, open(out_file, 'w+'), "fasta")
-    repr_pth, all_pth = 'Data/sp.nr.70', 'Data/sp.fasta'
-    fasta_fname = 'Data/sp.nr.70'
+    repr_pth, all_pth = '%s/sp.nr.70' % out_dir, '%s/sp.fasta' % out_dir
+    fasta_fname = '%s/sp.nr.70' % out_dir
     if not os.path.exists(repr_pth):
         query = {"db": "sp"}
         num_seq = db.uniprot.count(query)
@@ -256,6 +249,26 @@ class BLAST(object):
         hits = list(map(HSP, collection.find({"qseqid": seq1.uid, "sseqid": seq2.uid})))
         return hits
 
+    def blastp(self, seq1, seq2, evalue=10e6):
+        query_pth = os.path.join(tmp_dir, "%s.seq" % seq1.uid)
+        subject_pth = os.path.join(tmp_dir, "%s.seq" % seq2.uid)
+        output_pth = os.path.join(tmp_dir, "%s_%s.out" % (seq1.uid, seq2.uid))
+        SeqIO.write(SeqRecord(BioSeq(seq1.seq), seq1.uid), open(query_pth, 'w+'), "fasta")
+        SeqIO.write(SeqRecord(BioSeq(seq2.seq), seq2.uid), open(subject_pth, 'w+'), "fasta")
+        cline = "blastp -query %s -subject %s -outfmt 6 -out %s -evalue %s 1>/dev/null 2>&1" \
+                % (query_pth, subject_pth, output_pth, evalue)
+        if os.WEXITSTATUS(os.system(cline)) != 0:
+            print("BLAST failed unexpectedly (%s, %s)" % (seq1.uid, seq2.uid))
+            return HSP([seq1.uid, seq2.uid, 0., 0., 0., 0., 0., 0., 0., 0., evalue * 10, 10e-6])
+        assert os.path.exists(output_pth)
+        with open(output_pth, 'r') as f:
+            hits = [HSP(line.split('\t')) for line in f.readlines()]
+            if len(hits) == 0:
+                return HSP([seq1.uid, seq2.uid, 0., 0., 0., 0., 0., 0., 0., 0., evalue * 10, 10e-6])
+            hsp = hits[np.argmin([h.evalue for h in hits])]
+            self.collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
+        return hsp
+
     def __getitem__(self, seq):
         return self.qid2hsp[seq.uid]
 
@@ -264,6 +277,13 @@ class BLAST(object):
 
     def __contains__(self, seq):
         return seq in self.qid2hsp[seq.uid]
+
+
+def cleanup():
+    files = os.listdir(tmp_dir)
+    for file in files:
+        if file.endswith(".fas") or file.endswith(".tsv"):
+            os.remove(os.path.join(tmp_dir, file))
 
 
 def add_arguments(parser):
@@ -279,15 +299,9 @@ def add_arguments(parser):
                         help="Set evalue threshold for BLAST")
 
 
-def cleanup():
-    try:
-        os.remove("%s/*.fas" % tmp_dir)
-        os.remove("%s/*.tsv" % tmp_dir)
-    except FileNotFoundError:
-        pass
-
-
 if __name__ == "__main__":
+
+    cleanup()
 
     parser = argparse.ArgumentParser()
     add_arguments(parser)
@@ -297,9 +311,6 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client[args.db_name]
     asp = args.aspect   # molecular function
-
-    evalue = args.evalue
-    # print("evalue=%d" % evalue)
 
     onto = get_ontology(asp)
     t0 = datetime.datetime(2014, 1, 1, 0, 0)
@@ -314,11 +325,11 @@ if __name__ == "__main__":
     print("Loading Validation Data...")
     uid2seq_tst, uid2go_tst, _ = tst_stream.to_dictionaries(propagate=True)
 
-    db_pth = _prepare_blast(uid2seq_trn)
+    db_pth = prepare_blast(uid2seq_trn)
     timestamp = datetime.date.today().strftime("%m-%d-%Y")
 
     if args.mode == "load":
-        pth = "Data/blast_%s_hits_%s" % (asp, timestamp)
+        pth = "%s/blast_%s_hits_%s" % (out_dir, asp, timestamp)
         pth = args.load  # Data/blast_F_hits_04-11-2018
         assert os.path.exists(pth)
         print("Loading %s" % pth)
@@ -336,20 +347,20 @@ if __name__ == "__main__":
         db.blast.create_index("qseqid")
         db.blast.create_index("sseqid")
 
-        compute_blast_parallel(uid2seq_tst, db_pth, blast_hsp_matrix)
-        compute_blast_parallel(uid2seq_trn, db_pth, blast_hsp_matrix)
+        compute_blast_parallel(uid2seq_tst, db_pth, blast_hsp_matrix, args.evalue)
+        compute_blast_parallel(uid2seq_trn, db_pth, blast_hsp_matrix, args.evalue)
 
         nature_set = load_nature_repr_set(db)
         uid2seq_nature = {seq.uid: seq.seq for seq in nature_set}
-        compute_blast_parallel(uid2seq_nature, db_pth, blast_hsp_matrix)
+        compute_blast_parallel(uid2seq_nature, db_pth, blast_hsp_matrix, args.evalue)
         cleanup()
 
     elif args.mode == "predict":
         # evalue = 0.001
         queries = [Seq(uid, seq) for uid, seq in uid2seq_tst.items()]
-        predictions = predict_blast_parallel(queries, uid2go_trn, db_pth)
-        save_object(predictions, "Data/blast_%s_hsp_%s" % (asp, timestamp))
-        save_object(uid2go_tst, "Data/gt_%s_%s" % (asp, timestamp))
+        predictions = predict_blast_parallel(queries, uid2go_trn, db_pth, args.evalue)
+        save_object(predictions, "%s/blast_%s_hsp" % (out_dir, GoAspect(asp)))
+        save_object(uid2go_tst, "%s/gt_%s" % (out_dir, GoAspect(asp)))
         cleanup()
 
     else:
