@@ -178,6 +178,8 @@ class Node(object):
         self._f_dist_out = None
         self._f_dist_in = None
         self._plus = None
+        self._ancestors = None
+        self.seq2vec = {}
 
     def __iter__(self):
         for seq in self.sequences:
@@ -212,11 +214,15 @@ class Node(object):
         return ret - {self}
 
     @property
+    def ancestors(self):
+        if not self._ancestors:
+            self._ancestors = get_ancestors(self)
+        return self._ancestors
+
+    @property
     def plus(self):
         if not self._plus:
-            union = reduce(
-                lambda s1, s2: s1 | s2,
-                map(lambda c: c.sequences, self.children), set())
+            union = sequences_of(self.children)
             assert len(union) <= self.size
             self._plus = list(self.sequences - union)
         return self._plus
@@ -247,13 +253,31 @@ class Node(object):
         return s
 
 
+def get_ancestors(node):
+        Q = [node]
+        visited = {node}
+        while Q:
+            curr = Q.pop()
+            for father in curr.fathers:
+                if father in visited or father.is_root():
+                    continue
+                visited.add(father)
+                Q.append(father)
+        return visited
+
+
+def sequences_of(nodes):
+    return reduce(lambda s1, s2: s1 | s2,
+                  map(lambda node: node.sequences, nodes), set())
+
+
 def compute_node_prior(node, graph, grace=0.0):
     node.prior = grace + (1 - grace) * node.size / len(graph.sequences)
 
 
 class Graph(object):
     def __init__(self, onto, uid2seq, go2ids, grace=0.5):
-        self.nodes = nodes = {}
+        self._nodes = nodes = {}
         self.sequences = sequences = set()
         # self.onto = onto
 
@@ -292,7 +316,7 @@ class Graph(object):
 
     def prune(self, gte):
         to_be_deleted = []
-        for go, node in self.nodes.items():
+        for go, node in self._nodes.items():
             if node.size >= gte:
                 continue
             for father in node.fathers:
@@ -301,25 +325,29 @@ class Graph(object):
                 child.fathers.remove(node)
             to_be_deleted.append(node)
         for node in to_be_deleted:
-            del self.nodes[node.go]
+            del self._nodes[node.go]
         return to_be_deleted
 
     def __len__(self):
-        return len(self.nodes)
+        return len(self._nodes)
 
     def __iter__(self):
-        for node in self.nodes.values():
+        for node in self._nodes.values():
             yield node
 
     def __getitem__(self, go):
-        return self.nodes[go]
+        return self._nodes[go]
 
     def __contains__(self, go):
-        return go in self.nodes
+        return go in self._nodes
 
     @property
     def leaves(self):
         return [node for node in self if node.is_leaf()]
+
+    @property
+    def nodes(self):
+        return list(self._nodes.values())
 
     def sample(self, max_add_to_sample=10):
         def sample_recursive(node, sampled):
@@ -334,6 +362,80 @@ class Graph(object):
         return sample_recursive(self.root, set())
 
 
+def sample_pairs(nodes, include_node, sample_size=10000):
+    pairs = set()
+    pbar = tqdm(range(len(nodes)), desc="nodes sampled")
+    for node in nodes:
+        pbar.update(1)
+        s_in = min(200, node.size)
+        sample_in = np.random.choice(list(node.sequences), s_in, replace=False)
+        if include_node:
+            pairs |= set((seq1, seq2, node) for seq1, seq2 in itertools.combinations(sample_in, 2))
+        else:
+            pairs |= set((seq1, seq2) for seq1, seq2 in itertools.combinations(sample_in, 2))
+    pbar.close()
+    n = len(pairs)
+    pairs_indices = np.random.choice(list(range(n)), min(n, sample_size), replace=False)
+    return np.asarray(list(pairs))[pairs_indices, :]
+
+
+# def sample_seq_go(graph, sample_size=10000):
+#     pos, neg = set(), set()
+#     pbar = tqdm(range(len(graph)), desc="nodes sampled")
+#     all_nodes = set([node for node in graph])
+#     for pos_node in graph:
+#         pbar.update(1)
+#         if pos.is_leaf():
+#             pos |= set((seq, pos_node) for seq in pos_node.sequences)
+#         else:
+#             pos |= set((seq, pos_node) for seq in pos_node.plus)
+#         for cousin in node.cousins:
+#             s_out = min(10, cousin.size)
+#             sample_out = np.random.choice(list(cousin.sequences), s_out, replace=False)
+#             neg |= set((seq1, seq2) for seq1 in sample_out for seq2 in sample_in)
+#     pbar.close()
+#     n, m = len(pos), len(neg)
+#     pos_indices = np.random.choice(list(range(n)), min(n, sample_size), replace=False)
+#     neg_indices = np.random.choice(list(range(m)), min(m, sample_size), replace=False)
+#     return np.asarray(list(pos))[pos_indices, :], np.asarray(list(neg))[neg_indices, :]
+
+
+def sample_pos_neg_no_common_ancestors(graph, sample_size=10000):
+    pos, neg = set(), set()
+    root_children = set(graph.root.children)
+    seq2nodes = {}
+    for node in graph:
+        for seq in node.sequences:
+            if seq in seq2nodes:
+                seq2nodes[seq].add(node)
+            else:
+                seq2nodes[seq] = {node}
+    pbar = tqdm(range(len(graph)), desc="nodes sampled")
+    for node in graph:
+        pbar.update(1)
+        if not node.is_leaf():
+            continue
+        list_in = list(node.sequences)
+        s_in = min(100, len(list_in))
+        sample_in = np.random.choice(list_in, s_in, replace=False)
+        pos |= set((seq1, seq2, node) for seq1, seq2 in itertools.combinations(sample_in, 2))
+        non_ancestors = root_children - node.ancestors
+        if not non_ancestors:
+            continue
+        for distant in non_ancestors:
+            list_out = list(filter(lambda s: node not in seq2nodes[s], distant.sequences))
+            if not list_out:
+                continue
+            s_out = min(100, len(list_out))
+            sample_out = np.random.choice(list_out, s_out, replace=False)
+            neg |= set((seq1, seq2, distant) for seq1 in sample_out for seq2 in sample_in)
+    pbar.close()
+    n, m = len(pos), len(neg)
+    pos_indices = np.random.choice(list(range(n)), min(n, sample_size), replace=False)
+    neg_indices = np.random.choice(list(range(m)), min(m, sample_size), replace=False)
+    return np.asarray(list(pos))[pos_indices, :], np.asarray(list(neg))[neg_indices, :]
+
+
 def sample_pos_neg(graph, sample_size=10000):
     pos, neg = set(), set()
     pbar = tqdm(range(len(graph)), desc="nodes sampled")
@@ -341,13 +443,16 @@ def sample_pos_neg(graph, sample_size=10000):
         pbar.update(1)
         if not node.is_leaf():
             continue
-        s_in = min(10, node.size)
+        s_in = min(100, node.size)
         sample_in = np.random.choice(list(node.sequences), s_in, replace=False)
-        pos |= set((seq1, seq2) for seq1, seq2 in itertools.combinations(sample_in, 2))
+        pos |= set((seq1, seq2, node) for seq1, seq2 in itertools.combinations(sample_in, 2))
         for cousin in node.cousins:
-            s_out = min(10, cousin.size)
-            sample_out = np.random.choice(list(cousin.sequences), s_out, replace=False)
-            neg |= set((seq1, seq2) for seq1 in sample_out for seq2 in sample_in)
+            cousin_sequences = cousin.sequences - node.sequences
+            if not cousin_sequences:
+                continue
+            s_out = min(100, len(cousin_sequences))
+            sample_out = np.random.choice(list(cousin_sequences), s_out, replace=False)
+            neg |= set((seq1, seq2, cousin) for seq1 in sample_out for seq2 in sample_in)
     pbar.close()
     n, m = len(pos), len(neg)
     pos_indices = np.random.choice(list(range(n)), min(n, sample_size), replace=False)
@@ -370,11 +475,11 @@ def run_metric_on_pairs(metric, pairs, verbose=True):
     return data
 
 
-def kolmogorov_smirnov_test(graph):
+def kolmogorov_smirnov_test(graph, metric):
     client = BLAST(db.blast)
     pos, neg = sample_pos_neg(graph)
-    data1 = run_metric_on_pairs(client.blastp, pos)
-    data2 = run_metric_on_pairs(client.blastp, neg)
+    data1 = run_metric_on_pairs(metric, pos)
+    data2 = run_metric_on_pairs(metric, neg)
     save_object(data1, "Data/digo_%s_ks_pos_data" % asp)
     save_object(data2, "Data/digo_%s_ks_neg_data" % asp)
     return ks_2samp([h.bitscore for h in data1], [h.bitscore for h in data2])
@@ -409,5 +514,5 @@ if __name__ == "__main__":
     save_object(graph, "Data/digo_%s_graph" % asp)
 
     print("Running KS test...")
-    ks_val, p_val = kolmogorov_smirnov_test(graph)
+    ks_val, p_val = kolmogorov_smirnov_test(graph, client.blastp)
     print("ks_val=%s, p_val=%s" % (ks_val, p_val))
