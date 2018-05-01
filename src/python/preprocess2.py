@@ -1,10 +1,10 @@
 import os
 import sys
-import wget
 
 from Bio import SeqIO
-from Bio.Seq import Seq
+from Bio.Seq import Seq as BioSeq
 from Bio.SeqRecord import SeqRecord
+from Bio.SeqIO import parse as parse_fasta
 
 from numpy import unique
 
@@ -12,13 +12,15 @@ from src.python.geneontology import *
 
 from src.python.consts import *
 
-MAX_LENGTH = 2800
-MIN_LENGTH = 30
+MAX_LENGTH = 2000
+MIN_LENGTH = 1
 
 t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
 
 verbose = True
+
+np.random.seed(1)
 
 
 def blocks(files, size=8192*1024):
@@ -69,7 +71,7 @@ class FastaFileLoader(SequenceLoader):
         super(FastaFileLoader, self).__init__(src_fasta, num_seqs)
 
     def parse_sequence(self, seq):
-        return seq.id, seq.seq
+        return seq.id, str(seq.seq)
 
 
 class UniprotCollectionLoader(SequenceLoader):
@@ -185,68 +187,121 @@ def unzip(src, trg):
         if res != 0: print("failed to decompress")
 
 
-def wget_and_unzip(sub_dir, rel_dir, url):
-    print("Downloading %s" % sub_dir)
-    fname = wget.download(url, out=rel_dir)
-    unzip(fname, rel_dir)
-    os.remove(fname)
+def propagate_labels(seq2go, onto, include_root):
+    seq2go_cpy = {}
+    for i, (k, v) in enumerate(seq2go.items()):
+        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
+        seq2go_cpy[k] = onto.propagate(v, include_root=include_root)
+    return seq2go_cpy
 
 
-def get_classes(db, onto, asp, start=t0, end=t1):
+def get_classes(seq2go, onto=None):
+    if onto: seq2go = propagate_labels(seq2go, onto, include_root=False)
+    return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
 
-    q1 = {'DB': 'UniProtKB',
-         'Evidence': {'$in': exp_codes},
-         'Date': {"$lte": start},
-         'Aspect': asp}
-    q2 = {'DB': 'UniProtKB',
+
+def get_classes_trn_tst(onto, seq2go_trn, seq2go_tst, propagate=False):
+    return onto.sort(get_classes(seq2go_trn, onto, propagate)
+                     | get_classes(seq2go_tst, onto, propagate))
+
+
+def get_random_training_and_validation_streams(db, asp, ratio, profile=False):
+    onto = get_ontology(asp)
+    Stream = ProfileStream if profile else SequenceStream
+    collection = db.pssm if profile else db.uniprot
+    q_valid = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes}, 'Aspect': asp}
+    seq2go, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid),
+                                             db.goa_uniprot.count(q_valid), asp).load()
+    seq2go_tst = {k: seq2go[k] for k in np.random.choice(list(seq2go.keys()), size=int(len(seq2go)*ratio))}
+    seq2go_trn = {k: v for k, v in seq2go.items() if k not in seq2go_tst}
+    stream_tst = Stream(seq2go_tst, collection, onto)
+    stream_trn = Stream(seq2go_trn, collection, onto)
+    return stream_trn, stream_tst
+
+
+def load_training_and_validation(db, start, end, asp, limit=None):
+    q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
-               'Date': {"$gt": start, "$lte": end},
+               'Date':  {"$lte": start},
                'Aspect': asp}
 
-    def helper(q):
-        seq2go, _ = GoAnnotationCollectionLoader(
-            db.goa_uniprot.find(q), db.goa_uniprot.count(q), asp).load()
-        for i, (k, v) in enumerate(seq2go.items()):
-            sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seq2go)))
-            seq2go[k] = onto.propagate(v)
-        return reduce(lambda x, y: set(x) | set(y), seq2go.values(), set())
+    sequences_train, annotations_train, _ = _get_labeled_data(db, q_train, asp, limit=None)
 
-    return onto.sort(helper(q1) | helper(q2))
+    q_valid = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date':  {"$gt": start, "$lte": end},
+               'Aspect': asp}
+
+    sequences_valid, annotations_valid, _ = _get_labeled_data(db, q_valid, asp, limit=limit)
+    forbidden = set(sequences_train.keys())
+    sequences_valid = {k: v for k, v in sequences_valid.items() if k not in forbidden}
+    annotations_valid = {k: v for k, v in annotations_valid.items() if k not in forbidden}
+
+    return sequences_train, annotations_train, sequences_valid, annotations_valid
 
 
-def get_training_and_validation_streams(db, start, end, asp, profile=1, limit=None):
+def _get_labeled_data(db, query, asp, limit=None, propagate=True):
+    onto = get_ontology(asp)
+    c = limit if limit else db.goa_uniprot.count(query)
+    s = db.goa_uniprot.find(query)
+    if limit: s = s.limit(limit)
 
-    if profile == 1:
-        collection = db.pssm
-        DataStream = ProfileStream
-    else:
-        collection = db.uniprot
-        DataStream = SequenceStream
+    seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, asp).load()
 
+    query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    num_seq = db.uniprot.count(query)
+    src_seq = db.uniprot.find(query)
+
+    seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
+
+    if propagate:
+        for k, v in seqid2goid.items():
+            annots = onto.propagate(v, include_root=False)
+            seqid2goid[k] = annots
+
+    return seqid2seq, seqid2goid, goid2seqid
+
+
+def get_training_and_validation_streams(db, start, end, asp, profile=False):
+    onto = get_ontology(asp)
+    Stream = ProfileStream if profile else SequenceStream
+    collection = db.pssm if profile else db.uniprot
     q_train = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$lte": start},
                'Aspect': asp}
     seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train),
                                                  db.goa_uniprot.count(q_train), asp).load()
-    query = {"_id": {"$in": unique(list(seq2go_trn.keys())).tolist()}}
-    count = limit if limit else collection.count(query)
-    source = collection.find(query).batch_size(10)
-    if limit: source = source.limit(limit)
-    stream_trn = DataStream(source, count, seq2go_trn)
-
+    stream_trn = Stream(seq2go_trn, collection, onto)
     q_valid = {'DB': 'UniProtKB',
                'Evidence': {'$in': exp_codes},
                'Date': {"$gt": start, "$lte": end},
                'Aspect': asp}
     seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid),
                                                  db.goa_uniprot.count(q_valid), asp).load()
-    query = {"_id": {"$in": unique(list(seq2go_tst.keys())).tolist()}}
-    count = limit if limit else collection.count(query)
-    source = collection.find(query).batch_size(10)
-    if limit: source = source.limit(limit)
-    stream_tst = DataStream(source, count, seq2go_tst)
+    seq2go_tst = {k: v for k, v in seq2go_tst.items() if k not in seq2go_trn}
+    stream_tst = Stream(seq2go_tst, collection, onto)
+    assert not set(seq2go_tst.keys() & seq2go_trn.keys())
+    return stream_trn, stream_tst
 
+
+def get_balanced_training_and_validation_streams(db, start, end, asp, onto, classes):
+    collection = db.uniprot
+    q_valid = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$gt": start, "$lte": end},
+               'Aspect': asp}
+    seq2go_tst, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_valid),
+                                                 db.goa_uniprot.count(q_valid), asp).load()
+    stream_tst = BinaryStream(seq2go_tst, collection, onto, classes)
+    q_train = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date': {"$lte": start},
+               'Aspect': asp}
+    seq2go_trn, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train),
+                                                 db.goa_uniprot.count(q_train), asp).load()
+    seq2go_trn = {k:v for k,v in seq2go_trn.items() if k not in seq2go_tst}
+    stream_trn = BalancedBinaryStream(seq2go_trn, collection, onto, classes)
     return stream_trn, stream_tst
 
 
@@ -258,69 +313,153 @@ def pssm2matrix(seq, pssm):
 
 
 class DataStream(object):
-    def __init__(self, source, count, seq2go):
+    def __init__(self, seq2go, collection, onto, limit=None):
+        query = {"_id": {"$in": list(seq2go.keys())}}
+        count = limit if limit else collection.count(query)
+        source = collection.find(query).batch_size(10)
+        if limit: source = source.limit(limit)
         self._count = count
         self._source = source
         self._seq2go = seq2go
+        self._onto = onto
 
     def __len__(self):
         return self._count
 
 
 class SequenceStream(DataStream):
-    def __init__(self, source, count, seq2go):
-        super(SequenceStream, self).__init__(source, count, seq2go)
+    def __init__(self, seq2go, collection, onto):
+        super(SequenceStream, self).__init__(seq2go, collection, onto)
 
     def __iter__(self):
         count = self._count
         source = self._source
         seq2go = self._seq2go
-        for uid, seq in UniprotCollectionLoader(source, count):
-            if uid not in seq2go:
-                continue
-            if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
-                continue
-            indices = [AA.aa2index[aa] for aa in seq]
-            yield uid, indices, seq2go[uid]
-
-    def to_fasta(self, out_file):
-        count = self._count
-        source = self._source
-        seq2go = self._seq2go
-        sequences = []
+        cls = set(self._onto.classes)
         for unipid, seq in UniprotCollectionLoader(source, count):
             if unipid not in seq2go:
                 continue
+            if not np.all([go in cls for go in seq2go[unipid]]):
+                continue
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            sequences.append(SeqRecord(Seq(seq), unipid))
+            yield [unipid, seq, seq2go[unipid]]
+
+    def to_dictionaries(self, propagate=False):
+        go2uid = {}
+        uid2seq = {}
+        uid2go = {}
+        onto = self._onto
+        for unipid, seq, annots in self:
+            if propagate:
+                annots = onto.propagate(annots, include_root=False)
+            for go in annots:
+                if go in go2uid:
+                    go2uid[go].append(unipid)
+                else:
+                    go2uid[go] = [unipid]
+            uid2seq[unipid] = seq
+            uid2go[unipid] = annots
+        return uid2seq, uid2go, go2uid
+
+    def to_fasta(self, out_file):
+        sequences = []
+        for unipid, seq, annots in self:
+            sequences.append(SeqRecord(BioSeq(seq), unipid))
         SeqIO.write(sequences, open(out_file, 'w+'), "fasta")
 
 
 class ProfileStream(DataStream):
-    def __init__(self, source, count, seq2go):
-        super(ProfileStream, self).__init__(source, count, seq2go)
+    def __init__(self, seq2go, collection, onto):
+        super(ProfileStream, self).__init__(seq2go, collection, onto)
 
     def __iter__(self):
         count = self._count
         source = self._source
         seq2go = self._seq2go
+        onto = self._onto
         for uid, (seq, pssm, aln) in PssmCollectionLoader(source, count):
             if uid not in seq2go:
                 continue
             if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
                 continue
-            indices = [AA.aa2index[aa] for aa in seq]
             mat = pssm2matrix(seq, pssm)
-            yield uid, indices, mat, seq2go[uid]
+            yield [uid, seq, mat, seq2go[uid]]
 
 
-def load_data(stream, reverse=True):
+class BinaryStream(DataStream):
+    def __init__(self, seq2go, collection, onto, classes):
+        super(BinaryStream, self).__init__(seq2go, collection)
+        self._collection = collection
+        source = self._source
+        count = self._count
+        self._onto = onto
+        self._seq2go = seq2go
+        self._classes = classes
+        self._seq2seq = UniprotCollectionLoader(source, count).load()
+        self._go2seq = go2seq = {}
+        self._seq2go_original = {}
+        for seqid, terms in seq2go.items():
+            self._seq2go_original[seqid] = terms
+            prop = onto.propagate(terms, include_root=False)
+            for go in prop:
+                if go in go2seq:
+                    go2seq[go].append(seqid)
+                else:
+                    go2seq[go] = [seqid]
+            seq2go[seqid] = prop
+
+    def __iter__(self):
+        onto = self._onto
+        go2seq = self._go2seq
+        seq2seq = self._seq2seq
+        seq2go = self._seq2go_original
+        classes = onto.classes
+        for pos, sequences in go2seq.items():
+            for seqid in sequences:
+                yield seqid, seq2seq[seqid], classes.index(pos), 1
+                neg = onto.negative_sample(seq2go[seqid])
+                yield seqid, seq2seq[seqid], classes.index(neg), 0
+
+    def __len__(self):
+        return sum(map(len, self._go2seq.values()))
+
+
+class BalancedBinaryStream(BinaryStream):
+
+    def __init__(self, seq2go, collection, onto, classes):
+        super(BalancedBinaryStream, self).__init__(seq2go, collection, onto, classes)
+
+    def __iter__(self, ssz=512):  # ssz == sample_size
+        onto = self._onto
+        classes = self._classes
+        go2seq = self._go2seq
+        seq2seq = self._seq2seq
+        seq2go = self._seq2go_original
+        for i in range(1, onto.num_levels):
+            for pos in onto.get_level(i):
+                if pos not in go2seq:
+                    continue
+                for seqid in np.random.choice(go2seq[pos], max(ssz, 8)):
+                    seq = seq2seq[seqid]
+                    if not MIN_LENGTH <= len(seq) <= MAX_LENGTH:
+                        continue
+                    yield seqid, seq, classes.index(pos), 1
+                    neg = onto.negative_sample(seq2go[seqid])
+                    assert not onto.is_father(neg, seq2go[seqid])
+                    yield seqid, seq, classes.index(neg), -1
+            ssz //= 2
+
+    def __len__(self):
+        return -1
+
+
+def load_data(stream, sort=True):
     data = []
     for i, packet in enumerate(stream):
-        sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(stream)))
+        sys.stdout.write("\rLoading {0:.0f}".format(i))
         data.append(packet)
-    data.sort(key=lambda p: len(p[1]), reverse=reverse)  # it is important to have seq @ 2nd place
+    if sort: data.sort(key=lambda p: len(p[1]), reverse=True)  # it is important to have seq @ 2nd place
     return data
 
 
@@ -329,7 +468,7 @@ if __name__ == "__main__":
     client = MongoClient('mongodb://localhost:27017/')
     db = client['prot2vec']
     print("Indexing Data...")
-    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, 'F', profile=0)
+    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, 'F')
     print("Loading Data...")
     trn_stream.to_fasta('../../Data/training_set.fasta')
     tst_stream.to_fasta('../../Data/validation_set.fasta')

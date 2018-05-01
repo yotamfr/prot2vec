@@ -1,7 +1,7 @@
 from datetime import datetime
 from Bio.SubsMat import MatrixInfo
 
-exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"] + ["HDA", "HEP", "HMP"]
+exp_codes = ["EXP", "IDA", "IPI", "IMP", "IGI", "IEP"] + ["TAS", "IC"]
 
 t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
@@ -99,6 +99,8 @@ class AminoAcids(object):
 
 AA = AminoAcids()
 
+amino_acids = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
+assert len(set(amino_acids)) == 20
 
 if __name__=="__main__":
     print(AA.blosum62)

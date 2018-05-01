@@ -5,7 +5,6 @@ import random
 import time
 
 import math
-import numpy as np
 
 import torchvision
 from torch import optim
@@ -16,18 +15,16 @@ from PIL import Image
 import visdom
 vis = visdom.Visdom()
 
-import sconce
-
 import matplotlib.ticker as ticker
 
 import socket
 hostname = socket.gethostname()
 
-from .seq2go_model import *
+from src.python.pssm2go_model import *
 
-from .embedding2 import *
+from src.python.baselines import *
 
-from .baselines import *
+from src.python.consts import *
 
 from pymongo import MongoClient
 
@@ -47,83 +44,101 @@ SHOW_PLOT = False
 
 USE_CUDA = False
 
-KMER = 3
-
 PAD_token = 0
 SOS_token = 1
 EOS_token = 2
 
-# MIN_LENGTH = 3
-# MAX_LENGTH = 25
-MIN_LENGTH = 1
+
+MIN_LENGTH = 50
 MAX_LENGTH = 500
 
-MIN_COUNT = 5
-# MIN_COUNT = 2
+MIN_COUNT = 2
+
+GAP = '-'
+
+t0 = datetime.datetime(2016, 2, 1, 0, 0)
+t1 = datetime.datetime(2017, 12, 1, 0, 0)
 
 
-class Lang(object):
-    def __init__(self, name):
-        self.name = name
-        self.trimmed = False
-        self.word2index = {}
-        self.word2count = {}
-        self.index2word = {0: "PAD", 1: "SOS", 2: "EOS"}
-        self.n_words = 3  # Count default tokens
-
-    def index_words(self, sequence):
-        for word in sequence:
-            self.index_word(word)
-
-    def index_word(self, word):
-        if word not in self.word2index:
-            self.word2index[word] = self.n_words
-            self.word2count[word] = 1
-            self.index2word[self.n_words] = word
-            self.n_words += 1
-        else:
-            self.word2count[word] += 1
-
-    # Remove words below a certain count threshold
-    def trim(self, min_count):
-        if self.trimmed: return
-        self.trimmed = True
-
-        keep_words = []
-
-        for k, v in self.word2count.items():
-            if v >= min_count:
-                keep_words.append(k)
-
-        print('keep_words %s / %s = %.4f' % (
-            len(keep_words), len(self.word2index), len(keep_words) / len(self.word2index)
-        ))
-
-        # Reinitialize dictionaries
-        self.word2index = {}
-        self.word2count = {}
-        self.index2word = {0: "PAD", 1: "SOS", 2: "EOS"}
-        self.n_words = 3  # Count default tokens
-
-        for word in keep_words:
-            self.index_word(word)
+set_verbose(False)
 
 
-# def load_data(db, asp, codes=exp_codes, limit=None):
-#     q = {'Evidence': {'$in': codes}, 'DB': 'UniProtKB'}
-#     c = limit if limit else db.goa_uniprot.count(q)
-#     s = db.goa_uniprot.find(q)
-#     if limit: s = s.limit(limit)
-#
-#     seqid2goid, goid2seqid = GoAnnotationCollectionLoader(s, c, asp).load()
-#
-#     query = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
-#     num_seq = db.uniprot.count(query)
-#     src_seq = db.uniprot.find(query)
-#
-#     seqid2seq = UniprotCollectionLoader(src_seq, num_seq).load()
-#
-#     return seqid2seq, goid2seqid, seqid2goid
+def labeled_3pics(db, query, t, limit):
+
+    c = limit if limit else db.goa_uniprot.count(query)
+    s = db.goa_uniprot.find(query)
+    if limit: s = s.limit(limit)
+    seqid2goid, _ = GoAnnotationCollectionLoader(s, c, ASPECT).load()
+
+    q = {"_id": {"$in": unique(list(seqid2goid.keys())).tolist()}}
+    num_seq = db.pssm.count(q)
+    src_seq = db.pssm.find(q)
+
+    seqid2seqpssm = PssmCollectionLoader(src_seq, num_seq).load()
+    seqid2seqpssm = {k: v for k, v in seqid2seqpssm.items() if len(seqid2seqpssm[k][2]) > 1}
+    seqid2goid = {k: v for k, v in seqid2goid.items() if k in seqid2seqpssm}
+
+    ids, pics1, pics2, pics3 = [], [], [], []
+    for i, (seqid, (seq, pssm, msa)) in enumerate(seqid2seqpssm.items()):
+        # sys.stdout.write("\r{0:.0f}%".format(100.0 * i / len(seqid2seqpssm)))
+        query["DB_Object_ID"] = {"$in": [r[0].split('|')[1] for r in msa[1:]]}
+        homoids = [r[0].split('|')[1] for r in msa[1:]]
+        homodocs = db.goa_uniprot.find({"DB": "UniProtKB",
+                                        "DB_Object_ID": {"$in": homoids},
+                                        "Date": {"$lte": t}})
+        homologos = {}
+        for i, doc in len(homodocs):
+            k, v = doc["DB_Object_ID"], doc["GO_ID"]
+            if k in homologos:
+                homologos[k].append(v)
+            else:
+                homologos[k] = [v]
+
+        gomap = [[k, homologos[k] if k in homologos else []] for k in homoids]
+        print(i)
+        print(len(homologos))
+        print(len(gomap))
+
+        pics1.append(profile2pic(pssm, seq))
+        pics2.append(msa2pic(msa))
+        pics3.append(gomap2pic(gomap))
+        ids.append(seqid)
+
+    labels = [seqid2goid[k] for k in ids]
+
+    return ids, pics1, pics2, pics3, labels
+
+
+def gomap2pic(gomap):
+    global onto
+    return []
+
+
+def msa2pic(msa):
+    return [[-1. if aa == GAP else AA.aa2index[aa] for aa in aln] for _, aln in msa]
+
+
+def profile2pic(pssm, seq):
+    return [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
+            for i, aa in enumerate(seq)]
+
+
+def load_training_and_validation(db, limit=None):
+    q_train = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date':  {"$lte": t0},
+               'Aspect': ASPECT}
+
+    trn_ids, trn_pics1, trn_pics2, trn_pics3, trn_labels = labeled_3pics(db, q_train, t0, None)
+
+    q_valid = {'DB': 'UniProtKB',
+               'Evidence': {'$in': exp_codes},
+               'Date':  {"$gt": t0, "$lte": t1},
+               'Aspect': ASPECT}
+
+    tst_ids, tst_pics1, tst_pics2, tst_pics3, tst_labels = labeled_3pics(db, q_valid, t1, limit)
+
+    return trn_ids, trn_pics1, trn_pics2, trn_pics3, trn_labels, tst_ids, tst_pics1, tst_pics2, tst_pics3, tst_labels
 
 
 def filter_pairs(pairs_gen):
@@ -131,32 +146,35 @@ def filter_pairs(pairs_gen):
     original_pairs = []
     for _, inp, out in pairs_gen:
         original_pairs.append((inp, out))
-        if MIN_LENGTH <= len(inp) <= MAX_LENGTH and MIN_LENGTH <= len(out) <= MAX_LENGTH:
+        if MIN_LENGTH <= len(inp) <= MAX_LENGTH:
             filtered_pairs.append((inp, out))
     return original_pairs, filtered_pairs
 
 
-class KmerGoPairsGen(object):
+class PssmGoPairsGen(object):
 
-    def __init__(self, kmer, seqid2seq, seqid2goid, emb=None):
+    def __init__(self, seqid2seqpssm, seqid2goid):
 
-        self.k = kmer
-        self.emb = emb
-        self.seqid2seq = seqid2seq
+        self.seqid2seqpssm = seqid2seqpssm
         self.seqid2goid = seqid2goid
 
     def __iter__(self):
-        emb = self.emb
-        seqid2seq = self.seqid2seq
+        seqid2seqpssm = self.seqid2seqpssm
         seqid2goid = self.seqid2goid
-        for (seqid, annots) in seqid2goid.items():
-            seq = seqid2seq[seqid]
+        sorted_keys = sorted(seqid2goid.keys(), key=lambda k: len(seqid2seqpssm[k][0]))
+        for seqid in sorted_keys:
+            annots = seqid2goid[seqid]
+            seq, pssm, msa = seqid2seqpssm[seqid]
+            if len(pssm) != len(seq) or len(msa) == 1:
+                print("WARN: wrong PSSM! (%s)" % seqid)
+                continue
+            for head, seq in msa[1:]:
+                _, seqid, _ = head.split('|')
+                annots = map(lambda doc: doc[""], db.goa_uniprot.f)
+            matrix = [AA.aa2onehot[aa] + [pssm[i][AA.index2aa[k]] for k in range(20)]
+                      for i, aa in enumerate(seq)]
             sent_go = onto.propagate(annots, include_root=False)
-            for offset in range(self.k):
-                sent_kmer = get_kmer_sentences(seq, self.k, offset)
-                if emb and not np.all([(w in emb) for w in sent_kmer]):
-                    continue
-                yield (seqid, sent_kmer, sent_go)
+            yield (seqid, matrix, sent_go)
 
 
 def prepare_data(pairs_gen):
@@ -166,10 +184,9 @@ def prepare_data(pairs_gen):
 
     print("Indexing words...")
     for pair in pairs2:
-        input_lang.index_words(pair[0])
         output_lang.index_words(pair[1])
 
-    print('Indexed %d words in input language, %d words in output' % (input_lang.n_words, output_lang.n_words))
+    print('Indexed %d words in GO' % output_lang.n_words)
     return pairs2
 
 
@@ -186,11 +203,6 @@ def trim_pairs(pairs):
         input_seq, output_annots = pair
         keep_input = True
         keep_output = True
-
-        for word in input_seq:
-            if word not in input_lang.word2index:
-                keep_input = False
-                break
 
         for word in output_annots:
             if word not in output_lang.word2index:
@@ -212,34 +224,33 @@ def indexes_from_sequence(lang, seq):
     return [lang.word2index[word] for word in seq] + [EOS_token]
 
 
+# Pad a with zeros
+def pad_inp(seq, max_length):
+    seq = [(seq[i] if i < len(seq) else ([0.] * input_size)) for i in range(max_length)]
+    return seq
+
+
 # Pad a with the PAD symbol
-def pad_seq(seq, max_length):
-    seq += [PAD_token for i in range(max_length - len(seq))]
+def pad_out(seq, max_length):
+    seq += [PAD_token for _ in range(max_length - len(seq))]
     return seq
 
 
 def random_batch(batch_size):
-    input_seqs = []
-    target_seqs = []
 
     # Choose random pairs
-    for i in range(batch_size):
-        pair = random.choice(pairs)
-        input_seqs.append(indexes_from_sequence(input_lang, pair[0]))
-        target_seqs.append(indexes_from_sequence(output_lang, pair[1]))
-
-    # Zip into pairs, sort by length (descending), unzip
-    seq_pairs = sorted(zip(input_seqs, target_seqs), key=lambda p: len(p[0]), reverse=True)
-    input_seqs, target_seqs = zip(*seq_pairs)
+    ix = random.choice(list(range(len(pairs)-batch_size)))
+    input_seqs = sorted([pair[0] for pair in pairs[ix:ix+batch_size]], key=lambda s: -len(s))
+    target_seqs = [indexes_from_sequence(output_lang, pair[1]) for pair in pairs[ix:ix+batch_size]]
 
     # For input and target sequences, get array of lengths and pad with 0s to max length
     input_lengths = [len(s) for s in input_seqs]
-    input_padded = [pad_seq(s, max(input_lengths)) for s in input_seqs]
+    input_padded = [pad_inp(s, max(input_lengths)) for s in input_seqs]
     target_lengths = [len(s) for s in target_seqs]
-    target_padded = [pad_seq(s, max(target_lengths)) for s in target_seqs]
+    target_padded = [pad_out(s, max(target_lengths)) for s in target_seqs]
 
     # Turn padded arrays into (batch_size x max_len) tensors, transpose into (max_len x batch_size)
-    input_var = Variable(torch.LongTensor(input_padded)).transpose(0, 1)
+    input_var = Variable(torch.FloatTensor(input_padded)).transpose(0, 1)
     target_var = Variable(torch.LongTensor(target_padded)).transpose(0, 1)
 
     if USE_CUDA:
@@ -260,7 +271,7 @@ def test_models():
     small_hidden_size = 8
     small_n_layers = 2
 
-    encoder_test = EncoderRNN(input_lang.n_words, small_hidden_size, small_n_layers)
+    encoder_test = EncoderRNN(input_size, small_hidden_size, small_n_layers)
     decoder_test = LuongAttnDecoderRNN('general', small_hidden_size, output_lang.n_words, small_n_layers)
 
     if USE_CUDA:
@@ -276,7 +287,7 @@ def test_models():
 
     # Prepare decoder input and outputs
     decoder_input = Variable(torch.LongTensor([SOS_token] * small_batch_size))
-    decoder_hidden = encoder_hidden[:decoder_test.n_layers]  # Use last (forward) hidden state from encoder
+    decoder_hidden = encoder_hidden[:decoder_test.n_layers] # Use last (forward) hidden state from encoder
     all_decoder_outputs = Variable(torch.zeros(max_target_length, small_batch_size, decoder_test.output_size))
 
     if USE_CUDA:
@@ -300,8 +311,9 @@ def test_models():
     print('loss', loss.data[0])
 
 
-def train(input_batches, input_lengths, target_batches, target_lengths, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, batch_size, grad_clip, gamma):
+def train(input_batches, input_lengths, target_batches, target_lengths,
+          encoder, decoder, encoder_optimizer, decoder_optimizer,
+          batch_size, grad_clip, gamma):
     # Zero gradients of both optimizers
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
@@ -365,8 +377,7 @@ def time_since(since, percent):
 
 def evaluate(encoder, decoder, input_seq, max_length=MAX_LENGTH):
     input_lengths = [len(input_seq)]
-    input_seqs = [indexes_from_sequence(input_lang, input_seq)]
-    input_batches = Variable(torch.LongTensor(input_seqs), volatile=True).transpose(0, 1)
+    input_batches = Variable(torch.FloatTensor([input_seq]), volatile=True).transpose(0, 1)
 
     if USE_CUDA:
         input_batches = input_batches.cuda()
@@ -450,8 +461,10 @@ def show_plot_visdom():
     vis.image(torchvision.transforms.ToTensor()(im), win=attn_win, opts={'title': attn_win})
 
 
-def evaluate_and_show_attention(encoder, decoder, input_words, target_words=None):
-    output_words, attentions = evaluate(encoder, decoder, input_words)
+def evaluate_and_show_attention(encoder, decoder, input_seq, target_words=None):
+    output_words, attentions = evaluate(encoder, decoder, input_seq)
+    input_words = [AA.index2aa[vec[:len(AA)].index(1) if 1 in vec[:len(AA)] else 20]
+                   for vec in input_seq]
     output_sequence = ' '.join(output_words)
     input_sequence = ' '.join(input_words)
     target_sequence = ' '.join(target_words)
@@ -474,7 +487,7 @@ def evaluate_and_show_attention(encoder, decoder, input_words, target_words=None
 def show_plot(points):
     plt.figure()
     fig, ax = plt.subplots()
-    loc = ticker.MultipleLocator(base=0.2)  # put ticks at regular intervals
+    loc = ticker.MultipleLocator(base=0.2) # put ticks at regular intervals
     ax.yaxis.set_major_locator(loc)
     plt.plot(points)
 
@@ -482,12 +495,14 @@ def show_plot(points):
 def add_arguments(parser):
     parser.add_argument("--mongo_url", type=str, default='mongodb://localhost:27017/',
                         help="Supply the URL of MongoDB")
+    parser.add_argument('--cnn', action='store_true', default=False,
+                        help="Use CNN to extract features from input sequence.")
     parser.add_argument("-a", "--aspect", type=str, choices=['F', 'P', 'C'],
                         default="F", help="Specify the ontology aspect.")
     parser.add_argument("-o", "--out_dir", type=str, required=False,
                         default=gettempdir(), help="Specify the output directory.")
     parser.add_argument("-m", "--model_name", type=str, required=False,
-                        default="seq2go", help="Specify the model name.")
+                        default="pssm2go", help="Specify the model name.")
     parser.add_argument("-q", '--quiet', action='store_true', default=False,
                         help="Run in quiet mode.")
     parser.add_argument('--pretrained', action='store_true', default=False,
@@ -549,8 +564,11 @@ def main_loop(
     assert encoder_hidden_size == decoder_hidden_size
 
     # Initialize models
-    encoder = EncoderRNN(input_lang.n_words, encoder_hidden_size, n_layers,
-                         dropout=dropout, embedding=input_embedding)
+    if not args.cnn:
+        encoder = EncoderRNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+    else:
+        encoder = EncoderRCNN(input_size, encoder_hidden_size, n_layers, dropout=dropout)
+
     decoder = LuongAttnDecoderRNN(attn_model, decoder_hidden_size, output_lang.n_words, n_layers,
                                   dropout=dropout, embedding=output_embedding)
 
@@ -578,20 +596,6 @@ def main_loop(
     if USE_CUDA and args.resume:
         optimizer_cuda(encoder_optimizer)
         optimizer_cuda(decoder_optimizer)
-
-    # job = sconce.Job('seq2go-nmt', {
-    #     'attn_model': attn_model,
-    #     'n_layers': n_layers,
-    #     'dropout': dropout,
-    #     'decoder_hidden_size': decoder_hidden_size,
-    #     'encoder_hidden_size': encoder_hidden_size,
-    #     'learning_rate': learning_rate,
-    #     'clip': clip,
-    #     'teacher_forcing_ratio': teacher_forcing_ratio,
-    #     'decoder_learning_ratio': decoder_learning_ratio,
-    # })
-    # job.plot_every = plot_every
-    # job.log_every = print_every
 
     # Keep track of time elapsed and running averages
     start = time.time()
@@ -664,11 +668,6 @@ def main_loop(
             dca = 0
 
 
-def set_input_lang(lang):
-    global input_lang
-    input_lang = lang
-
-
 def set_output_lang(lang):
     global output_lang
     output_lang = lang
@@ -720,46 +719,33 @@ if __name__ == "__main__":
 
     onto = init_GO(args.aspect)
 
-    stream = map(lambda p: p['sequence'], db.uniprot.find({'db': 'sp'}))
-    if args.pretrained:
-        kmer_w2v = Word2VecWrapper("3mer", KmerSentencesLoader(3, list(stream)))
-    else:
-        kmer_w2v = None
+    data = load_training_and_validation(db, limit=1000)
+    pass
 
-    seqid2seq, seqid2goid, _, _ = load_training_and_validation(db, limit=None)
-
-    input_lang = Lang("KMER")
-    output_lang = Lang("GO")
-    gen = KmerGoPairsGen(KMER, seqid2seq, seqid2goid, emb=kmer_w2v)
-    pairs = prepare_data(gen)
-
-    input_lang.trim(MIN_COUNT)
-    output_lang.trim(MIN_COUNT)
-
-    save_object(input_lang, os.path.join(ckptpath, "kmer-lang-%s.pkl" % GoAspect(args.aspect)))
-    save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
-
-    pairs, _ = trim_pairs(pairs)
-
-    test_models()
-
-    if args.pretrained:
-        input_embedding = np.array([kmer_w2v[kmer] for kmer
-                                    in sorted(input_lang.word2index.keys(),
-                                              key=lambda k: input_lang.word2index[k])])
-        dummy_embedding = np.random.rand(3, input_embedding.shape[1])
-        input_embedding = np.concatenate((dummy_embedding, input_embedding))
-
-        output_embedding = np.array([onto.todense(go) for go
-                                     in sorted(output_lang.word2index.keys(),
-                                               key=lambda k: output_lang.word2index[k])])
-        dummy_embedding = np.random.rand(3, output_embedding.shape[1])
-        output_embedding = np.concatenate((dummy_embedding, output_embedding))
-    else:
-        input_embedding = None
-        output_embedding = None
-
-    main_loop(
-        print_every=args.print_every,
-        evaluate_every=args.eval_every
-    )
+    # input_size = len(AA) * 2
+    #
+    # gen = PssmGoPairsGen(seqid2seqpssm, seqid2goid)
+    # pairs = prepare_data(gen)
+    #
+    # output_lang.trim(MIN_COUNT)
+    #
+    # save_object(output_lang, os.path.join(ckptpath, "go-lang-%s.pkl" % GoAspect(args.aspect)))
+    #
+    # pairs, _ = trim_pairs(pairs)
+    #
+    # test_models()
+    #
+    # if args.pretrained:
+    #     output_embedding = np.array([onto.todense(go) for go
+    #                                  in sorted(output_lang.word2index.keys(),
+    #                                            key=lambda k: output_lang.word2index[k])])
+    #     dummy_embedding = np.random.rand(3, output_embedding.shape[1])
+    #     output_embedding = np.concatenate((dummy_embedding, output_embedding))
+    # else:
+    #     input_embedding = None
+    #     output_embedding = None
+    #
+    # main_loop(
+    #     print_every=args.print_every,
+    #     evaluate_every=args.eval_every
+    # )

@@ -139,15 +139,31 @@ class Ontology(object):
     def classes(self):
         return [c for c in self._mlb.classes_]
 
+    @property
+    def num_levels(self):
+        return len(self._levels)
+
     def sort(self, go_terms):
         return sorted(go_terms, key=lambda go: self[go])
+
+    # If father to one of the leaves return True else False
+    def is_father(self, father, leaves):
+        d = nx.shortest_path_length(self._graph, target=father)
+        for leaf in leaves:
+            if leaf in d:
+                return True
+        return False
+
+    def negative_sample(self, leaves, classes=None):
+        if not classes: classes = self.classes
+        can = np.random.choice(classes)
+        while self.is_father(can, leaves):
+            can = np.random.choice(classes)
+        return can
 
     def propagate(self, go_terms, include_root=True):
         G = self._graph
         lbl = self.sort(filter(lambda x: G.has_node(x), go_terms))
-        # if max_length:
-        #     anc = map(lambda go: nx.shortest_path_length(G, source=go), lbl)
-        #     aug = set([k for d in anc for k, v in d.items() if v <= max_length])
         if include_root:
             anc = map(lambda go: self.sort(nx.descendants(G, go)) + [go], lbl)
         else:
@@ -183,6 +199,15 @@ class Ontology(object):
 
     def __len__(self):
         return len(self.classes)
+
+
+def least_common_ancestor(G, go1, go2):
+    ancestors1 = nx.shortest_path_length(G, source=go1)
+    ancestors2 = nx.shortest_path_length(G, source=go2)
+    common = list(set(ancestors1.keys()) & set(ancestors2.keys()))
+    assert len(common) > 0
+    c = common[np.argmin([ancestors1[c] + ancestors2[c] for c in common])]
+    return c, ancestors1[c] + ancestors2[c]
 
 
 if __name__=="__main__":

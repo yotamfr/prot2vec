@@ -191,45 +191,40 @@ def _run_hhblits_batched(sequences, collection):
     pbar.close()
 
 
-def _comp_profile_batched(sequences, collection):
+def _get_profile_func(method="pssm"):
+    func = _get_pssm if method == "pssm" else _get_profile
 
-    records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
-    pbar = tqdm(range(len(records)), desc="sequences processed")
+    def _comp_profile_batched(sequences, collection):
 
-    while records:
-        batch = []
-        while (len(batch) < batch_size) and (len(records) > 0):
-            seq = records.pop()
-            pbar.update(1)
-            batch.append(seq)
+        records = [SeqRecord(Seq(seq), seqid) for (seqid, seq) in sequences]
+        pbar = tqdm(range(len(records)), desc="sequences processed")
 
-        pwd = os.getcwd()
-        os.chdir(out_dir)
+        while records:
+            batch = []
+            while (len(batch) < batch_size) and (len(records) > 0):
+                seq = records.pop()
+                pbar.update(1)
+                batch.append(seq)
 
-        e = ThreadPoolExecutor(num_cpu)
-        for (seq, profile) in e.map(_get_profile, [seq for seq in batch]):
-            if not profile: continue
-            collection.update_one({
-                "_id": seq.id}, {
-                '$set': {"profile": profile,
-                         "seq": str(seq.seq),
-                         "length": len(seq.seq),
-                         "updated_at": datetime.utcnow()}
-            }, upsert=True)
+            pwd = os.getcwd()
+            os.chdir(out_dir)
 
-        for (seq, pssm) in e.map(_get_pssm, [seq for seq in batch]):
-            if not pssm: continue
-            collection.update_one({
-                "_id": seq.id}, {
-                '$set': {"pssm": pssm,
-                         "seq": str(seq.seq),
-                         "length": len(seq.seq),
-                         "updated_at": datetime.utcnow()}
-            }, upsert=True)
+            e = ThreadPoolExecutor(num_cpu)
+            for (seq, attr) in e.map(func, [seq for seq in batch]):
+                if not attr: continue
+                collection.update_one({
+                    "_id": seq.id}, {
+                    '$set': {method: attr,
+                             "seq": str(seq.seq),
+                             "length": len(seq.seq),
+                             "updated_at": datetime.utcnow()}
+                }, upsert=True)
 
-        os.chdir(pwd)
+            os.chdir(pwd)
 
-    pbar.close()
+        pbar.close()
+
+    return _comp_profile_batched
 
 
 def _read_a3m(seq):
@@ -344,7 +339,7 @@ def add_arguments(parser):
                         help="Supply an input file in FASTA format.")
     parser.add_argument('--out_dir', default='./hhblits', type=str, metavar='PATH',
                         help='Where to save the output/log files?')
-    parser.add_argument("--comp", type=str, required=True, choices=['hhblits', 'profiles'],
+    parser.add_argument("--comp", type=str, required=True, choices=['hhblits', 'profile', 'pssm'],
                         help="The name of the computation that you want run.")
     parser.add_argument("--db_name", type=str, default='prot2vec', choices=['prot2vec', 'prot2vec2'],
                         help="The name of the DB to which to write the data.")
@@ -378,7 +373,7 @@ if __name__ == "__main__":
     db = client[args.db_name]
     lim = args.limit
 
-    func = _run_hhblits_batched if args.comp == 'hhblits' else _comp_profile_batched
+    func = _run_hhblits_batched if args.comp == 'hhblits' else _get_profile_func(args.comp)
 
     if not args.input_file:
         seqs = _get_annotated_uniprot(db, lim, deltadays=args.dd)
@@ -387,7 +382,8 @@ if __name__ == "__main__":
     else:
         fasta_fname = args.input_file
         fasta_src = parse_fasta(open(fasta_fname, 'r'), 'fasta')
-        existing_ids = set([doc["_id"] for doc in db.cafa_pi.find({})])
-        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids), key=lambda p: -len(p[1]))
+        existing_ids = set([doc["_id"] for doc in db.cafa_pi.find({}) if args.comp in doc])
+        seqs = sorted(((r.id, str(r.seq)) for r in fasta_src if r.id not in existing_ids),
+                      key=lambda p: -len(p[1]))
         db.cafa_pi.create_index("updated_at")
         func(seqs, db.cafa_pi)

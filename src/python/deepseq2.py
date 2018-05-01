@@ -42,7 +42,7 @@ t0 = datetime(2014, 1, 1, 0, 0)
 t1 = datetime(2014, 9, 1, 0, 0)
 
 MAX_LENGTH = 2000
-MIN_LENGTH = 1
+MIN_LENGTH = 30
 
 
 def get_classes(db, onto, start=t0, end=t1):
@@ -255,12 +255,10 @@ def batch_generator(stream, onto, classes):
 
     def pad_seq(seq, max_length=MAX_LENGTH):
         delta = max_length - len(seq)
-        seq = [PAD for _ in range(delta - delta // 2)] + seq + [PAD for _ in range(delta // 2)]
+        left = [PAD for _ in range(delta // 2)]
+        right = [PAD for _ in range(delta - delta // 2)]
+        seq = left + seq + right
         return np.asarray(seq)
-
-    # def pad_seq(seq):
-    #     seq += [PAD for _ in range(MAX_LENGTH - len(seq))]
-    #     return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
         b = max(map(len, sequences)) + 100
