@@ -1,18 +1,24 @@
 import os
 
 import torch
+<<<<<<< HEAD
 from torch import nn
 
 import torch.nn.functional as F
 
 from torch.autograd import Variable
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 
 import numpy as np
 
 VERBOSE = True
 
+<<<<<<< HEAD
 USE_CUDA = True
 
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 
 def model_summary(model):
     for idx, m in enumerate(model.modules()):
@@ -45,7 +51,11 @@ def optimizer_cuda(optimizer):
 
 class AdaptiveLR(object):
 
+<<<<<<< HEAD
     def __init__(self, opt, initial_lr, num_iterations=1000):
+=======
+    def __init__(self, opt, initial_lr, num_iterations=2000):
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
         self._lr = initial_lr
         self.opt = opt
         self.losses = []
@@ -83,6 +93,7 @@ def shuffle(data, labels):
     s = np.arange(data.shape[0])
     np.random.shuffle(s)
     return data[s], labels[s]
+<<<<<<< HEAD
 
 
 class CosineSimilarityRegressionLoss(nn.Module):
@@ -115,3 +126,5 @@ class CosineSimilarityLossWithL2Regularization(nn.Module):
         l2_2 = F.l1_loss(ones, vec2.norm(p=2, dim=1))
         loss = F.cosine_embedding_loss(vec1, vec2, y)
         return loss + self.alpha * (l2_1 + l2_2)
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3

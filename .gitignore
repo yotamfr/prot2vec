@@ -26,10 +26,12 @@ recurrentshop
 build
 dist
 
-*.ipynb*
 .ipynb_checkpoints
+benchmark-*.py
+benchmark-*.ipynb
 .Rproj.user
 
+Data/blast_dist_matrix_04-09-2018
 Data/CAFA_PI/CAFA pi Submission Rules.pdf
 Data/CAFA_PI/keywords.txt
 Data/CAFA_PI/sampleSubmission/
@@ -37,6 +39,14 @@ Data/CAFA_PI/sampleSubmissions.zip
 Data/CAFA_PI/targetFiles.zip
 Data/validation_set.fasta
 Data/training_set.fasta
+Data/swissprot.fasta
+Data/sp.fasta
+Data/sp.nr.90.clstr
+Data/sp.nr.90
+Data/sp.nr.70.clstr
+Data/sp.nr.70
+
+cdhit
 
 src/__pycache__/
 src/python/__pycache__/

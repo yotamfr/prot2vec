@@ -23,8 +23,11 @@ import pickle
 
 import datetime
 
+<<<<<<< HEAD
 from pymongo.errors import DuplicateKeyError
 
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 NUM_CPU = 8
 
 E = ThreadPoolExecutor(NUM_CPU)
@@ -46,6 +49,7 @@ def _blast(target_fasta, database_pth, evalue):
     SeqIO.write(target_fasta, open(query_pth, 'w+'), "fasta")
     cline = "blastp -db %s -query %s -outfmt 6 -out %s -evalue %s 1>/dev/null 2>&1" \
             % (database_pth, query_pth, output_pth, evalue)
+<<<<<<< HEAD
     res = os.WEXITSTATUS(os.system(cline))
     try:
         with open(output_pth, 'r') as f:
@@ -57,6 +61,13 @@ def _blast(target_fasta, database_pth, evalue):
     finally:
         os.remove(query_pth)
         os.remove(output_pth)
+=======
+    assert os.WEXITSTATUS(os.system(cline)) == 0
+    with open(output_pth, 'r') as f:
+        hits = [HSP(line.split('\t')) for line in f.readlines()]
+    os.remove(query_pth)
+    os.remove(output_pth)
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
     return hits
 
 
@@ -274,10 +285,14 @@ class BLAST(object):
             if len(hits) == 0:
                 return HSP([seq1.uid, seq2.uid, 0., 0., 0., 0., 0., 0., 0., 0., evalue * 10, 10e-6])
             hsp = hits[np.argmin([h.evalue for h in hits])]
+<<<<<<< HEAD
             try:
                 self.collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
             except DuplicateKeyError:
                 pass
+=======
+            self.collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
         return hsp
 
     def __getitem__(self, seq):
@@ -290,12 +305,15 @@ class BLAST(object):
         return seq in self.qid2hsp[seq.uid]
 
 
+<<<<<<< HEAD
 def load_targets(fpath):
     num_seq = count_lines(fpath, sep=bytes('>', 'utf8'))
     fasta_src = parse_fasta(open(fpath, 'r'), 'fasta')
     return FastaFileLoader(fasta_src, num_seq).load()
 
 
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 def cleanup():
     files = os.listdir(tmp_dir)
     for file in files:
@@ -310,7 +328,11 @@ def add_arguments(parser):
                         help="The name of the DB to which to write the data.")
     parser.add_argument("--aspect", type=str, default='F', choices=['F', 'P', 'C'],
                         help="The name of the DB to which to write the data.")
+<<<<<<< HEAD
     parser.add_argument("--mode", type=str, default='predict', choices=['comp', 'load', 'predict', 'cafapi'],
+=======
+    parser.add_argument("--mode", type=str, default='predict', choices=['comp', 'load', 'predict'],
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
                         help="In which mode to do you want me to work?")
     parser.add_argument("--evalue", type=int, default=10e3,
                         help="Set evalue threshold for BLAST")
@@ -328,6 +350,7 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client[args.db_name]
     asp = args.aspect   # molecular function
+<<<<<<< HEAD
     onto = get_ontology(asp)
 
     if args.mode != "cafapi":
@@ -345,6 +368,24 @@ if __name__ == "__main__":
 
         db_pth = prepare_blast(uid2seq_trn)
         timestamp = datetime.date.today().strftime("%m-%d-%Y")
+=======
+
+    onto = get_ontology(asp)
+    t0 = datetime.datetime(2014, 1, 1, 0, 0)
+    t1 = datetime.datetime(2014, 9, 1, 0, 0)
+    # t0 = datetime.datetime(2017, 1, 1, 0, 0)
+    # t1 = datetime.datetime.utcnow()
+
+    print("Indexing Data...")
+    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)
+    print("Loading Train Data...")
+    uid2seq_trn, uid2go_trn, _ = trn_stream.to_dictionaries(propagate=True)
+    print("Loading Validation Data...")
+    uid2seq_tst, uid2go_tst, _ = tst_stream.to_dictionaries(propagate=True)
+
+    db_pth = prepare_blast(uid2seq_trn)
+    timestamp = datetime.date.today().strftime("%m-%d-%Y")
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 
     if args.mode == "load":
         pth = "%s/blast_%s_hits_%s" % (out_dir, asp, timestamp)
@@ -381,6 +422,7 @@ if __name__ == "__main__":
         save_object(uid2go_tst, "%s/gt_%s" % (out_dir, GoAspect(asp)))
         cleanup()
 
+<<<<<<< HEAD
     elif args.mode == "cafapi":
         # db = client["prot2vec2"]  # use newest db
 
@@ -410,4 +452,8 @@ if __name__ == "__main__":
 
     else:
         print("unknown mode: %s" % args.mode)
+=======
+    else:
+        print("unknown mode")
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
         exit(0)

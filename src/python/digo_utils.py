@@ -266,6 +266,7 @@ def get_ancestors(node):
         return visited
 
 
+<<<<<<< HEAD
 def get_descendants(node):
     Q = [node]
     visited = {node}
@@ -279,6 +280,8 @@ def get_descendants(node):
     return visited
 
 
+=======
+>>>>>>> 76ab7df4b4f8f2c4eb5b644154c84548fe4b40a3
 def sequences_of(nodes):
     return reduce(lambda s1, s2: s1 | s2,
                   map(lambda node: node.sequences, nodes), set())
