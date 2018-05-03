@@ -10,8 +10,6 @@ import torch.nn.functional as F
 
 from src.python.digo_utils import *
 
-from pymongo import MongoClient
-
 from tqdm import tqdm
 
 import numpy as np
@@ -26,7 +24,9 @@ LR = 0.01
 
 LEARN_GO = True
 
-BATCH_SIZE = 12
+ATTN = "general"
+
+BATCH_SIZE = 32
 
 USE_CUDA = True
 
@@ -84,15 +84,13 @@ class ProteinEncoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
 
-            nn.MaxPool1d(3),
-
             nn.Conv1d(num_channels, num_channels, kernel_size=15),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
 
-            nn.Conv1d(num_channels, num_channels, kernel_size=15),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
+            # nn.Conv1d(num_channels, num_channels, kernel_size=15),
+            # nn.ReLU(inplace=True),
+            # nn.Dropout(dropout),
         )
 
         self.embedding_size = embedding_size
@@ -106,27 +104,37 @@ class ProteinEncoder(nn.Module):
 
 class AttnDecoder(nn.Module):
 
-    def __init__(self, attn_model, prot_section_size, go_embedding_weights, dropout=0.1):
+    def __init__(self, attn_model, num_channels, prot_section_size, go_embedding_weights, dropout=0.1):
         super(AttnDecoder, self).__init__()
 
-        self.prot_encoder = ProteinEncoder(prot_section_size, 5)
+        self.prot_encoder = ProteinEncoder(num_channels, 5)
 
         self.dropout = dropout
 
         # Keep for reference
         self.attn_model = attn_model
         self.prot_section_size = prot_section_size
+        self.num_channels = num_channels
         self.dropout = dropout
 
         # Define layers
         self.go_embedding_size = go_embedding_size = go_embedding_weights.shape[1]
         self.go_embedding = Go2Vec(go_embedding_weights)
         self.embedding_dropout = nn.Dropout(dropout)
-        self.attn = Attn(attn_model, go_embedding_size, prot_section_size)
+        self.attn = Attn(attn_model, num_channels * prot_section_size, go_embedding_size)
 
     def forward(self, input_seq, input_go_term):
         encoder_outputs = self.prot_encoder(input_seq)
         encoder_outputs = self.embedding_dropout(encoder_outputs)
+        batch_size = encoder_outputs.size(0)
+        protein_length = encoder_outputs.size(2)
+        prot_section_size = self.prot_section_size
+        new_prot_length = protein_length // prot_section_size
+        remainder = protein_length % prot_section_size
+        head = remainder // 2
+        tail = protein_length - (remainder - head)
+        encoder_outputs = encoder_outputs[:, :, head:tail].contiguous()
+        encoder_outputs = encoder_outputs.view(batch_size, -1, new_prot_length)
         embedded_go = self.go_embedding(input_go_term)
         attn_weights = self.attn(embedded_go, encoder_outputs)
         context_vec = attn_weights.bmm(encoder_outputs.transpose(1, 2))
@@ -134,7 +142,7 @@ class AttnDecoder(nn.Module):
 
 
 class Attn(nn.Module):
-    def __init__(self, method, go_embedding_size, protein_section_size):
+    def __init__(self, method, protein_section_size, go_embedding_size):
         super(Attn, self).__init__()
 
         self.method = method
@@ -187,9 +195,10 @@ class Attn(nn.Module):
             return energy
 
         elif self.method == 'concat':
-            energy = self.attn(torch.cat((go_embedding, protein_section), 1))
-            energy = torch.bmm(self.v.view(batch_size, 1, go_size + prot_size),
-                               energy.view(batch_size, go_size + prot_size, 1))
+            energy = F.tanh(self.attn(torch.cat((go_embedding, protein_section), 1)))
+            print(self.v.size(), energy.size())
+            energy = torch.bmm(self.v.view(batch_size, 1, go_size),
+                               energy.view(1, go_size, 1))
             return energy
 
 
@@ -226,9 +235,9 @@ def batch_generator(data, labels, batch_size=BATCH_SIZE):
     def prepare_node(node):
         return onto.classes.index(node.go)
 
-    def prepare_batch(seqs1, seqs2, nodes, labels):
-        b1 = max(map(len, seqs1))
-        b2 = max(map(len, seqs2))
+    def prepare_batch(seqs1, seqs2, nodes, labels, extra_padding=0):
+        b1 = max(map(len, seqs1)) + extra_padding
+        b2 = max(map(len, seqs2)) + extra_padding
         inp1 = np.asarray([prepare_seq(seq, b1) for seq in seqs1])
         inp2 = np.asarray([prepare_seq(seq, b2) for seq in seqs2])
         inp3 = np.asarray([prepare_node(node) for node in nodes])
@@ -359,7 +368,7 @@ if __name__ == "__main__":
 
     go_embedding_weights = np.asarray([onto.todense(go) for go in onto.classes])
 
-    net = AttnDecoder("general", 500, go_embedding_weights)
+    net = AttnDecoder(ATTN, 100, 10, go_embedding_weights)
 
     ckptpath = args.out_dir
 
@@ -395,7 +404,7 @@ if __name__ == "__main__":
     graph_tst = Graph(onto, uid2seq_tst, go2ids_tst)
     print("Graph contains %d nodes" % len(graph_tst))
 
-    size_trn = 400000
+    size_trn = 200000
     size_tst = 10000
     pos_trn, neg_trn = sample_pos_neg(graph_trn, sample_size=size_trn)
     pos_tst, neg_tst = sample_pos_neg(graph_tst, sample_size=size_tst)
@@ -405,22 +414,30 @@ if __name__ == "__main__":
     lbl_tst = np.concatenate([np.ones(len(pos_tst)), -np.ones(len(neg_tst))])
     data_tst = np.concatenate([pos_tst, neg_tst], axis=0)
 
-    data_trn, lbl_trn = shuffle(data_trn, lbl_trn)
-    data_tst, lbl_tst = shuffle(data_tst, lbl_tst)
+    # data_trn = sample_pairs(graph_trn.leaves, True, size_trn)
+    # lbl_trn = np.ones(len(data_trn))
+    # data_tst = sample_pairs(graph_tst.leaves, True, size_tst)
+    # lbl_tst = np.ones(len(data_tst))
+
+    size_trn = len(data_trn)
+    size_tst = len(data_tst)
 
     print("|Train|: %d, |Test|: %d, Batch_Size: %d, Learn_GO: %s"
           % (len(data_trn), len(data_tst), BATCH_SIZE, LEARN_GO))
+
+    data_trn, lbl_trn = shuffle(data_trn, lbl_trn)
+    data_tst, lbl_tst = shuffle(data_tst, lbl_tst)
 
     num_epochs = 200
 
     for epoch in range(args.init_epoch, num_epochs):
 
-        train(net, epoch + 1, opt, batch_generator(data_trn, lbl_trn), size_trn * 2)
+        train(net, epoch + 1, opt, batch_generator(data_trn, lbl_trn), size_trn)
 
         if epoch < num_epochs - 1 and epoch % args.eval_every != 0:
             continue
 
-        loss = evaluate(net, batch_generator(data_tst, lbl_tst), size_tst * 2)
+        loss = evaluate(net, batch_generator(data_tst, lbl_tst), size_tst)
 
         print("[Epoch %d/%d] (Validation Loss: %.5f" % (epoch + 1, num_epochs, loss))
 

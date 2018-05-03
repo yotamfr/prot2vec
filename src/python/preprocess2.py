@@ -71,7 +71,7 @@ class FastaFileLoader(SequenceLoader):
         super(FastaFileLoader, self).__init__(src_fasta, num_seqs)
 
     def parse_sequence(self, seq):
-        return seq.id, seq.seq
+        return seq.id, str(seq.seq)
 
 
 class UniprotCollectionLoader(SequenceLoader):

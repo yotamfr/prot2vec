@@ -185,10 +185,11 @@ def bin2dict(distribution, classes):
 
 
 def get_P_and_T_from_dictionaries(tau, predictions, targets):
+    assert len(predictions) == len(targets)
     P, T = [], []
-    for seqid, seq_preds in predictions.items():
-        seq_targets = targets[seqid]
+    for seqid, seq_targets in targets.items():
         assert len(seq_targets) > 0
+        seq_preds = predictions[seqid]
         seq_annots = [go for go, prob in seq_preds.items() if prob >= tau]
         P.append(set(seq_annots))
         T.append(set(seq_targets))
@@ -197,6 +198,7 @@ def get_P_and_T_from_dictionaries(tau, predictions, targets):
 
 
 def get_P_and_T_from_arrays(tau, predictions, targets, classes):
+    assert len(predictions) == len(targets)
     P, T = [], []
     classes_arr = np.asarray(classes)
     for prob_arr in map(lambda p: np.asarray(p), predictions):

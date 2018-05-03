@@ -1,3 +1,6 @@
+src/__pycache__/
+src/python/__pycache__/
+
 prot2vec.Rproj
 .Rhistory
 *.Rproj.user*
@@ -31,22 +34,17 @@ benchmark-*.py
 benchmark-*.ipynb
 .Rproj.user
 
-Data/blast_dist_matrix_04-09-2018
-Data/CAFA_PI/CAFA pi Submission Rules.pdf
-Data/CAFA_PI/keywords.txt
-Data/CAFA_PI/sampleSubmission/
-Data/CAFA_PI/sampleSubmissions.zip
-Data/CAFA_PI/targetFiles.zip
+Data/CAFA_PI/*
+
 Data/validation_set.fasta
 Data/training_set.fasta
 Data/swissprot.fasta
 Data/sp.fasta
-Data/sp.nr.90.clstr
-Data/sp.nr.90
-Data/sp.nr.70.clstr
-Data/sp.nr.70
+Data/sp.nr.*
+Data/blast_*
+Data/cafapi_*
+Data/digo_*
+Data/dingo_*
+Data/gt_*
 
 cdhit
-
-src/__pycache__/
-src/python/__pycache__/

@@ -23,6 +23,8 @@ import pickle
 
 import datetime
 
+from pymongo.errors import DuplicateKeyError
+
 NUM_CPU = 8
 
 E = ThreadPoolExecutor(NUM_CPU)
@@ -44,11 +46,17 @@ def _blast(target_fasta, database_pth, evalue):
     SeqIO.write(target_fasta, open(query_pth, 'w+'), "fasta")
     cline = "blastp -db %s -query %s -outfmt 6 -out %s -evalue %s 1>/dev/null 2>&1" \
             % (database_pth, query_pth, output_pth, evalue)
-    assert os.WEXITSTATUS(os.system(cline)) == 0
-    with open(output_pth, 'r') as f:
-        hits = [HSP(line.split('\t')) for line in f.readlines()]
-    os.remove(query_pth)
-    os.remove(output_pth)
+    res = os.WEXITSTATUS(os.system(cline))
+    try:
+        with open(output_pth, 'r') as f:
+            hits = [HSP(line.split('\t')) for line in f.readlines()]
+            assert res == 0
+    except FileNotFoundError:
+        print("An error as occurred while BLASTing %s" % seqid)
+        return []
+    finally:
+        os.remove(query_pth)
+        os.remove(output_pth)
     return hits
 
 
@@ -266,7 +274,10 @@ class BLAST(object):
             if len(hits) == 0:
                 return HSP([seq1.uid, seq2.uid, 0., 0., 0., 0., 0., 0., 0., 0., evalue * 10, 10e-6])
             hsp = hits[np.argmin([h.evalue for h in hits])]
-            self.collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
+            try:
+                self.collection.update_one({"_id": hsp.uid}, {"$set": vars(hsp)}, upsert=True)
+            except DuplicateKeyError:
+                pass
         return hsp
 
     def __getitem__(self, seq):
@@ -277,6 +288,12 @@ class BLAST(object):
 
     def __contains__(self, seq):
         return seq in self.qid2hsp[seq.uid]
+
+
+def load_targets(fpath):
+    num_seq = count_lines(fpath, sep=bytes('>', 'utf8'))
+    fasta_src = parse_fasta(open(fpath, 'r'), 'fasta')
+    return FastaFileLoader(fasta_src, num_seq).load()
 
 
 def cleanup():
@@ -293,7 +310,7 @@ def add_arguments(parser):
                         help="The name of the DB to which to write the data.")
     parser.add_argument("--aspect", type=str, default='F', choices=['F', 'P', 'C'],
                         help="The name of the DB to which to write the data.")
-    parser.add_argument("--mode", type=str, default='predict', choices=['comp', 'load', 'predict'],
+    parser.add_argument("--mode", type=str, default='predict', choices=['comp', 'load', 'predict', 'cafapi'],
                         help="In which mode to do you want me to work?")
     parser.add_argument("--evalue", type=int, default=10e3,
                         help="Set evalue threshold for BLAST")
@@ -311,22 +328,23 @@ if __name__ == "__main__":
     client = MongoClient(args.mongo_url)
     db = client[args.db_name]
     asp = args.aspect   # molecular function
-
     onto = get_ontology(asp)
-    t0 = datetime.datetime(2014, 1, 1, 0, 0)
-    t1 = datetime.datetime(2014, 9, 1, 0, 0)
-    # t0 = datetime.datetime(2017, 1, 1, 0, 0)
-    # t1 = datetime.datetime.utcnow()
 
-    print("Indexing Data...")
-    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)
-    print("Loading Train Data...")
-    uid2seq_trn, uid2go_trn, _ = trn_stream.to_dictionaries(propagate=True)
-    print("Loading Validation Data...")
-    uid2seq_tst, uid2go_tst, _ = tst_stream.to_dictionaries(propagate=True)
+    if args.mode != "cafapi":
+        t0 = datetime.datetime(2014, 1, 1, 0, 0)
+        t1 = datetime.datetime(2014, 9, 1, 0, 0)
+        # t0 = datetime.datetime(2017, 1, 1, 0, 0)
+        # t1 = datetime.datetime.utcnow()
 
-    db_pth = prepare_blast(uid2seq_trn)
-    timestamp = datetime.date.today().strftime("%m-%d-%Y")
+        print("Indexing Data...")
+        trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)
+        print("Loading Train Data...")
+        uid2seq_trn, uid2go_trn, _ = trn_stream.to_dictionaries(propagate=True)
+        print("Loading Validation Data...")
+        uid2seq_tst, uid2go_tst, _ = tst_stream.to_dictionaries(propagate=True)
+
+        db_pth = prepare_blast(uid2seq_trn)
+        timestamp = datetime.date.today().strftime("%m-%d-%Y")
 
     if args.mode == "load":
         pth = "%s/blast_%s_hits_%s" % (out_dir, asp, timestamp)
@@ -363,6 +381,33 @@ if __name__ == "__main__":
         save_object(uid2go_tst, "%s/gt_%s" % (out_dir, GoAspect(asp)))
         cleanup()
 
+    elif args.mode == "cafapi":
+        # db = client["prot2vec2"]  # use newest db
+
+        target_fname1 = "./Data/CAFA_PI/targetFiles/target.208963.fasta"
+        target_fname2 = "./Data/CAFA_PI/targetFiles/target.237561.fasta"
+
+        targets = {}
+        targets1 = load_targets(target_fname1)
+        targets2 = load_targets(target_fname2)
+        targets.update(targets1)
+        targets.update(targets2)
+
+        t1 = datetime.datetime.utcnow()
+        q_train = {'DB': 'UniProtKB', 'Evidence': {'$in': exp_codes},
+                   'Date': {"$lte": t1}, 'Aspect': asp}
+        seq2go_ref, _ = GoAnnotationCollectionLoader(db.goa_uniprot.find(q_train),
+                                                     db.goa_uniprot.count(q_train), asp).load()
+        stream_ref = SequenceStream(seq2go_ref, db.uniprot, onto)
+
+        print("Loading Ref Data...")
+        uid2seq_ref, uid2go_ref, _ = stream_ref.to_dictionaries(propagate=True)
+        db_pth = prepare_blast(uid2seq_ref)
+        queries = [Seq(uid, seq, aa20=False) for uid, seq in targets.items()]
+        predictions = predict_blast_parallel(queries, seq2go_ref, db_pth, 0.001)
+        save_object(predictions, "%s/cafapi_blast_%s_hsp" % (out_dir, GoAspect(asp)))
+        cleanup()
+
     else:
-        print("unknown mode")
+        print("unknown mode: %s" % args.mode)
         exit(0)

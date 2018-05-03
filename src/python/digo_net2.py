@@ -2,6 +2,7 @@ import os
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
+import torch
 import torch.nn as nn
 from torch import optim
 from torch.autograd import Variable
@@ -79,13 +80,13 @@ class ProteinEncoder(nn.Module):
 
         self.cnn = nn.Sequential(
 
-            nn.Conv1d(5, num_channels, kernel_size=3),
+            nn.Conv1d(5, num_channels * 2, kernel_size=15),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
 
-            # nn.Conv1d(num_channels * 2, num_channels, kernel_size=3),
-            # nn.ReLU(inplace=True),
-            # nn.Dropout(dropout),
+            nn.Conv1d(num_channels * 2, num_channels, kernel_size=15),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
         )
 
         self.embedding_size = embedding_size
@@ -206,18 +207,18 @@ def prepare_seq(sequence_obj, max_length=MAX_LENGTH):
     return np.asarray(seq)
 
 
-def prepare_node(node):
+def prepare_node(node, onto):
     return onto.classes.index(node.go)
 
 
-def pairs_generator(data, labels, batch_size=BATCH_SIZE):
+def pairs_generator(data, labels, onto, batch_size=BATCH_SIZE):
 
     def prepare_batch(seqs1, seqs2, nodes, labels, extra_padding=10):
         b1 = max(map(len, seqs1)) + extra_padding
         b2 = max(map(len, seqs2)) + extra_padding
         inp1 = np.asarray([prepare_seq(seq, b1) for seq in seqs1])
         inp2 = np.asarray([prepare_seq(seq, b2) for seq in seqs2])
-        inp3 = np.asarray([prepare_node(node) for node in nodes])
+        inp3 = np.asarray([prepare_node(node, onto) for node in nodes])
         inp_var1 = Variable(torch.LongTensor(inp1))
         inp_var2 = Variable(torch.LongTensor(inp2))
         inp_var3 = Variable(torch.LongTensor(inp3))
@@ -239,12 +240,12 @@ def pairs_generator(data, labels, batch_size=BATCH_SIZE):
         yield prepare_batch(seqs1, seqs2, nodes, lbls)
 
 
-def compute_vectors(data, model, batch_size=20):
+def compute_vectors(data, model, onto, batch_size=BATCH_SIZE):
 
     def prepare_batch(seqs, nodes, extra_padding=10):
         b = max(map(len, seqs)) + extra_padding
         inp_seq = np.asarray([prepare_seq(seq, b) for seq in seqs])
-        inp_node = np.asarray([prepare_node(node) for node in nodes])
+        inp_node = np.asarray([prepare_node(node, onto) for node in nodes])
         var_seq = Variable(torch.LongTensor(inp_seq))
         var_node = Variable(torch.LongTensor(inp_node))
         if USE_CUDA:
@@ -252,6 +253,7 @@ def compute_vectors(data, model, batch_size=20):
             var_node = var_node.cuda()
         return var_seq, var_node
 
+    pbar = tqdm(range(len(data)), desc="records processed")
     indices = list(range(0, len(data), batch_size))
     while indices:
         ix = indices.pop()
@@ -259,9 +261,11 @@ def compute_vectors(data, model, batch_size=20):
         seqs, nodes = zip(*batch_inp)
         var_seq, var_node = prepare_batch(seqs, nodes)
         var_vec = model(var_seq, var_node)
-        vecs = var_vec.data.numpy()
+        vecs = var_vec.data.cpu().numpy()
         for seq, node, vec in zip(seqs, nodes, vecs):
             node.seq2vec[seq] = vec
+        pbar.update(len(vecs))
+    pbar.close()
 
 
 def train(model, opt, adalr, gen_xy, length_xy):
@@ -415,7 +419,7 @@ if __name__ == "__main__":
 
     for epoch in range(init_epoch, num_epochs):
 
-        train(net, opt, adalr, pairs_generator(data_trn, lbl_trn), size_trn)
+        train(net, opt, adalr, pairs_generator(data_trn, lbl_trn, onto), size_trn)
 
         if epoch < num_epochs - 1 and epoch % args.eval_every != 0:
             continue

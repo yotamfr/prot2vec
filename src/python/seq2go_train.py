@@ -474,7 +474,7 @@ def evaluate_and_show_attention(encoder, decoder, input_words, target_words=None
 def show_plot(points):
     plt.figure()
     fig, ax = plt.subplots()
-    loc = ticker.MultipleLocator(base=0.2) # put ticks at regular intervals
+    loc = ticker.MultipleLocator(base=0.2)  # put ticks at regular intervals
     ax.yaxis.set_major_locator(loc)
     plt.plot(points)
 

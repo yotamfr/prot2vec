@@ -69,28 +69,28 @@ def evaluate(model, gen_xy, length_xy):
 
 
 class CNN(nn.Module):
-    def __init__(self, num_channels, embedding_size, dropout=0.1):
+    def __init__(self, num_channels, embedding_size, dropout=0.3):
         super(CNN, self).__init__()
 
         self.aa_embedding = nn.Embedding(26, embedding_size)
 
         self.cnn = nn.Sequential(
 
-            nn.Conv1d(5, num_channels, kernel_size=3),
+            nn.Conv1d(embedding_size, num_channels * 2, kernel_size=15),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
 
-            # nn.Conv1d(num_channels * 2, num_channels, kernel_size=15),
-            # nn.ReLU(inplace=True),
-            # nn.Dropout(dropout),
+            nn.Conv1d(num_channels * 2, num_channels, kernel_size=15),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
 
-            # nn.Conv1d(num_channels, num_channels, kernel_size=6),
-            # nn.ReLU(inplace=True),
-            # nn.Dropout(dropout),
-            #
-            # nn.Conv1d(num_channels, num_channels, kernel_size=6),
-            # nn.ReLU(inplace=True),
-            # nn.Dropout(dropout),
+            nn.Conv1d(num_channels, num_channels, kernel_size=15),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+
+            nn.Conv1d(num_channels, num_channels, kernel_size=15),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
         )
 
         self.embedding_size = embedding_size
@@ -107,7 +107,7 @@ class DingoNet(nn.Module):
     def __init__(self, num_channels, prot_section_size, dropout=0.1):
         super(DingoNet, self).__init__()
 
-        self.cnn = CNN(num_channels, 5)
+        self.cnn = CNN(num_channels, 23)
 
         self.dropout = dropout
 
@@ -240,7 +240,11 @@ def train(model, training_manager, gen_xy, length_xy):
         vec1 = model(seq1)
         vec2 = model(seq2)
 
+        # print(vec1)
+        # print(vec2)
+
         loss = get_loss(vec1, vec2, lbl)
+        # print(loss.data[0])
         adalr.update(loss.data[0])
 
         err += loss.data[0]
@@ -308,7 +312,8 @@ if __name__ == "__main__":
     size_trn = 300000
     size_tst = 10000
 
-    criterion = nn.CosineEmbeddingLoss(margin=0.1)
+    # criterion = nn.CosineEmbeddingLoss(margin=0.1)
+    criterion = CosineSimilarityLossWithL2Regularization()
 
     if args.sample == "pos_only":
         data_trn = sample_pairs(graph_trn.leaves, sample_size=size_trn)
@@ -329,12 +334,12 @@ if __name__ == "__main__":
         pos_tst, neg_tst = sample_pos_neg_no_common_ancestors(graph_tst, sample_size=size_tst)
         data_tst = np.concatenate([pos_tst, neg_tst], axis=0)
         lbl_tst = np.concatenate([np.ones(len(pos_tst)), -np.ones(len(neg_tst))])
-    elif args.sample == "iou":
-        seqs1, seqs2, labels = zip(*sample_pairs_iou(graph_trn, sample_size=size_trn))
-        data_trn, lbl_trn = np.asarray(list(zip(seqs1, seqs2))), np.asarray(labels)
-        seqs1, seqs2, labels = zip(*sample_pairs_iou(graph_tst, sample_size=size_tst))
-        data_tst, lbl_tst = np.asarray(list(zip(seqs1, seqs2))), np.asarray(labels)
-        criterion = CosineSimilarityRegressionLoss()
+    # elif args.sample == "iou":
+    #     seqs1, seqs2, labels = zip(*sample_pairs_iou(graph_trn, sample_size=size_trn))
+    #     data_trn, lbl_trn = np.asarray(list(zip(seqs1, seqs2))), np.asarray(labels)
+    #     seqs1, seqs2, labels = zip(*sample_pairs_iou(graph_tst, sample_size=size_tst))
+    #     data_tst, lbl_tst = np.asarray(list(zip(seqs1, seqs2))), np.asarray(labels)
+    #     criterion = CosineSimilarityRegressionLoss()
     else:
         print("Unrecognized sampling technique")
         exit(0)

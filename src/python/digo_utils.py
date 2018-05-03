@@ -266,6 +266,19 @@ def get_ancestors(node):
         return visited
 
 
+def get_descendants(node):
+    Q = [node]
+    visited = {node}
+    while Q:
+        curr = Q.pop()
+        for child in curr.children:
+            if child in visited:
+                continue
+            visited.add(child)
+            Q.append(child)
+    return visited
+
+
 def sequences_of(nodes):
     return reduce(lambda s1, s2: s1 | s2,
                   map(lambda node: node.sequences, nodes), set())

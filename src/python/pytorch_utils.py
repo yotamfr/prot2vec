@@ -1,10 +1,17 @@
 import os
 
 import torch
+from torch import nn
+
+import torch.nn.functional as F
+
+from torch.autograd import Variable
 
 import numpy as np
 
 VERBOSE = True
+
+USE_CUDA = True
 
 
 def model_summary(model):
@@ -38,7 +45,7 @@ def optimizer_cuda(optimizer):
 
 class AdaptiveLR(object):
 
-    def __init__(self, opt, initial_lr, num_iterations=2000):
+    def __init__(self, opt, initial_lr, num_iterations=1000):
         self._lr = initial_lr
         self.opt = opt
         self.losses = []
@@ -76,3 +83,35 @@ def shuffle(data, labels):
     s = np.arange(data.shape[0])
     np.random.shuffle(s)
     return data[s], labels[s]
+
+
+class CosineSimilarityRegressionLoss(nn.Module):
+    def __init__(self):
+        super(CosineSimilarityRegressionLoss, self).__init__()
+
+    def forward(self, vec1, vec2, y):
+        mse = nn.MSELoss()
+        y_hat = F.cosine_similarity(vec1, vec2)
+        return mse(y_hat, y)
+
+
+class CosineSimilarityLossWithL2Regularization(nn.Module):
+    def __init__(self, cos_sim_margin=0.1, l2_margin=0.1, alpha=0.1):
+        super(CosineSimilarityLossWithL2Regularization, self).__init__()
+        self.cos_sim_margin = cos_sim_margin
+        self.l2_margin = l2_margin
+        self.alpha = alpha
+
+    def forward(self, vec1, vec2, y):
+        assert vec1.size(0) == vec2.size(0)
+        ones = Variable(torch.ones(vec1.size(0), 1))
+        if USE_CUDA:
+            ones = ones.cuda()
+        # l2_1 = torch.clamp(torch.abs(ones - vec1.norm(p=2, dim=1)), max=1.0)
+        # l2_2 = torch.clamp(torch.abs(ones - vec2.norm(p=2, dim=1)), max=1.0)
+        # l2_1 = l2_1.mean()
+        # l2_2 = l2_2.mean()
+        l2_1 = F.l1_loss(ones, vec1.norm(p=2, dim=1))
+        l2_2 = F.l1_loss(ones, vec2.norm(p=2, dim=1))
+        loss = F.cosine_embedding_loss(vec1, vec2, y)
+        return loss + self.alpha * (l2_1 + l2_2)

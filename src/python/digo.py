@@ -105,7 +105,7 @@ def compute_f_outside(f, seq, node, submitted, pbar):
 def predict_seq(graph, seq, f):
     predictions = {}
     run_compute_f(f, [seq], graph, compute_f_outside)
-    for node in graph.nodes.values():
+    for node in graph:
         score = is_seq_in_node(seq, node)
         predictions[node.go] = score
     return predictions

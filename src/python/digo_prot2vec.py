@@ -24,11 +24,13 @@ np.random.seed(101)
 
 LR = 0.01
 
-BATCH_SIZE = 32
+BATCH_SIZE = 12
 
 LONG_EXPOSURE = True
 
 USE_CUDA = True
+
+LEARN_GO = False
 
 
 def set_cuda(val):
@@ -267,15 +269,23 @@ if __name__ == "__main__":
     graph_tst = Graph(onto, uid2seq_tst, go2ids_tst)
     print("Graph contains %d nodes" % len(graph_tst))
 
-    size_trn = 50000
+    size_trn = 200000
     size_tst = 10000
-    pos_trn, neg_trn = sample_pos_neg(graph_trn, sample_size=size_trn)
-    pos_tst, neg_tst = sample_pos_neg(graph_tst, sample_size=size_tst)
+    # pos_trn, neg_trn = sample_pos_neg(graph_trn, sample_size=size_trn)
+    # pos_tst, neg_tst = sample_pos_neg(graph_tst, sample_size=size_tst)
 
-    lbl_trn = np.concatenate([np.ones(len(pos_trn)), -np.ones(len(neg_trn))])
-    data_trn = np.concatenate([pos_trn, neg_trn], axis=0)
-    lbl_tst = np.concatenate([np.ones(len(pos_tst)), -np.ones(len(neg_tst))])
-    data_tst = np.concatenate([pos_tst, neg_tst], axis=0)
+    # lbl_trn = np.concatenate([np.ones(len(pos_trn)), -np.ones(len(neg_trn))])
+    # data_trn = np.concatenate([pos_trn, neg_trn], axis=0)
+    # lbl_tst = np.concatenate([np.ones(len(pos_tst)), -np.ones(len(neg_tst))])
+    # data_tst = np.concatenate([pos_tst, neg_tst], axis=0)
+
+    data_trn = sample_pairs(graph_trn.leaves, False, size_trn)
+    data_tst = sample_pairs(graph_tst.leaves, False, size_tst)
+    lbl_trn = np.ones(len(data_trn))
+    lbl_tst = np.ones(len(data_tst))
+
+    size_trn = len(data_trn)
+    size_tst = len(data_tst)
 
     data_trn, lbl_trn = shuffle(data_trn, lbl_trn)
     data_tst, lbl_tst = shuffle(data_tst, lbl_tst)
@@ -286,12 +296,12 @@ if __name__ == "__main__":
 
     for epoch in range(args.init_epoch, num_epochs):
 
-        train(net, epoch + 1, opt, batch_generator(data_trn, lbl_trn), size_trn * 2)
+        train(net, epoch + 1, opt, batch_generator(data_trn, lbl_trn), size_trn)
 
         if epoch < num_epochs - 1 and epoch % args.eval_every != 0:
             continue
 
-        loss = evaluate(net, batch_generator(data_tst, lbl_tst), size_tst * 2)
+        loss = evaluate(net, batch_generator(data_tst, lbl_tst), size_tst)
 
         print("[Epoch %d/%d] (Validation Loss: %.5f" % (epoch + 1, num_epochs, loss))
 

@@ -65,11 +65,12 @@ def batch_generator(data, onto, classes, batch_size=BATCH_SIZE, shuffle=True):
         delta = max_length - len(seq)
         left = [PAD for _ in range(delta // 2)]
         right = [PAD for _ in range(delta - delta // 2)]
-        seq = left + seq + right
+        seq = left + [AA.aa2index[aa] for aa in seq] + right
         return np.asarray(seq)
 
     def prepare_batch(sequences, labels):
-        b = max(max(map(len, sequences)), 100)
+        # b = max(max(map(len, sequences)), 100)
+        b = MAX_LENGTH
         Y = np.asarray([labels2vec(lbl) for lbl in labels])
         X = np.asarray([pad_seq(seq, b) for seq in sequences])
         return X, Y
@@ -178,9 +179,9 @@ def Features(inpt):
     feats = inpt
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
-    feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
+    feats = Conv1D(100, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
     feats = Conv1D(250, 15, activation='relu', padding='valid')(feats)
     feats = Dropout(0.3)(feats)
@@ -284,7 +285,7 @@ if __name__ == "__main__":
     model.summary()
 
     print("Indexing Data...")
-    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp, profile=0)
+    trn_stream, tst_stream = get_training_and_validation_streams(db, t0, t1, asp)
     print("Loading Data...")
     trn_data = load_data(trn_stream)
     tst_data = load_data(tst_stream)
